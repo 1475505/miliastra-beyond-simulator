@@ -1,12 +1,13 @@
 # 设计、共享规格与测试
 
-本 reference 用于阶段 1（GDD）、阶段 3（玩法抽象）和阶段 5/6（测试设计与生产 TDD）。只读取当前阶段需要的章节。它把原先的 GDD、逻辑契约、测试策略和 P0 用例合并到同一条追踪链：
+本 reference 用于步骤 1（策划案与玩法契约）、步骤 2（TDD 测试用例）和步骤 5（Lua 实现中的 Red→Green→Regress）。只读取当前步骤需要的章节。
 
 ```text
-GDD requirement → HYPOTHESIS / CONTRACT / UNKNOWN
-                → 短契约 / 需要时的 game-spec
-                → HTML 最终效果演示（阶段 4，不碰模拟器）
-                → qxqy case + 模拟器 play/screenshot（阶段 6–7）
+策划案 requirement → HYPOTHESIS / CONTRACT / UNKNOWN
+                 → 玩法契约与 TDD 测试用例（步骤 2）
+                 → HTML 效果展示（步骤 3，不碰模拟器）
+                 → Lua 实现与模拟器测试（步骤 5–6）
+                 → 真机试玩与修复（步骤 7）
 ```
 
 ## 1. GDD：把创意压缩为 P0
@@ -17,8 +18,8 @@ GDD requirement → HYPOTHESIS / CONTRACT / UNKNOWN
 # <游戏名> GDD
 
 - slug / 当前里程碑：P0 完整一局游戏体验
-- 当前阶段：1 GDD
-- Gate A：draft / locked；用户确认摘要：
+- 当前步骤：1 策划案
+- 策划状态：draft / locked；用户确认摘要：
 - 更新日期 / 本轮砍项及理由：
 
 ## 玩家与幻想
@@ -49,7 +50,7 @@ GDD requirement → HYPOTHESIS / CONTRACT / UNKNOWN
 - PC/手机画布、触控热区、单手/双手假设：
 - 美术意图、素材用途（参考/原型/发布候选）与权利假设：
 
-## HTML 最终效果演示（阶段 4，不碰模拟器）
+## HTML 效果展示（步骤 3，不碰模拟器）
 - 必须可玩的场景：boot / first-success / first-fail / restart
 - `must-reproduce` / `can-degrade` / `concept-only`：
 - 坐标：千星左下 Y 上；HTML 左上 Y 下；禁止从网页抄像素
@@ -63,7 +64,7 @@ GDD requirement → HYPOTHESIS / CONTRACT / UNKNOWN
 | restart | | | | mobile-16-9 |
 | mobile-smoke | | 最短成功路径 | 整屏可见+不崩溃+关键状态 | mobile-16-9 |
 
-| HYPOTHESIS | 任务（不泄题） | Gate C（HTML 演示） | Gate D（模拟器交付） |
+| HYPOTHESIS | 任务（不泄题） | HTML 展示（步骤 3） | 模拟器测试（步骤 6） |
 |---|---|---|---|
 | | 请直接开始玩 | | |
 
@@ -73,7 +74,7 @@ GDD requirement → HYPOTHESIS / CONTRACT / UNKNOWN
 | API / GIA / 资产 / 真机 | | | knowledge/probe/device | |
 ```
 
-Gate A 只锁产品语义、P0、砍项和关键规则歧义；函数名、控件拆分和目录由 Agent 自行决定。
+策划确认只锁产品语义、P0、砍项和关键规则歧义；函数名、控件拆分和目录由 Agent 自行决定。
 
 ## 2. 共享 game-spec / ui-spec
 
@@ -103,7 +104,7 @@ HTML（若存在）与 Lua 可以有不同适配层；稳定的状态、动作�
 
 ## 3. 测试设计与追踪
 
-在阶段 5 建立 `requirement → rule/invariant → 模拟器场景 → qxqy case → oracle → evidence` 表。`HYPOTHESIS` 指向 play/screenshot/用户试玩，`CONTRACT` 指向自动化 oracle，`UNKNOWN` 指向知识、探针或真机。
+在步骤 2 建立 `requirement → rule/invariant → 模拟器场景 → qxqy case → oracle → evidence` 表。`HYPOTHESIS` 指向 HTML、模拟器与用户试玩，`CONTRACT` 指向自动化 oracle，`UNKNOWN` 指向知识、探针或真机。
 
 ### 五层证据
 
@@ -155,7 +156,7 @@ HTML（若存在）与 Lua 可以有不同适配层；稳定的状态、动作�
 
 最小 P0：`boot`、`first-success`、`first-fail`、`restart`、`mobile-smoke`。稳定控件优先用 `click`，只有坐标本身是规则时才用 `pointer`；`mobile-smoke` 使用独立 `args.canvasId`，不要与 PC 串联。布局与 HUD 以 `mobile-16-9` 为完整可见基准，PC 画布只做放大/留边，不裁掉手机上看得到的内容。缩放容器不要再加全屏不透明兄弟节点。
 
-阶段 5 完成用例和静态/schema 校验；阶段 6 运行最小存档后，`first-success`、`first-fail`、`restart` 至少一次因生产行为缺失而 Red。每次实现记录：
+步骤 2 完成用例和静态/schema 校验；步骤 5 运行最小存档后，`first-success`、`first-fail`、`restart` 至少一次因生产行为缺失而 Red。每次实现记录：
 
 ```text
 case / red reason / failedAt / frame

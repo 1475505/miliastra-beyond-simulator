@@ -36,7 +36,7 @@ dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 1. pnpm 获取整个源码仓库，并根据 workspace 与锁文件安装构建依赖。
 2. 根 `prepare` 执行 `node scripts/build.mjs dsh-plugin`，复用现有构建脚本生成插件、Worker、浏览器资源、Skill 和 Agent 预设。
 3. 按根 `files` 白名单打包安装产物；运行时依赖在根清单中声明，不依赖源码里的 workspace 链接。
-4. Harness 根据根 `dsh.bundle` 注册插件，通过 exports 加载 Host、Client、Skill 和预设。
+4. Harness 根据根 `dsh.bundle` 注册插件，通过 exports 加载 Host、Client、Skill 和旧版预设复制入口；Agent 预设同时由构建生成的 patch 声明注册。旧入口仅在目标不存在时复制到 `.agent-presets`，不覆盖用户文件。
 
 维护一个源码分支即可。需要固定版本时，可在仓库地址后附加 `#<tag>` 或 `#<commit>`。Git 源码安装需要 Node.js 22+、Git 和构建脚本执行权限；若 pnpm 拒绝执行 `prepare`，按错误提示在该 profile 的允许名单中加入本插件或指定的精确 Git 依赖键后重试。预构建 `.tgz` 安装仍保留，安装者无需编译。
 
@@ -54,7 +54,17 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 ## 仓库与许可证
 
-根包的 `repository` 已指向 `1475505/miliastra-beyond-simulator`。采用 [GPL-3.0-only](LICENSE)，三个分发包均附带完整许可证。公开 npm 发布和 GitHub Actions 尚未配置。后续 CI 可以执行冻结锁文件安装、测试、Git 源码安装验收和预构建包验收；发布 tarball / npm 复用 `pack:release`，不创建专用产物分支。
+根包的 `repository` 已指向 `1475505/miliastra-beyond-simulator`。采用 [GPL-3.0-only](LICENSE)，三个分发包均附带完整许可证，并已通过 `dudukl` 发布到 npm。自动发布使用 [GitHub Actions](.github/workflows/publish-npm.yml)，从 Git tag 构建并验收三个 tarball，再通过 npm Trusted Publishing 暂存版本有变化的包，等待维护者审核后上线；不创建专用产物分支。
+
+当前 npm `latest`：`dsh-plugin-beyond-simulator@1.0.9`、`beyond-simulator-web@0.1.3`、`beyond-simulator-mcp@0.1.3`。原 MCP 包名 `qxqy-simulator-mcp@0.1.3` 仍保留为历史名称；新项目使用 `beyond-simulator-mcp`。DSH 1.0.9 在旧版 DSH 缺少新版 Agent 预设模块时跳过注册项，保留目录复制入口；在 DSH 0.1.7-rc.1 中启用新版注册项。
+
+## 自动发布到 npm
+
+工作流文件是 `.github/workflows/publish-npm.yml`，推送 `npm-*` Git tag 时触发。它在 GitHub 托管的 Ubuntu runner 上运行冻结锁文件安装、回归测试、Git 源码安装验收、三个包的构建和仓库外安装验收。`scripts/publish-npm.mjs` 在发布前校验 tarball 哈希；同版本同内容会跳过，同版本不同内容会失败并要求增加版本号。首次推送该工作流前，先把本地源码改动提交并推送到仓库；标记的提交必须包含这份工作流和要发布的版本。
+
+在 npm 的以下三个包页面分别进入 **Settings → Trusted publishing → GitHub Actions**，配置相同的发布者：[DSH 插件](https://www.npmjs.com/package/dsh-plugin-beyond-simulator)、[Web](https://www.npmjs.com/package/beyond-simulator-web)、[MCP](https://www.npmjs.com/package/beyond-simulator-mcp)。填写 **Organization or user** `1475505`、**Repository** `miliastra-beyond-simulator`、**Workflow filename** `publish-npm.yml`；**Environment name** 留空，**Allow npm publish** 保持不勾选，只允许 `npm stage publish`。不需要在 GitHub 配置 `NPM_TOKEN`。工作流使用 `id-token: write` 获取 npm 的短期 OIDC 凭据。
+
+以后发布时，先为发生变更的包更新 `package.json` 版本并提交推送，再在该提交创建并推送一个新 tag，例如 `npm-2026-09-24-1`。只改代码而不增加对应包的版本号会触发“同版本不同内容”保护，不会覆盖 npm 上已发布的内容；未变化的包会跳过。工作流成功后，在 npmjs.com 的 **Staged Packages** 页面逐个检查并点击 **Approve**，通过 2FA 后版本才会公开；也可以使用 `npm stage list <包名>` 查找 stage ID，再运行 `npm stage approve <stage-id>`。审批后到 npm registry 可查询可能有几分钟延迟。
 
 ## 最新验收：主分支源码安装
 

@@ -11,10 +11,10 @@ pnpm install --frozen-lockfile
 pnpm dev:web --workspace /absolute/path/to/workspace
 ```
 
-安装已生成的 tarball（在仓库根执行，版本以 `release/manifest.json` 为准；当前尚未发布到 npm）：
+从 npm 安装：
 
 ```sh
-npm install -g ./release/beyond-simulator-web-0.1.2.tgz
+npm install -g beyond-simulator-web
 beyond-simulator-web --workspace /absolute/path/to/workspace --open
 ```
 
@@ -30,7 +30,7 @@ beyond-simulator-web --workspace /absolute/path/to/workspace --open
 
 构建后的入口是 `web/dist/server.js`，静态文件与 Worker 随包携带。安装者无需源码、pnpm 或 esbuild。
 
-更新时安装新版本 `.tgz`，再重启服务。包名与启动命令已统一为 `beyond-simulator-web`；此前使用旧命令的启动脚本也需同步更新。
+更新时再次执行 `npm install -g beyond-simulator-web`，再重启服务。包名与启动命令已统一为 `beyond-simulator-web`；此前使用旧命令的启动脚本也需同步更新。
 
 ## 编辑与保存
 

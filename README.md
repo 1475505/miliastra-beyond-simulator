@@ -48,17 +48,19 @@ Harness 插件附带“千星 2D+Lua 游戏制作”Agent 预设。新建会话�
 | **Web 部署** | 希望直接在浏览器中编辑、调试的人 | 启动一个包含前后端的服务，通过浏览器编辑和试玩，无需 Harness。 |
 | **MCP 接入** | 使用其他支持 MCP 的 AI 客户端的人 | 向 AI 提供工程编辑、试玩、截图和保存工具，可配合 Web 查看结果。 |
 
-当前通过源码或本地构建的 `.tgz` 安装包使用，尚未发布到 npm。Web 包名和启动命令均为 `beyond-simulator-web`。下面的安装包路径以仓库根目录为基准；当前版本及文件名见 `release/manifest.json`。
+三个包已发布到 npm，也可从 GitHub 源码或本地构建的 `.tgz` 安装。Web 包名和启动命令均为 `beyond-simulator-web`。本地安装包路径以仓库根目录为基准；当前版本及文件名见 `release/manifest.json`。
 
 ### DeepSeek Harness 插件
 
 准备 Node.js 22+ 和 DeepSeek Harness，选择下面一种安装方式。GitHub 安装还需要 Git，会自动从源码构建；本地安装包路径以仓库根目录为基准，可按文末的[构建说明](#从源码构建)生成，文件名以 `release/manifest.json` 为准。
 
 ```sh
-# 从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-1.0.6.tgz
+# 从 npm 安装
+dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
+# 或，从本地安装包安装
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-1.0.10.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -74,10 +76,10 @@ GitHub 安装使用仓库默认分支，安装时由 `prepare` 自动构建。�
 
 ### Web 部署
 
-已有安装包时，只需准备 **Node.js 22+**，安装后即可启动完整前后端：
+准备 **Node.js 22+**，从 npm 安装后即可启动完整前后端：
 
 ```sh
-npm install -g ./release/beyond-simulator-web-0.1.2.tgz
+npm install -g beyond-simulator-web
 mkdir ../my-game
 beyond-simulator-web --workspace ../my-game --open
 ```
@@ -103,13 +105,13 @@ Web 也支持安装预构建包运行，仓库提供了 Docker 部署配置。�
 
 在支持本地 MCP stdio 服务的 AI 客户端中配置模拟器，指定游戏工作区后，AI 即可打开、编辑和保存工程，控制试玩并获取画面。
 
-已有安装包时，先执行：
+从 npm 安装：
 
 ```sh
-npm install -g ./release/qxqy-simulator-mcp-0.1.2.tgz
+npm install -g beyond-simulator-mcp
 ```
 
-然后在客户端中将服务命令设为 `qxqy-simulator-mcp`，参数设为 `--workspace` 和已有游戏目录的绝对路径。
+然后在客户端中将服务命令设为 `beyond-simulator-mcp`，参数设为 `--workspace` 和已有游戏目录的绝对路径。
 
 MCP 可以独立使用。需要同时看画面时，让 Web 指向同一个工作区，打开“存档预览”；AI 保存 JSON 后，预览会自动更新。Web 编辑器中的未保存草稿不会被自动覆盖。
 
@@ -187,6 +189,8 @@ pnpm test:packages
 安装包生成在 `release/`，本次产物的名称、版本与校验值见 `release/manifest.json`。包中已包含模拟器核心及所需界面资源，使用者无需构建源码；安装时仍会下载第三方运行依赖。
 
 少量集成测试使用外部知识库中的历史样本，独立检出时会明确跳过；可用 `QXQY_FIXTURE_ROOT` 指定样本根目录。模块分工见 [开发入口](AGENTS.md)，构建、验收与发布设计见 [分发说明](DISTRIBUTION.md)。
+
+自动发布通过 `npm-*` Git tag 触发；需要先在 npm 为三个包绑定同一份 GitHub Actions Trusted Publisher。配置项和版本规则见 [自动发布说明](DISTRIBUTION.md#自动发布到-npm)。
 
 ## 开源协议
 

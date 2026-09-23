@@ -10,9 +10,12 @@ const require = createRequire(import.meta.url)
 const packageRoot = dirname(require.resolve('dsh-plugin-beyond-simulator/package.json'))
 const manifest = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'))
 const patch = await readFile(join(packageRoot, manifest.dsh.bundle.patch), 'utf8')
-for (const [, name] of patch.matchAll(/^\s+name:\s+(\S+)/gm)) {
+for (const [, name] of patch.matchAll(/^      name:\s+(\S+)/gm)) {
+  if (name === "'@deepseek-ai/dsh-agent-preset'") continue // supplied by Harness 0.1.7+
   assert.equal(typeof (await import(name)).apply, 'function', `Bundle entry ${name}`)
 }
+assert.match(patch, /id: wonderland-lua-builder/)
+assert.equal(typeof (await import('dsh-plugin-beyond-simulator/preset')).apply, 'function')
 const client = await readFile(require.resolve('dsh-plugin-beyond-simulator/client'), 'utf8')
 let clientModule
 new Function('window', client)({ __ModuleLoader__: { load(value) { clientModule = value } } })

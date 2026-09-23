@@ -7,10 +7,12 @@
 准备 Node.js 22+ 和 DeepSeek Harness，选择下面一种安装方式。GitHub 源码安装还需要 Git；本地安装包路径以仓库根目录为基准，在其他目录安装时请换成 `.tgz` 的绝对路径。
 
 ```powershell
-# 从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-1.0.6.tgz
+# 从 npm 安装
+dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
+# 或，从本地安装包安装
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-1.0.10.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -36,6 +38,6 @@ Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxq
 
 插件同时注册 runtime skill `qxqy-simulator`：正文源文件是 [`../skill/SKILL.md`](../skill/SKILL.md)，构建时复制为包内 `dsh-plugin/skill.md`，经独立 bundle 行（只注入 `skills` 服务）调用 `ctx.skills.register` 注册。模型通过技能目录自动发现并按需加载，无需用户手动安装；该服务缺失时仅技能不可见，主功能不受影响。
 
-插件随包附带 agent 预设 `wonderland-lua-builder`（千星 2D+Lua 游戏制作）：源目录 [`../agent/wonderland-lua-builder`](../agent/wonderland-lua-builder)，构建时同步为包内 `dsh-plugin/presets/wonderland-lua-builder`，经独立 bundle 行（`dsh-plugin-beyond-simulator/preset`）在启动时复制到 `$DSH_HOME/.agent-presets/wonderland-lua-builder`。预设名册的 roots 被 CLI 钉死为 shipped 根，用户根（`includeUserRoot`）是唯一可扩展来源，因此用物化目录的方式安装；roster 每次读取重扫磁盘，复制完成预设立即可见。已存在则跳过、绝不覆盖用户改动；删除目标目录后重启即重装。
+插件随包附带 agent 预设 `wonderland-lua-builder`（千星 2D+Lua 游戏制作）：源目录 [`../agent/wonderland-lua-builder`](../agent/wonderland-lua-builder)。构建时把 `agent.cordis.yml` 嵌入 `dsh-plugin/cordis.patch.yml`。在提供 `@deepseek-ai/dsh-agent-preset` 的 DSH 0.1.7-rc.1 及更新版本中，新版注册项会启用；旧版 DSH 自动跳过它，避免缺失模块阻塞启动。旧版复制入口始终保留：启动时仅当 `$DSH_HOME/.agent-presets/wonderland-lua-builder` 不存在，才从包内 `dsh-plugin/presets/` 复制，已有用户预设不覆盖。支持预设选择的 DSH 中，可在「设置 → Agent 预设」选择；已有任务不会自动切换。
 
 编辑器自动跟随 Harness 亮/暗主题并占满宿主内容高度，分为“UI 编辑 / Lua 脚本 / 服务端逻辑”三个页面。顶栏显示存档名、会话工作区和当前资产。点击“试玩 ↗”会先保存脚本与服务端逻辑，再打开同源 `/qxqy-simulator/play#<sessionId>`；试玩画面由 PixiJS v8 WebGL 渲染，Runtime 仍在 Worker 内推进并独占 Lua、布局、锚点、命中和测试语义。`qxqy_studio_play_screenshot` 根据 Runtime `paint` 在 Host 出 PNG，`qxqy_studio_ui_screenshot` 根据编辑器 `boxes` 出舞台 PNG，都不依赖可见页签。完整使用与排障见 [`../../docs/simulator-usage.md`](../../docs/simulator-usage.md)。

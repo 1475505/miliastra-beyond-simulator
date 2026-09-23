@@ -21,6 +21,37 @@ export async function buildProduct(product) {
   await cleanGenerated(output, join(root, product))
   await mkdir(output, { recursive: true })
   if (product === 'dsh-plugin') {
+    const presetRoot = join(root, 'agent/wonderland-lua-builder')
+    const presetMeta = await readFile(join(presetRoot, 'preset.yml'), 'utf8')
+    const presetRows = await readFile(join(presetRoot, 'agent.cordis.yml'), 'utf8')
+    const display = key => {
+      const value = presetMeta.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))?.[1]
+      if (!value) throw new Error(`Agent preset is missing ${key}`)
+      return JSON.stringify(value.trim())
+    }
+    // Older DSH releases do not ship this plugin. Keep the legacy copier active
+    // there, and enable declarative registration only when DSH provides it.
+    const modernPresetUnavailable = "(()=>{try{process.getBuiltinModule('node:module').createRequire(process.argv[1]).resolve('@deepseek-ai/dsh-agent-preset');return false}catch{return true}})()"
+    const patch = [
+      '- insert:',
+      '    - id: qxqy-simulator',
+      '      name: dsh-plugin-beyond-simulator',
+      '    - id: qxqy-simulator-skill',
+      '      name: dsh-plugin-beyond-simulator/skill',
+      '    - id: qxqy-simulator-preset-legacy',
+      '      name: dsh-plugin-beyond-simulator/preset',
+      '    - id: qxqy-simulator-preset',
+      "      name: '@deepseek-ai/dsh-agent-preset'",
+      `      disabled: !!js ${JSON.stringify(modernPresetUnavailable)}`,
+      '      config:',
+      '        id: wonderland-lua-builder',
+      `        name: ${display('name')}`,
+      `        description: ${display('description')}`,
+      '        plugins:',
+      ...presetRows.trimEnd().split(/\r?\n/).map(line => line ? `          ${line}` : ''),
+      '',
+    ].join('\n')
+    await writeFile(join(root, 'dsh-plugin/cordis.patch.yml'), patch)
     for (const name of ['index', 'worker', 'skill', 'preset']) {
       await bundle(`dsh-plugin/lib/${name}.js`, join(output, `${name}.js`))
     }

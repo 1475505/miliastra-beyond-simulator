@@ -1,11 +1,11 @@
 {
-  "name": "qxqy-simulator-mcp",
-  "version": "0.1.2",
+  "name": "beyond-simulator-mcp",
+  "version": "0.1.3",
   "description": "MCP stdio server for the Qianxing UI simulator",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "qxqy-simulator-mcp": "dist/index.js"
+    "beyond-simulator-mcp": "dist/index.js"
   },
   "files": [
     "dist",

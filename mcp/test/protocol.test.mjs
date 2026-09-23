@@ -66,7 +66,7 @@ test('MCP handshake exposes simulator tools and supports an edit/save round trip
       clientInfo: { name: 'test', version: '1' },
     })
     assert.equal(initialized.result.protocolVersion, '2024-11-05')
-    assert.equal(initialized.result.serverInfo.name, 'qxqy-simulator-mcp')
+    assert.equal(initialized.result.serverInfo.name, 'beyond-simulator-mcp')
     assert.ok(initialized.result.capabilities.tools)
     server.notify('notifications/initialized')
 

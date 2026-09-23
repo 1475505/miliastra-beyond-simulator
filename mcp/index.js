@@ -4,7 +4,7 @@ import { SimulatorController } from './lib/controller.js'
 import { listWorkspaceArchives, resolveWorkspaceRoot } from './lib/workspace.js'
 import manifest from './package.json' with { type: 'json' }
 
-const SERVER_NAME = 'qxqy-simulator-mcp'
+const SERVER_NAME = 'beyond-simulator-mcp'
 const SERVER_VERSION = manifest.version
 const SUPPORTED_PROTOCOL_VERSIONS = [
   '2025-11-25',

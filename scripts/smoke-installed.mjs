@@ -23,7 +23,7 @@ await mkdir(workspace)
 for (const name of ['qxqy-studio', 'qxqy-lua-runtime', 'qxqy-server']) {
   assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' })
 }
-for (const name of ['dsh-plugin-beyond-simulator', 'qxqy-simulator-mcp', 'beyond-simulator-web']) {
+for (const name of ['dsh-plugin-beyond-simulator', 'beyond-simulator-mcp', 'beyond-simulator-web']) {
   const manifest = JSON.parse(await readFile(join(process.cwd(), 'node_modules', name, 'package.json'), 'utf8'))
   assert.equal(manifest.devDependencies, undefined)
   for (const script of ['prepare', 'preinstall', 'install', 'postinstall', 'prepack']) assert.equal(manifest.scripts?.[script], undefined)
@@ -65,7 +65,7 @@ try {
 } finally { await app.close() }
 console.log('PASS installed Web: HTTP, editor save, static resources, PNG and Worker')
 
-const child = spawn(process.execPath, [require.resolve('qxqy-simulator-mcp'), '--workspace', workspace], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+const child = spawn(process.execPath, [require.resolve('beyond-simulator-mcp'), '--workspace', workspace], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
 let buffer = ''
 let diagnostics = ''
 let nextId = 0
@@ -96,7 +96,7 @@ async function request(method, params) {
 }
 try {
   const init = await request('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'package-smoke', version: '1' } })
-  assert.equal(init.result.serverInfo.name, 'qxqy-simulator-mcp')
+  assert.equal(init.result.serverInfo.name, 'beyond-simulator-mcp')
   const tools = await request('tools/list', {})
   assert.ok(tools.result.tools.some(tool => tool.name === 'qxqy_project_save'))
   const opened = await request('tools/call', { name: 'qxqy_project_open', arguments: { path: 'demo.save.json' } })

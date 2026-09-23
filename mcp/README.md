@@ -1,4 +1,4 @@
-# qxqy-simulator-mcp
+# beyond-simulator-mcp
 
 独立的 MCP stdio server，让 Codex 或其他 MCP client 直接驱动千星沙箱模拟器。它不依赖 DSH；编辑和试玩仍复用 `../studio`、`../client/lua-runtime` 与 `../server`。
 
@@ -10,7 +10,7 @@
 cd E:\qxqy-lua\simulator
 pnpm install --frozen-lockfile
 pnpm build
-pnpm --filter qxqy-simulator-mcp test
+pnpm --filter beyond-simulator-mcp test
 ```
 
 直接运行时，server 通过 stdin/stdout 使用 MCP JSON-RPC；stdout 只输出协议消息，诊断信息应写到 stderr。工作区默认是启动进程的当前目录，也可以显式指定：
@@ -44,13 +44,13 @@ startup_timeout_sec = 120
 QXQY_WORKSPACE = "E:/qxqy-lua"
 ```
 
-也可以安装根目录 `pnpm pack:release` 生成的包（在仓库根执行，文件名以 `release/manifest.json` 为准；当前尚未发布到 npm）：
+也可以直接从 npm 安装：
 
 ```sh
-npm install -g ./release/qxqy-simulator-mcp-0.1.2.tgz
+npm install -g beyond-simulator-mcp
 ```
 
-包包含核心和 Worker，无需相邻源码。安装到 PATH 后，可把 `command` 设为 `qxqy-simulator-mcp` 并仅传 `--workspace` 和工作区绝对路径。更新时安装新版本安装包并重启客户端。保存配置并重启客户端后，在工具列表中应看到：
+包包含核心和 Worker，无需相邻源码。安装到 PATH 后，可把 `command` 设为 `beyond-simulator-mcp` 并仅传 `--workspace` 和工作区绝对路径。更新时再次执行 `npm install -g beyond-simulator-mcp` 并重启客户端。保存配置并重启客户端后，在工具列表中应看到：
 
 - `qxqy_project_open` / `qxqy_project_save`
 - `qxqy_studio_get` / `qxqy_studio_patch`
