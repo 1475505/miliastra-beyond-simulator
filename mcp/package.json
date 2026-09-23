@@ -1,0 +1,36 @@
+{
+  "name": "qxqy-simulator-mcp",
+  "version": "0.1.2",
+  "description": "MCP stdio server for the Qianxing UI simulator",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "qxqy-simulator-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ../scripts/build.mjs mcp",
+    "prepack": "node ../scripts/build.mjs mcp",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "0.1.100",
+    "fengari": "0.1.5",
+    "protobufjs": "8.7.2"
+  },
+  "devDependencies": {
+    "qxqy-studio": "workspace:*"
+  },
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1475505/miliastra-beyond-simulator.git",
+    "directory": "mcp"
+  }
+}

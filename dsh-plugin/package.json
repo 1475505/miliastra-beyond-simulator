@@ -1,0 +1,19 @@
+{
+  "name": "qxqy-dsh-adapter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../scripts/build.mjs dsh-plugin",
+    "pretest": "node ../scripts/build.mjs dsh-plugin",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "qxqy-editor-ui": "workspace:*",
+    "qxqy-studio": "workspace:*"
+  },
+  "license": "GPL-3.0-only"
+}

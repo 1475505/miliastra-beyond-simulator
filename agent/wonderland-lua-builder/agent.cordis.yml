@@ -1,0 +1,214 @@
+# The `wonderland-lua-builder` agent preset: a Genshin Miliastra Wonderland
+# (千星奇域) 2D+Lua game-studio agent, copied from `standard`.
+#
+# This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
+# standing scope; every session naming it joins by scope parentage. The host
+# composition keeps the registries, sandbox, approval stack, persistence, and
+# the model route. Simulator Tools come from `dsh-plugin-beyond-simulator`.
+# 2D Lua knowledge is the user's workspace (AGENTS.md / knowledge docs they
+# place when creating the agent workspace). Do not bundle a corpus in this
+# preset and do not route through miliastra-knowledge (3D sandbox nodes).
+#
+# A service row here MUST sit inside a group carrying an `isolate` realm.
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: |-
+      You are a 千星奇域 2D+Lua game studio director powered by the {{model}} model. Your working directory is {{cwd}}.
+
+      You make playable UI+Lua games for 原神千星奇域 (Miliastra Wonderland): client UI controls, client Lua, and a thin server of custom variables/signals. You are not a 3D level-graph designer. Load `qxqy-game-studio` before creating, changing, reviewing, or polishing a game, then load only the stage skills it routes to. Read 2D API and observed pitfalls from the current workspace (AGENTS.md and knowledge docs the user placed there). Never use `miliastra-knowledge` for 2D UI+Lua and never invent official APIs, imageIds, GIA fields, or simulator support. If the workspace has no API docs, ask the user to add them before writing Lua that depends on editor APIs.
+
+      Keep one current stage: PREFLIGHT, then (1) GDD, (2) art direction, (3) logic contract, (4) HTML final-look demo with no simulator, (5) test design, (6) Lua + simulator TDD — first contact with the simulator, (7) delivery verification via simulator play/screenshots, (8) quality expansion and device validation. Art and logic may run in parallel after the GDD gate and meet in the HTML demo. Existing projects resume from the earliest missing evidence.
+
+      Stages 1–4 do not open the simulator, edit saves, or runCase. HTML is a final-look demo the user opens in a browser (this composition has no browser-play tool; record browser-run: user). HTML is not the Lua source and not the ship artifact. After implementation, delivery proof uses qxqy_studio_play, qxqy_studio_ui_screenshot, and qxqy_studio_play_screenshot. Do not treat web search as playtesting. Coordinates: 千星 origin bottom-left, Y up; HTML is usually top-left, Y down — never copy CSS pixels into Lua.
+
+      The deliverable is a game that runs in the simulator and on device (Lua + save/GIA), not a webpage. Official Genshin/千星 art and imageIds are allowed; the simulator only previews primitives 100001–100006 (missing box is a preview limit). Design qxqy tests before production rules; a valid Red is a running skeleton whose intended behavior is absent. Fun is judged with the HTML demo first, then simulator play/screenshots — not fake log asserts.
+
+      First milestone is one complete game session. Saves: workspace/<slug>/<slug>.save.json with qxqy-simulator-save near the file head. Simulator green is not ship. Ask the user at GDD, real art-direction forks, HTML demo lock, integrated feel, and device/release. Skip empty art forks. Inspect the repo and tools yourself.
+
+      Maintain a living tech-architecture doc (docs/tech-architecture.md) throughout development, in the spirit of Karpathy's llm.c dev wiki: module breakdown, what each Lua file, client control/container, and server variable/signal is responsible for, key data flow and mount points. Update it with every structural change — it is the operability manual after delivery, and stale entries are worse than none.
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+# `shell-env` stays in the HOST composition. Both shell tools consume the host
+# registry from here; their executors (`bash-sandbox`/`pwsh-sandbox`) are
+# host-plane too.
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+# ── filesystem ──────────────────────────────────────────────────────────────
+
+# Both register into the host `tools` registry and provide nothing, so
+# they need no realm. The `fs` service and its policy stay in the host.
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# ── background jobs ────────────────────────────────────────────────────────
+
+# Only the model-facing controls. The task REGISTRY stays on the host plane.
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# ── skills ──────────────────────────────────────────────────────────────────
+
+# The skill REGISTRY lives in the host composition and is layered per scope.
+# `customSkillDirs` ships this preset's studio workflow with the copy; project
+# and user roots remain enabled so `~/.dsh/skills` and workspace skills still
+# appear. The simulator plugin still registers globally; miliastra-knowledge
+# is not part of this preset's workflow.
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    customSkillDirs:
+      - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── goals ───────────────────────────────────────────────────────────────────
+
+# Only the model-facing tool. The goal SERVICE stays on the host plane.
+- id: tool-goal
+  name: '@deepseek-ai/dsh-tool-goal'
+
+# ── plan mode ───────────────────────────────────────────────────────────────
+
+- id: planning
+  name: cordis:group
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '@deepseek-ai/dsh-plan-mode'
+      config:
+        section: |
+              You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+              Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+              The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+              Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+              For 千星奇域 games, plan the eight-stage vertical-slice workflow: GDD; optional art-direction fork; logic contract; HTML final-look demo (no simulator in stages 1–4); test design; Lua + simulator TDD as first simulator contact; delivery verification with qxqy_studio_play and screenshots; risk-based coverage, GIA, and device validation. The ship artifact is a game that runs in the simulator and on device, not HTML. Never translate DOM/CSS/JS to Lua, never copy HTML coordinates (top-left) into 千星 (bottom-left, Y up). Official imageIds are allowed; simulator missing-box is a preview limit. Cover the three-asset split, workspace/<slug>/<slug>.save.json, canvases, budgets, GIA warnings, real-device pass. Route Lua/API through workspace knowledge docs the user provides, never miliastra. State entry/exit evidence, which gates can merge, and rollbacks so another engineer need not invent design.
+
+              When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+# ── compaction ──────────────────────────────────────────────────────────────
+
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# ── delegation and workflows ────────────────────────────────────────────────
+
+# The `subagents` registry stays on the HOST plane. `workflowEngine` is
+# isolated here because nothing outside an agent reads it.
+- id: delegation
+  name: cordis:group
+  group: true
+  isolate:
+    workflowEngine: true
+  config:
+    - id: tool-subagent-control
+      name: '@deepseek-ai/dsh-tool-subagent-control'
+
+    - id: tool-subagent-list-agents
+      name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+
+    - id: tool-subagent
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent
+        backgroundMode: continuable
+
+    - id: tool-subagent-fork
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: fork
+        toolName: subagent_fork
+        backgroundMode: continuable
+
+    - id: tool-subagent-codex
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: codex
+        toolName: subagent_codex
+        enableRunInBackground: false
+        maxDepth: provider-managed
+
+    - id: tool-subagent-claude-code
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: claude-code
+        toolName: subagent_claude_code
+        enableRunInBackground: false
+        maxDepth: provider-managed
+
+    - id: workflow-worker-thread
+      name: '@deepseek-ai/dsh-workflow-worker-thread'
+      config:
+        provider: spawn
+
+    - id: tool-workflow
+      name: '@deepseek-ai/dsh-tool-workflow'
+
+    - id: tool-ralph
+      name: '@deepseek-ai/dsh-tool-ralph'
+      config:
+        subagentProvider: spawn
+        maxRounds: 64
+
+# ── remaining model-facing rows ─────────────────────────────────────────────
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: false
+    searchTimeoutMs: 60000

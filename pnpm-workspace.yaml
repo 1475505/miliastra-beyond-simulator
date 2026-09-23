@@ -1,0 +1,11 @@
+packages:
+  - client/lua-runtime
+  - server
+  - studio
+  - editor-ui
+  - dsh-plugin
+  - mcp
+  - web
+
+onlyBuiltDependencies:
+  - esbuild

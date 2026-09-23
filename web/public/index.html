@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#20242e">
+    <title>千星模拟器 · Live Preview</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">UI</span>
+        <div>
+          <strong>模拟器</strong>
+          <span>Web Preview · 实时预览</span>
+        </div>
+      </div>
+      <div class="project-picker">
+        <label for="archive-select">工作区存档</label>
+        <select id="archive-select" aria-label="工作区存档"></select>
+        <button id="reload-button" class="icon-button" title="重新读取存档" aria-label="重新读取存档">↻</button>
+      </div>
+      <div class="topbar-status">
+        <a href="/editor" style="color:inherit">编辑工作台 ↗</a>
+        <div id="connection" class="connection"><span></span>正在连接</div>
+        <button id="theme-button" class="icon-button theme-button" title="切换亮暗主题" aria-label="切换亮暗主题">◐</button>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <aside class="tree-panel panel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">STRUCTURE</span>
+            <h2 id="tree-title">控件树</h2>
+          </div>
+          <span id="tree-count" class="count">0</span>
+        </div>
+        <div id="tree" class="tree" role="tree"></div>
+      </aside>
+
+      <section class="preview-panel">
+        <div class="preview-toolbar panel">
+          <div class="segmented" aria-label="预览模式">
+            <button id="mode-editor" class="active" data-mode="editor">编辑器</button>
+            <button id="mode-play" data-mode="play">试玩</button>
+          </div>
+          <label class="select-field">
+            <span>资产</span>
+            <select id="asset-select">
+              <option value="server-control-template">服务端 UI</option>
+              <option value="client-control-template">客户端模板</option>
+            </select>
+          </label>
+          <label class="select-field">
+            <span>设备</span>
+            <select id="device-select"></select>
+          </label>
+          <div class="play-controls" id="play-controls">
+            <button id="play-start" class="primary">▶ 启动</button>
+            <button id="play-pause">Ⅱ 暂停</button>
+            <button id="play-resume">▷ 继续</button>
+            <button id="play-step">+ 1 帧</button>
+            <button id="play-stop" class="danger">■ 停止</button>
+          </div>
+        </div>
+
+        <div class="workspace panel">
+          <div class="stage-meta">
+            <div>
+              <span id="asset-label">等待存档</span>
+              <strong id="save-name">未命名存档</strong>
+            </div>
+            <div class="stage-readout">
+              <span id="canvas-label">—</span>
+              <span id="revision-label">Revision —</span>
+            </div>
+          </div>
+          <div id="stage-shell" class="stage-shell" tabindex="0" aria-label="模拟器预览画布">
+            <img id="stage-image" alt="千星模拟器预览">
+            <canvas id="stage-canvas" class="stage-canvas" hidden></canvas>
+            <div id="stage-empty" class="stage-empty">
+              <span>⌁</span>
+              <strong>等待工作区存档</strong>
+              <p>Codex 保存 qxqy-simulator-save JSON 后会自动出现在这里。</p>
+            </div>
+            <div id="stage-loading" class="stage-loading" hidden>正在更新画面…</div>
+          </div>
+          <div class="stage-footer">
+            <span id="active-path">尚未打开存档</span>
+            <span id="play-readout">编辑器静态预览</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="info-panel panel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">INSPECT</span>
+            <h2>预览信息</h2>
+          </div>
+        </div>
+        <section class="info-card">
+          <span class="info-label">当前节点</span>
+          <strong id="node-name">未选择</strong>
+          <dl id="node-details"></dl>
+        </section>
+        <section class="info-card metrics">
+          <div><span>控件</span><strong id="metric-controls">0</strong></div>
+          <div><span>Lua</span><strong id="metric-scripts">0</strong></div>
+          <div><span>画布</span><strong id="metric-canvas">—</strong></div>
+        </section>
+        <section class="log-card">
+          <div class="log-heading"><span>Runtime Logs</span><button id="clear-logs">清空</button></div>
+          <pre id="runtime-logs">试玩启动后显示 Lua 日志。</pre>
+        </section>
+        <p class="watch-note"><span>●</span> 正在监听磁盘。MCP 保存当前 JSON 后，预览会自动重新加载。</p>
+      </aside>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>千星沙箱 · 独立试玩</title>
+  <style>
+    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden}
+    body{--bg:#0c1422;--panel:#101a2a;--panel2:#152238;--line:#263750;--text:#edf3ff;--muted:#8f9caf;--workspace:#111c2c;--input:#0d1726;--blue:#4382f3;color:var(--text);background:var(--bg);font:13px/1.45 Inter,"Microsoft YaHei UI","Microsoft YaHei",sans-serif}
+    body[data-theme=light]{--bg:#eef1f5;--panel:#fff;--panel2:#f3f5f8;--line:#d5dbe4;--text:#20252c;--muted:#68717e;--workspace:#d9dee6;--input:#fff}
+    button{font:inherit;color:inherit;cursor:pointer}button:disabled{opacity:.42;cursor:default}.app{height:100%;display:grid;grid-template-rows:56px minmax(0,1fr) 34px;background:var(--bg)}
+    .bar{display:grid;grid-template-columns:minmax(250px,1fr) auto minmax(360px,1fr);align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--panel2),var(--panel));box-shadow:0 1px 12px #0003;z-index:2}
+    .brand,.device,.view-tabs,.actions,.status{display:flex;align-items:center}.brand{gap:10px;min-width:0}.icon{width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--line);border-radius:6px;background:var(--input);font-size:11px}.brand strong{font-size:16px}.device{gap:8px;margin-left:18px;color:var(--muted)}.device b{color:var(--text);font-weight:500}.view-tabs{height:36px;padding:3px;border:1px solid var(--line);border-radius:7px;background:var(--input)}.view-tabs button{min-width:100px;height:28px;padding:0 16px;border:0;border-radius:5px;background:transparent;color:var(--muted)}.view-tabs button.active{color:#fff;background:linear-gradient(#4c87fa,#376fd7);box-shadow:0 0 0 1px #5e90ef55}.actions{justify-content:flex-end;gap:7px}.actions button{height:34px;padding:0 12px;border:1px solid var(--line);border-radius:6px;background:var(--input)}.actions button:hover:not(:disabled){border-color:var(--blue)}.actions .stop{color:#f17884}.actions .primary{color:#fff;border-color:#3265d8;background:linear-gradient(#4c87fa,#376fd7)}.devsel,.playersel,.viewsel{height:30px;width:150px;margin-left:12px;padding:0 4px;border:1px solid var(--line);border-radius:6px;background:var(--input);color:var(--text);text-overflow:ellipsis}.playersel,.viewsel{width:108px}
+    .views{position:relative;min-width:0;min-height:0}.play-view{position:absolute;inset:0}.debug-view{position:absolute;inset:0;display:grid;grid-template-columns:minmax(280px,32%) minmax(420px,1fr);background:var(--bg)}.panel{min-height:0;background:color-mix(in srgb,var(--panel) 96%,transparent)}.tree-panel{display:grid;grid-template-rows:42px minmax(0,1fr) 42px minmax(160px,32%);border-right:1px solid var(--line)}.log-stack{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr) auto}.log-panel{display:grid;grid-template-rows:42px minmax(0,1fr);min-height:0}.log-panel + .log-panel{border-top:1px solid var(--line)}.case-panel{display:grid;grid-template-rows:42px auto;border-top:1px solid var(--line)}.case-body{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:10px 14px}.case-body input,.case-body textarea{width:100%;min-height:34px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--input);color:var(--text);font:12px/1.4 Consolas,"Microsoft YaHei UI",monospace}.case-body textarea{min-height:72px;resize:vertical}.vars{min-height:0;overflow:auto;padding:8px 10px}.var-row{display:grid;grid-template-columns:72px minmax(72px,1fr) 52px minmax(80px,1.2fr);gap:6px;align-items:center;padding:5px 4px;border-bottom:1px solid color-mix(in srgb,var(--line) 70%,transparent);font:12px/1.4 Consolas,"Microsoft YaHei UI",monospace}.var-row b{font-weight:650;color:var(--text)}.var-empty{padding:14px 8px;color:var(--muted)}.panel-head{display:flex;align-items:center;padding:0 14px;border-bottom:1px solid var(--line);font-weight:650}.panel-head small{margin-left:auto;color:var(--muted);font-weight:400}.tree{min-height:0;overflow:auto;padding:8px 7px}.log{min-height:0;overflow:auto;padding:12px 16px;white-space:pre-wrap;color:var(--muted);font:12px/1.8 Consolas,"Microsoft YaHei UI",monospace}.log:empty:before{content:"暂无日志。";color:var(--muted)}#log:empty:before{content:"暂无客户端脚本日志。Lua print / printerr 会显示在这里。"}#serverLog:empty:before{content:"暂无服务端日志。变量缺失、越界和信号投递记录在这里，不会混入脚本输出。"}
+    .workspace{position:absolute;inset:0;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;padding:28px;overflow:hidden;background-color:var(--workspace);background-image:radial-gradient(#ffffff0c 1px,transparent 1px),linear-gradient(135deg,#ffffff07 25%,transparent 25%,transparent 75%,#00000008 75%);background-size:4px 4px,24px 24px}.stage-shell{position:relative;filter:drop-shadow(0 14px 28px #0005)}.stage-shell.veiled{visibility:hidden}.loading{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;gap:10px;color:var(--muted);background:var(--bg)}.loading .spin{width:14px;height:14px;border-radius:50%;border:2px solid #4382f338;border-top-color:var(--blue);animation:qxqy-spin .9s linear infinite}@keyframes qxqy-spin{to{transform:rotate(1turn)}}.stage-label{position:absolute;left:0;top:-23px;color:var(--muted);font-size:11px}.stage{position:relative;overflow:hidden;border:1px solid #4d7899;outline:1px solid #0005;background:radial-gradient(circle at 50% 45%,#123a6b,#061934 72%,#071426);touch-action:none;user-select:none}.fatal{position:absolute;inset:0;display:grid;place-items:center;padding:24px;color:#ef7784;background:color-mix(in srgb,var(--workspace) 88%,transparent)}.hidden{display:none!important}
+    .stage-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+    .status{gap:14px;padding:0 14px;border-top:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:11px}.status .live{color:#62d398}.status .error{color:#f07480}.spacer{flex:1}.metric{padding-left:14px;border-left:1px solid var(--line)}
+    @media(max-width:1050px){.bar{grid-template-columns:1fr auto 1fr}.device{display:none}.devsel{width:118px;margin-left:8px}.view-tabs button{min-width:78px}.workspace{padding:20px}.debug-view{grid-template-columns:260px minmax(360px,1fr)}}
+    @media(max-width:760px){.debug-view{grid-template-columns:1fr}.tree-panel{display:none}.brand strong{font-size:14px}.brand .devsel{width:104px;margin-left:6px}.actions button{padding:0 9px}.actions #theme{display:none}.view-tabs button{min-width:64px;padding:0 10px}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="bar">
+      <div class="brand"><span class="icon">UI</span><strong>模拟器</strong><select id="deviceSel" class="devsel hidden" aria-label="切换设备画布" title="切换设备画布：以新画布重建运行时，GetUICanvasSize 与预设像素一致"></select><select id="playerCountSel" class="playersel hidden" aria-label="试玩人数" title="试玩人数：最多 8 人，每人一份独立客户端"></select><select id="playerViewSel" class="viewsel hidden" aria-label="当前玩家视角" title="切换当前玩家视角：输入、画面和 PlayerSelf 都跟随该玩家"></select><span class="device">设备 <b id="resolution">准备中…</b></span></div>
+      <div class="view-tabs" role="tablist" aria-label="试玩页面"><button class="active" data-view="play" role="tab">试玩</button><button data-view="log" role="tab">日志</button></div>
+      <div class="actions"><button id="pause">Ⅱ 暂停运行</button><button id="step" disabled title="暂停后可单帧调试">▷ 单帧调试</button><button class="stop" id="stop">■ 结束试玩</button><button class="primary hidden" id="restart">↻ 重新开始</button><button id="theme" title="切换亮暗主题">◐</button><button id="close">返回编辑</button></div>
+    </header>
+    <div class="views">
+      <main class="workspace play-view" id="workspace"><div class="stage-shell veiled" id="shell"><div class="stage-label" id="stageLabel"></div><div class="stage" id="stage"><canvas id="cv" class="stage-canvas"></canvas></div></div><div class="loading" id="loading"><span class="spin"></span>正在准备试玩…</div><div class="fatal hidden" id="fatal"></div></main>
+      <section class="debug-view hidden" id="logView">
+        <aside class="panel tree-panel"><div class="panel-head">运行时场景树 <small id="nodeCount">0 节点</small></div><div class="tree" id="sceneTree"></div><div class="panel-head">服务端变量 <small id="varCount">0 项</small></div><div class="vars" id="serverVars"></div></aside>
+        <div class="log-stack"><main class="panel log-panel"><div class="panel-head">客户端脚本日志 <small>最近 100 条</small></div><div class="log" id="log"></div></main><aside class="panel log-panel"><div class="panel-head">服务端日志 <small>变量 / 信号</small></div><div class="log" id="serverLog"></div></aside><section class="panel case-panel"><div class="panel-head">自动测用例 <small id="caseHint">先试玩，再保存回放</small></div><div class="case-body"><textarea id="caseAsserts" spellcheck="false" placeholder='断言 JSON 数组，例如 [{"kind":"log","contains":"clicked"}]'></textarea><button id="saveCase">保存用例</button><button id="runCase">回放用例</button></div></section></div>
+      </section>
+    </div>
+    <footer class="status"><span class="live" id="state">● 正在启动</span><span id="viewMode">页面：试玩</span><span class="spacer"></span><span class="metric" id="frame">Frame 0</span><span class="metric" id="time">0.00s</span></footer>
+  </div>
+  <script type="module">
+    import { PixiPlayRenderer, createPlaySession } from '/qxqy-simulator/play-renderer.js'
+
+    (() => {
+      'use strict'
+      const API = '/qxqy-simulator/api/play'
+      const sessionId = decodeURIComponent(location.hash.slice(1))
+      const $ = (id) => document.getElementById(id)
+      const stage = $('stage')
+      const cv = $('cv')
+      const renderer = new PixiPlayRenderer(cv)
+      const shell = $('shell')
+      const workspace = $('workspace')
+      const logView = $('logView')
+      let theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      let fittedCanvas = ''
+
+      function applyTheme() { document.body.dataset.theme = theme }
+      applyTheme()
+
+      function setView(view) {
+        const showLog = view === 'log'
+        workspace.classList.toggle('hidden', showLog)
+        logView.classList.toggle('hidden', !showLog)
+        $('viewMode').textContent = showLog ? '页面：日志' : '页面：试玩'
+        for (const button of document.querySelectorAll('[data-view]')) button.classList.toggle('active', button.dataset.view === view)
+        if (!showLog) requestAnimationFrame(() => fitStage(true))
+      }
+
+      async function api(action, args = {}) {
+        const response = await fetch(API, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionId, action, args }),
+        })
+        const envelope = await response.json().catch(() => null)
+        if (!response.ok || !envelope || envelope.ok !== true) throw new Error(envelope?.error || '试玩请求失败')
+        return envelope.value
+      }
+
+      function renderVars(rows) {
+        const host = $('serverVars')
+        host.replaceChildren()
+        const list = Array.isArray(rows) ? rows : []
+        $('varCount').textContent = list.length + ' 项'
+        if (!list.length) {
+          const empty = document.createElement('div')
+          empty.className = 'var-empty'
+          empty.textContent = '暂无自定义变量。脚本 Get/Set 或 serverSet 之后会出现在这里。'
+          host.appendChild(empty)
+          return
+        }
+        for (const row of list) {
+          const el = document.createElement('div')
+          el.className = 'var-row'
+          const type = row.type || '—'
+          const value = row.value === undefined ? 'nil' : JSON.stringify(row.value)
+          const entityCell = document.createElement('span')
+          entityCell.textContent = row.entityLabel || row.entityType || ''
+          const nameCell = document.createElement('b')
+          nameCell.textContent = row.name || ''
+          const typeCell = document.createElement('span')
+          typeCell.textContent = type
+          const valueCell = document.createElement('span')
+          valueCell.textContent = value
+          el.append(entityCell, nameCell, typeCell, valueCell)
+          host.appendChild(el)
+        }
+      }
+
+      function renderTree(snapshot) {
+        const host = $('sceneTree')
+        host.replaceChildren()
+        const empty = document.createElement('div')
+        empty.className = 'var-empty'
+        empty.textContent = '完整运行树请用 Agent 的 inspect 快照。舞台按左树上方盖住下方绘制。'
+        host.appendChild(empty)
+        $('nodeCount').textContent = (snapshot?.scene?.count || snapshot?.paint?.length || 0) + ' 个可见图元'
+      }
+
+      function fitStage(force = false) {
+        const snapshot = play.snapshot
+        if (!snapshot) return
+        const key = snapshot.canvasWidth + '×' + snapshot.canvasHeight
+        if (!force && (fittedCanvas === key || !Number.isFinite(snapshot.canvasWidth) || !Number.isFinite(snapshot.canvasHeight))) return
+        fittedCanvas = key
+        const maxW = Math.max(120, workspace.clientWidth - 48)
+        const maxH = Math.max(80, workspace.clientHeight - 48)
+        const scale = Math.min(maxW / snapshot.canvasWidth, maxH / snapshot.canvasHeight)
+        if (!Number.isFinite(scale) || scale <= 0) return
+        shell.style.width = (snapshot.canvasWidth * scale) + 'px'
+        shell.style.height = (snapshot.canvasHeight * scale) + 'px'
+        stage.style.width = '100%'
+        stage.style.height = '100%'
+      }
+
+      function revealStage() {
+        shell.classList.remove('veiled')
+        $('loading').classList.add('hidden')
+      }
+
+      function applyStatus(next) {
+        $('frame').textContent = 'Frame ' + (next.frame || 0)
+        $('time').textContent = Number(next.time || 0).toFixed(2) + 's'
+        $('pause').textContent = next.paused ? '▶ 继续运行' : 'Ⅱ 暂停运行'
+        $('pause').disabled = false
+        $('step').disabled = !next.paused
+      }
+
+      function syncDeviceSelect(next) {
+        const sel = $('deviceSel')
+        const presets = Array.isArray(next.canvasPresets) ? next.canvasPresets : []
+        if (!presets.length || !next.canvasId) {
+          sel.replaceChildren()
+          sel.classList.add('hidden')
+          return
+        }
+        const stale = sel.options.length !== presets.length
+          || [...sel.options].some((opt, i) => opt.value !== presets[i].id)
+        if (stale) {
+          sel.replaceChildren(...presets.map((preset) => {
+            const opt = document.createElement('option')
+            opt.value = preset.id
+            opt.textContent = preset.label || (preset.id + ' · ' + preset.width + '×' + preset.height)
+            return opt
+          }))
+        }
+        if (sel.value !== next.canvasId) sel.value = next.canvasId
+        sel.classList.remove('hidden')
+      }
+
+      function fillCountSelect(sel, count) {
+        const n = Math.max(1, Math.min(8, Number(count) || 1))
+        if (sel.options.length !== 8) {
+          sel.replaceChildren(...Array.from({ length: 8 }, (_, i) => {
+            const opt = document.createElement('option')
+            opt.value = String(i + 1)
+            opt.textContent = (i + 1) + ' 人'
+            return opt
+          }))
+        }
+        sel.value = String(n)
+        sel.classList.remove('hidden')
+        return n
+      }
+
+      function syncPlayerSelects(next) {
+        const countSel = $('playerCountSel')
+        const viewSel = $('playerViewSel')
+        const count = fillCountSelect(countSel, next.playerCount || 1)
+        const players = Array.isArray(next.players) && next.players.length
+          ? next.players
+          : Array.from({ length: count }, (_, i) => ({ index: i + 1, label: '玩家' + (i + 1) }))
+        const stale = viewSel.options.length !== players.length
+          || [...viewSel.options].some((opt, i) => Number(opt.value) !== players[i].index)
+        if (stale) {
+          viewSel.replaceChildren(...players.map((player) => {
+            const opt = document.createElement('option')
+            opt.value = String(player.index)
+            opt.textContent = player.label || ('玩家' + player.index)
+            return opt
+          }))
+        }
+        const view = Number(next.viewPlayerIndex) || 1
+        if (viewSel.value !== String(view)) viewSel.value = String(view)
+        viewSel.classList.toggle('hidden', count < 2)
+      }
+
+      async function renderChrome(next) {
+        $('fatal').classList.add('hidden')
+        fitStage()
+        syncDeviceSelect(next)
+        syncPlayerSelects(next)
+        $('resolution').textContent = next.canvasWidth + '×' + next.canvasHeight
+        const viewLabel = next.playerCount > 1 ? (' · 玩家' + (next.viewPlayerIndex || 1)) : ''
+        $('stageLabel').textContent = next.canvasWidth + '×' + next.canvasHeight + viewLabel + ' · 点击输入'
+        applyStatus(next)
+        $('stop').disabled = false
+        $('restart').classList.add('hidden')
+        $('state').textContent = next.mountError ? '⚠ 脚本挂载失败' : next.paused ? 'Ⅱ 已暂停' : '● 试玩运行中'
+        $('state').className = next.mountError ? 'error' : 'live'
+        renderTree(next)
+        renderVars(next.serverVars)
+        $('log').textContent = (next.logs || []).slice(-100).map((entry) => Number(entry.time || 0).toFixed(2).padStart(7, ' ') + '  [' + entry.level + ']  ' + entry.text).join('\n')
+        $('serverLog').textContent = (next.serverLogs || next.server?.logs || []).slice(-100).map((entry) => Number(entry.time || 0).toFixed(2).padStart(7, ' ') + '  [' + entry.level + ']  ' + entry.text).join('\n')
+        $('caseHint').textContent = (next.history && next.history.length ? ('已记录 ' + next.history.length + ' 步') : '先试玩，再保存回放')
+        if (next.mountError) setView('log')
+      }
+
+      function showError(error) {
+        $('loading').classList.add('hidden')
+        $('fatal').classList.remove('hidden')
+        $('fatal').textContent = error?.message || String(error)
+        $('state').className = 'error'
+        $('state').textContent = '⚠ 试玩错误'
+      }
+
+      const play = createPlaySession({
+        renderer,
+        api,
+        onSnapshot: renderChrome,
+        onStatus: applyStatus,
+        onError: showError,
+      })
+      play.bindInput(stage, { keysOn: window })
+
+      $('step').addEventListener('click', () => void play.act('step', { dt: 1 / 30 }))
+      $('pause').addEventListener('click', () => void play.act(play.snapshot?.paused ? 'resume' : 'pause'))
+      $('stop').addEventListener('click', async () => {
+        if (!play.running) return
+        try { await play.stop() } catch (error) { showError(error); return }
+        $('state').textContent = '■ 试玩已结束，可重新开始或返回编辑'
+        $('state').className = ''
+        $('pause').disabled = true
+        $('step').disabled = true
+        $('stop').disabled = true
+        $('restart').classList.remove('hidden')
+      })
+      $('restart').addEventListener('click', async () => {
+        try {
+          fittedCanvas = ''
+          const keepArgs = {}
+          const snapshot = play.snapshot
+          if (snapshot?.canvasId) keepArgs.canvasId = snapshot.canvasId
+          if (snapshot?.playerCount) keepArgs.playerCount = snapshot.playerCount
+          if (snapshot?.viewPlayerIndex) keepArgs.viewPlayerIndex = snapshot.viewPlayerIndex
+          await play.start(keepArgs)
+          fitStage(true)
+        } catch (error) { showError(error) }
+      })
+      $('playerCountSel').addEventListener('change', async () => {
+        const playerCount = Number($('playerCountSel').value) || 1
+        try {
+          shell.classList.add('veiled')
+          $('loading').classList.remove('hidden')
+          fittedCanvas = ''
+          const args = { playerCount, viewPlayerIndex: 1 }
+          if (play.snapshot?.canvasId) args.canvasId = play.snapshot.canvasId
+          await play.start(args)
+          fitStage(true)
+          revealStage()
+        } catch (error) { showError(error) }
+      })
+      $('playerViewSel').addEventListener('change', async () => {
+        const playerIndex = Number($('playerViewSel').value) || 1
+        if (!play.snapshot || !play.running) return
+        try { await play.view({ playerIndex }) }
+        catch (error) { showError(error) }
+      })
+      $('deviceSel').addEventListener('change', async () => {
+        const canvasId = $('deviceSel').value
+        if (!canvasId) return
+        try {
+          shell.classList.add('veiled')
+          $('loading').classList.remove('hidden')
+          fittedCanvas = ''
+          await play.device({
+            canvasId,
+            playerCount: play.snapshot?.playerCount || 1,
+            viewPlayerIndex: play.snapshot?.viewPlayerIndex || 1,
+          })
+          fitStage(true)
+          revealStage()
+        } catch (error) { showError(error) }
+      })
+      $('close').addEventListener('click', async () => { if (play.running) await play.stop().catch(() => {}); window.close() })
+      $('theme').addEventListener('click', () => { theme = theme === 'dark' ? 'light' : 'dark'; applyTheme() })
+      let lastCase = null
+      function parseAsserts() {
+        const text = $('caseAsserts').value.trim()
+        if (!text) return []
+        const parsed = JSON.parse(text)
+        if (!Array.isArray(parsed)) throw new Error('断言必须是 JSON 数组')
+        return parsed
+      }
+      $('saveCase').addEventListener('click', async () => {
+        try {
+          lastCase = await api('saveCase', { name: 'play-case', asserts: parseAsserts() })
+          $('caseHint').textContent = '已保存 ' + (lastCase.events || []).length + ' 步 / ' + (lastCase.asserts || []).length + ' 条断言'
+        } catch (error) { showError(error) }
+      })
+      $('runCase').addEventListener('click', async () => {
+        try {
+          if (!lastCase) lastCase = await api('saveCase', { name: 'play-case', asserts: parseAsserts() })
+          const report = await api('runCase', { case: lastCase })
+          $('caseHint').textContent = report.passed ? '回放通过' : ('回放失败 @' + (report.failedAt ?? '?') + 's')
+          if (!report.passed) setView('log')
+        } catch (error) { showError(error) }
+      })
+      for (const button of document.querySelectorAll('[data-view]')) button.addEventListener('click', () => setView(button.dataset.view))
+      addEventListener('resize', () => fitStage(true))
+      addEventListener('pagehide', () => {
+        play.destroy()
+        fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, action: 'stop', args: {} }), keepalive: true }).catch(() => {})
+      })
+
+      if (!sessionId) showError(new Error('缺少会话 ID'))
+      else play.start().then(() => setTimeout(revealStage, 0)).catch(showError)
+    })()
+  </script>
+</body>
+</html>

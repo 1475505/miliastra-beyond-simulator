@@ -1,0 +1,12 @@
+- insert:
+    - id: qxqy-simulator
+      name: dsh-plugin-beyond-simulator
+    - id: qxqy-simulator-skill
+      # 技能注册独立成行，只注入 skills 服务：DSH 升级导致该服务缺失时，
+      # 仅损失技能正文，主插件（Tools/API/试玩页）不受牵连。
+      name: dsh-plugin-beyond-simulator/skill
+    - id: qxqy-simulator-preset
+      # agent 预设安装独立成行：启动时把包内捆绑的 wonderland-lua-builder 预设复制到
+      # $DSH_HOME/.agent-presets/wonderland-lua-builder（已存在则跳过，绝不覆盖用户改动）。
+      # 安装失败只损失预设，主插件与技能不受牵连。
+      name: dsh-plugin-beyond-simulator/preset

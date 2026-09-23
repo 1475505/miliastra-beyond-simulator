@@ -1,0 +1,45 @@
+{
+  "name": "qxqy-studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Qianxing UI authoring + play orchestration (no Lua VM)",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./constants": "./constants.js",
+    "./host-png": "./host-png.js",
+    "./host/controller": "./host/controller.js",
+    "./host/workspace": "./host/workspace.js",
+    "./host/worker": "./host/worker.js",
+    "./play/renderer": "./play/pixi-renderer.js"
+  },
+  "files": [
+    "index.js",
+    "constants.js",
+    "host-png.js",
+    "host",
+    "json.js",
+    "ui",
+    "play",
+    "gia",
+    "log",
+    "autotest",
+    "README.md"
+  ],
+  "scripts": {
+    "generate:client-template": "node scripts/generate-client-template.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "0.1.100",
+    "pixi.js": "8.20.0",
+    "protobufjs": "8.7.2",
+    "qxqy-lua-runtime": "workspace:*",
+    "qxqy-server": "workspace:*"
+  },
+  "license": "GPL-3.0-only"
+}

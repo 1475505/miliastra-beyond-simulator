@@ -1,0 +1,70 @@
+{
+  "name": "dsh-plugin-beyond-simulator",
+  "version": "1.0.5",
+  "description": "千星奇域客户端 UI 编辑与试玩模拟器 for DeepSeek Harness",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "dsh-plugin/dist/index.js",
+  "exports": {
+    ".": "./dsh-plugin/dist/index.js",
+    "./skill": "./dsh-plugin/dist/skill.js",
+    "./preset": "./dsh-plugin/dist/preset.js",
+    "./client": "./dsh-plugin/dist/client.js",
+    "./cordis.patch.yml": "./dsh-plugin/cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dsh-plugin/dist",
+    "dsh-plugin/lib/play.html",
+    "dsh-plugin/skill.md",
+    "dsh-plugin/presets",
+    "dsh-plugin/cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1475505/miliastra-beyond-simulator.git"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./dsh-plugin/cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "prepare": "node scripts/build.mjs dsh-plugin",
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test.mjs",
+    "pack:release": "node scripts/pack.mjs",
+    "test:packages": "node scripts/smoke-packages.mjs",
+    "test:git-install": "node scripts/smoke-git-install.mjs",
+    "dev:web": "node scripts/build.mjs web && node web/server.js",
+    "start:web": "node web/dist/server.js"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "0.1.100",
+    "fengari": "0.1.5",
+    "protobufjs": "8.7.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "esbuild": "0.25.12"
+  },
+  "license": "GPL-3.0-only"
+}

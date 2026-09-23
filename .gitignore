@@ -1,0 +1,31 @@
+node_modules/
+npm-debug.log*
+*.tgz
+.DS_Store
+studio/.tmp-dsh-play-*.json
+
+# 源码与测试入库，构建产物与生成副本不入库
+dist/
+release/
+web/public/play-renderer.js
+web/public/editor.js
+web/public/play.html
+web/public/play.js
+web/public/play.css
+coverage/
+.env
+.env.*
+!.env.example
+dsh-plugin/skill.md
+dsh-plugin/presets/
+
+# 设计稿（非代码）
+frontend/
+
+# 本地工具状态、日志与编辑器缓存
+.kilo/
+.pnpm-store/
+*.log
+.vscode/
+.idea/
+Thumbs.db
