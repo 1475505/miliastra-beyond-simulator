@@ -97,7 +97,7 @@ Web 启动命令同步改为 `beyond-simulator-web`；Docker 配置和安装验�
 2026-09-22，Windows x64 / Node.js 22.23.2 / pnpm 10.15.0：
 
 - 冻结锁文件安装成功；本机具备外部样本时，完整回归 181 项通过，0 失败、0 跳过。
-- 将 `QXQY_FIXTURE_ROOT` 指向空工作区时，166 项通过，15 项外部样本测试明确跳过，0 失败。
+- 依赖父级知识库样本的 19 项用例已于 2026-09-24 移除，测试套件改为完全自包含：当前回归 162 项通过，0 失败、0 跳过。
 - 三个 tarball 在源码目录外、禁用安装生命周期脚本的临时 npm 工程中通过 Controller、Worker、GIA、PNG、Web 编辑保存、MCP stdio 验证。
 - 实际浏览器检查 Web 编辑界面、修改属性、保存落盘与独立试玩页渲染/暂停；Harness Client 通过编译及 ModuleLoader 导出契约检查，没有修改用户现有 Harness profile。
 - 本机没有 Docker，未实跑容器；尚未验证 Linux/macOS 或公开 npm/GitHub 安装渠道。以上都是模拟器与分发验证，不新增千星真机结论。

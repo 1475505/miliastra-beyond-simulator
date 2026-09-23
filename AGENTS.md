@@ -34,4 +34,4 @@ Lua VM 只放在 Runtime，Authoring/GIA 只放在 Studio，接入层复用共�
 
 修改 Git 源码安装入口、根 `prepare` 或 DSH exports 时，另跑 `pnpm test:git-install`；可传入本机 DSH CLI 的 `lib/bin.js` 绝对路径，在临时 profile 中验证真实安装与配置注册。
 
-根目录统一运行 `pnpm install --frozen-lockfile`、`pnpm test`；分发修改另执行 `pnpm pack:release`、`pnpm test:packages`。源码和测试入库，依赖、构建产物与生成的 Skill/预设副本继续忽略，不用 `git add -f`。部分集成测试依赖父级知识库样本，缺失时明确跳过并报告路径，不记为通过；可用 `QXQY_FIXTURE_ROOT` 指定样本根目录。真机证据、模拟器策略和测试结果分开记录；在完整知识工作区中遵守 [知识维护规范](../knowledge/AGENTS.md)。
+根目录统一运行 `pnpm install --frozen-lockfile`、`pnpm test`；分发修改另执行 `pnpm pack:release`、`pnpm test:packages`。源码和测试入库，依赖、构建产物与生成的 Skill/预设副本继续忽略，不用 `git add -f`。测试必须自包含，只使用仓库内源码与合成数据，不依赖仓库外的样本文件。真机证据、模拟器策略和测试结果分开记录；在完整知识工作区中遵守 [知识维护规范](../knowledge/AGENTS.md)。

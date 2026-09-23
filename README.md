@@ -188,7 +188,7 @@ pnpm test:packages
 
 安装包生成在 `release/`，本次产物的名称、版本与校验值见 `release/manifest.json`。包中已包含模拟器核心及所需界面资源，使用者无需构建源码；安装时仍会下载第三方运行依赖。
 
-少量集成测试使用外部知识库中的历史样本，独立检出时会明确跳过；可用 `QXQY_FIXTURE_ROOT` 指定样本根目录。模块分工见 [开发入口](AGENTS.md)，构建、验收与发布设计见 [分发说明](DISTRIBUTION.md)。
+测试套件完全自包含，只依赖仓库内源码与合成数据，独立检出即可运行。模块分工见 [开发入口](AGENTS.md)，构建、验收与发布设计见 [分发说明](DISTRIBUTION.md)。
 
 自动发布通过 `npm-*` Git tag 触发；需要先在 npm 为三个包绑定同一份 GitHub Actions Trusted Publisher。配置项和版本规则见 [自动发布说明](DISTRIBUTION.md#自动发布到-npm)。
 

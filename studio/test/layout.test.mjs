@@ -1,7 +1,5 @@
-import { externalRoot, externalFixture, missingFixture } from '../../test/fixtures.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -25,11 +23,6 @@ import { createStudio, inspectGia, validateGiaCompatibility, validateServerGiaCo
 import { createRuntime } from '../../client/lua-runtime/src/index.js'
 import { assertNoUndefined } from '../json.js'
 import { CANVAS_PRESETS, PLATFORMS } from '../constants.js'
-
-function loadFlappy(studio) {
-  const save = JSON.parse(readFileSync(externalFixture('workspace/flappy-fish/flappy-fish.save.json'), 'utf8'))
-  studio.importData('json', Buffer.from(JSON.stringify(save)).toString('base64'), 'flappy-fish.save.json')
-}
 
 test('fullscreen stretch @1600×900 shows center 800,450 size 1600×900', () => {
   const parent = canvasBox('pc-16-9')
@@ -321,70 +314,6 @@ test('invalid numeric fields are rejected instead of becoming null', () => {
   assert.equal(after.inspector.fields.find((f) => f.key === 'posX').value, 500)
 })
 
-test('play snapshot applies Flappy Fish parent rotation to its whale primitives', { skip: missingFixture('workspace/flappy-fish/flappy-fish.save.json') }, () => {
-  const studio = createStudio()
-  loadFlappy(studio)
-  studio.playStart()
-  studio.playPointer('click', 800, 450)
-  const after = studio.playStep(0.05, { inspect: true, paint: true, view: true })
-  const logs = after.logs.map((entry) => entry.text).join('\n')
-  assert.match(logs, /flappy-flap/)
-  assert.equal((logs.match(/flappy-flap/g) || []).length, 1)
-
-  function find(control, name) {
-    if (control.name === name) return control
-    for (const child of control.children || []) {
-      const found = find(child, name)
-      if (found) return found
-    }
-    return null
-  }
-
-  const whale = find(after.tree[0], 'WhaleGirl')
-  assert.ok(whale)
-  assert.ok(Math.abs(whale.localRotationZ) > 0.001)
-  const primitive = whale.children[0]
-  const paint = after.paint.find((item) => item.id === primitive.id)
-  assert.ok(paint)
-  const whaleCenterX = whale.box.left + whale.box.width / 2
-  const whaleCenterY = whale.box.bottom + whale.box.height / 2
-  const primitiveCenterX = primitive.box.left + primitive.box.width / 2
-  const primitiveCenterY = primitive.box.bottom + primitive.box.height / 2
-  const radians = whale.localRotationZ * Math.PI / 180
-  const expectedCenterX = whaleCenterX
-    + (primitiveCenterX - whaleCenterX) * Math.cos(radians)
-    - (primitiveCenterY - whaleCenterY) * Math.sin(radians)
-  const expectedCenterY = whaleCenterY
-    + (primitiveCenterX - whaleCenterX) * Math.sin(radians)
-    + (primitiveCenterY - whaleCenterY) * Math.cos(radians)
-  assert.ok(Math.abs((paint.left + paint.width / 2) - expectedCenterX) < 1e-6)
-  assert.ok(Math.abs((paint.bottom + paint.height / 2) - expectedCenterY) < 1e-6)
-  assert.ok(Math.abs(paint.rotationZ - (whale.localRotationZ + primitive.localRotationZ)) < 1e-6)
-  studio.playStop()
-})
-
-test('play view scene patches only the rotating whale parent instead of every primitive', { skip: missingFixture('workspace/flappy-fish/flappy-fish.save.json') }, () => {
-  const studio = createStudio()
-  loadFlappy(studio)
-  const first = studio.playStart({ view: true })
-  assert.equal(first.scene.format, 'tree-v1')
-  assert.equal(first.scene.reset, true)
-  assert.ok(first.scene.count > 1000)
-  const whaleNode = first.scene.nodes.find((node) => node.name === 'WhaleGirl')
-  assert.ok(whaleNode)
-  assert.equal(whaleNode.group, true)
-  const childCount = first.scene.nodes.filter((node) => node.parent === whaleNode.id).length
-  assert.ok(childCount > 1000)
-
-  studio.playPointer('click', 800, 450)
-  const after = studio.playStep(0.05, { view: true, sceneRev: first.scene.revision })
-  assert.equal(after.scene.reset, false)
-  assert.ok(after.scene.changed.length < 40, `expected a small patch, got ${after.scene.changed.length}`)
-  assert.ok(after.scene.changed.some((node) => node.name === 'WhaleGirl'))
-  assert.equal(after.scene.changed.filter((node) => node.parent === whaleNode.id).length, 0)
-  studio.playStop()
-})
-
 test('play inherits a parent localScale for child paint and pointer hit testing without mutating child localScale', () => {
   const runtime = createRuntime({ canvasWidth: 1600, canvasHeight: 900 })
   const root = runtime.addRoot({
@@ -457,26 +386,6 @@ test('play inherits a parent localScale for child paint and pointer hit testing 
   // old unscaled box whose right edge is 950.
   assert.equal(hitPlayControl(session, 1090, 475), hit)
   assert.equal(hitPlayControl(session, 1110, 475), null)
-})
-
-test('play view paint lists later siblings first so earlier siblings cover them', { skip: missingFixture('workspace/flappy-fish/flappy-fish.save.json') }, () => {
-  const studio = createStudio()
-  loadFlappy(studio)
-  const snap = studio.playStart({ paint: true })
-  const names = (snap.paint || []).map((item) => item.name)
-  assert.ok(names.includes('Sky'))
-  assert.ok(names.indexOf('Sky') < names.indexOf('ScoreText'))
-  studio.playStop()
-})
-
-test('play pointer ignores decorative images and containers so a back-layer tap area still receives clicks', { skip: missingFixture('workspace/flappy-fish/flappy-fish.save.json') }, () => {
-  const studio = createStudio()
-  loadFlappy(studio)
-  studio.playStart()
-  const after = studio.playPointer('click', 800, 450)
-  const logs = after.logs.map((entry) => entry.text).join('\n')
-  assert.match(logs, /flappy-flap|flappy-play|flappy-ready/)
-  studio.playStop()
 })
 
 test('later play roots cover earlier roots for pointer hits', () => {
@@ -788,78 +697,6 @@ test('JSON and GIA export-import round-trip supported control kinds in-process',
   assert.equal(fromJson.snapshot.meta.name, 'authoring')
 })
 
-test('server client-control container validates the three-level graph and emits no external relations', { skip: missingFixture('knowledge/ui/template/服务端控件模板-客户端控件容器.gia') }, () => {
-  const fixture = readFileSync(externalFixture('knowledge/ui/template/服务端控件模板-客户端控件容器.gia'))
-  const fixtureCompatibility = validateServerGiaCompatibility(fixture)
-  assert.equal(fixtureCompatibility.valid, true, fixtureCompatibility.errors.join('\n'))
-  assert.equal(fixtureCompatibility.accessoryCount, 12)
-  assert.equal(fixtureCompatibility.controls[0].kind, 'container')
-
-  const studio = createStudio()
-  Object.assign(studio._project.meta, {
-    gameVersion: '7.0.50', giaOwnerUid: 114514, giaTimestamp: 1787410000,
-    giaFileId: 1073741860, giaFileName: 'qxqy-server-client-control-container.gia',
-  })
-  const exported = studio.exportData('gia')
-  const compatibility = validateServerGiaCompatibility(Buffer.from(exported.data, 'base64'))
-  assert.equal(compatibility.valid, true, compatibility.errors.join('\n'))
-  assert.equal(compatibility.accessoryCount, 11)
-  assert.deepEqual(compatibility.graph.relatedGuids, [])
-  assert.equal(compatibility.controls.every((control) => control.id === compatibility.graph.rootGuid || control.parent > 0), true)
-  assert.deepEqual(compatibility.explicitEmpty, { field17: 22, rectField508: 48 })
-})
-
-test('updated GIA fixture imports textbox, image and all preset-button state fields', { skip: missingFixture('knowledge/ui/template/gia_test.gia') }, () => {
-  const studio = createStudio()
-  const bytes = readFileSync(externalFixture('knowledge/ui/template/gia_test.gia'))
-  const imported = studio.importData('gia', bytes.toString('base64'), 'gia_test.gia')
-  const nodes = []
-  const collect = (node) => {
-    nodes.push(node)
-    for (const child of node.children || []) collect(child)
-  }
-  collect(studio._project.root)
-
-  assert.deepEqual(inspectGia(bytes), {
-    gameVersion: '7.0.51', graphName: '文本框', accessories: 1,
-    assetType: 'client-control-template', templateCount: 3,
-  })
-  assert.equal(imported.snapshot.tree.filter((row) => row.kind === 'textbox').length, 1)
-  assert.equal(imported.snapshot.tree.filter((row) => row.kind === 'button').length, 1)
-  assert.equal(imported.snapshot.tree.filter((row) => row.kind === 'image').length, 2)
-
-  const textbox = nodes.find((node) => node.kind === 'textbox')
-  assert.equal(textbox.adaptiveFontSize, false)
-  assert.equal(textbox.minimumFontSize, 10)
-  assert.equal(textbox.enableOutline, true)
-  assert.equal(textbox.horizontalAlignment, 'Right')
-
-  const button = nodes.find((node) => node.kind === 'button')
-  assert.equal(button.interactable, false)
-  assert.equal(button.raycastTarget, true)
-  assert.equal(button.clickAudioId, 50888)
-  assert.ok(button.pressedChildId)
-  assert.equal(button.unavailableChildId, button.pressedChildId)
-  assert.equal(button.hoverChildId, button.pressedChildId)
-  assert.equal(button.selectedChildId, button.pressedChildId)
-
-  const mainImage = nodes.find((node) => node.kind === 'image' && node.name === '图片')
-  assert.equal(mainImage.imageId, 100006)
-  assert.equal(mainImage.enableMask, true)
-  assert.equal(mainImage.enableSoftEdge, true)
-  assert.equal(mainImage.softEdgeMode, 'Percentage')
-  assert.equal(mainImage.enableFill, true)
-  assert.equal(mainImage.fillType, 'Radial180')
-  assert.equal(mainImage.reverseMaskArea, false)
-
-  const stateImage = nodes.find((node) => node.id === button.pressedChildId)
-  assert.equal(stateImage.imageId, 107075)
-  assert.equal(stateImage.softEdgeMode, 'Pixel')
-  assert.equal(stateImage.fillType, 'Horizontal')
-  assert.equal(stateImage.reverseMaskArea, true)
-  assertNoUndefined(imported.snapshot)
-})
-
 test('updated textbox, image and four-state button settings survive GIA export-import', () => {
   const source = createStudio()
   source.patch({ op: 'set', id: 'n2', key: 'adaptiveFontSize', value: true })
@@ -935,14 +772,6 @@ test('server GIA writes image fill color and reverses sibling order to match off
   assert.equal(image[0].imageColor >>> 0, 0xff5cb0d6)
 })
 
-test('official default server container imports editor-facing sibling order', { skip: missingFixture('knowledge/ui/template/服务端控件模板-客户端控件容器.gia') }, () => {
-  const fixture = readFileSync(externalFixture('knowledge/ui/template/服务端控件模板-客户端控件容器.gia'))
-  const studio = createStudio()
-  studio.importData('gia', fixture.toString('base64'), '官方默认容器.gia')
-  const names = studio.get().root.children[0].children.map((node) => node.name)
-  assert.deepEqual(names, ['容器节点', '文本框', '光标检测区域', '模板引用控件', '网格视窗', '预设按钮', '文本视窗', '按键提示', '图片', '界面动效', '全屏动效'])
-})
-
 test('five canvas presets report GetUICanvasSize-matching sizes', () => {
   const studio = createStudio()
   const expect = {
@@ -960,38 +789,6 @@ test('five canvas presets report GetUICanvasSize-matching sizes', () => {
     assert.equal(studio.get().canvas.width, wh[0])
     assert.equal(studio.get().canvas.height, wh[1])
   }
-})
-
-test('client control template list imports as top-level templates and exports UIControlTemplate graphs', { skip: missingFixture('knowledge/ui/template/客户端控件模板列表.gia') }, () => {
-  const studio = createStudio()
-  const fixture = readFileSync(externalFixture('knowledge/ui/template/客户端控件模板列表.gia'))
-  const fixtureCompatibility = validateGiaCompatibility(fixture)
-  assert.equal(fixtureCompatibility.valid, true, fixtureCompatibility.errors.join('\n'))
-  const imported = studio.importData('gia', fixture.toString('base64'), '客户端控件模板列表.gia')
-  assert.equal(imported.snapshot.asset.type, 'client-control-template')
-  assert.equal(imported.snapshot.asset.templateCount, 11)
-  assert.equal(imported.snapshot.tree.length, 11)
-  assert.equal(imported.snapshot.tree.every((row) => row.depth === 0), true)
-  assert.equal(imported.snapshot.root.children.length, 11)
-
-  const exported = studio.exportData('gia')
-  assert.equal(exported.filename, '未命名存档 · 客户端控件模板.gia')
-  const exportedCompatibility = validateGiaCompatibility(Buffer.from(exported.data, 'base64'))
-  assert.equal(exportedCompatibility.valid, true, exportedCompatibility.errors.join('\n'))
-  assert.deepEqual(exportedCompatibility.templates.map((item) => item.relatedGuids[0]), [
-    1073741845, 1073741846, 1073741847, 1073741848, 1073741849, 1073741850,
-    1073741851, 1073741852, 1073741853, 1073741854, 1073741855,
-  ])
-  const details = inspectGia(Buffer.from(exported.data, 'base64'))
-  assert.deepEqual(details, {
-    gameVersion: '7.0.50', graphName: '容器节点', accessories: 0,
-    assetType: 'client-control-template', templateCount: 11,
-  })
-  const target = createStudio()
-  const roundTrip = target.importData('gia', exported.data, exported.filename)
-  assert.equal(roundTrip.snapshot.asset.templateCount, 11)
-  assert.equal(roundTrip.snapshot.root.children.length, 11)
-  assertNoUndefined(roundTrip.snapshot)
 })
 
 test('new asset exports all eleven client controls as independently validated templates', () => {

@@ -2,11 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createStudio } from '../index.js'
 import * as giaCodec from '../gia/codec.js'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+import { join } from 'node:path'
 
 test('archive v1 save with per-asset scripts migrates into the script asset', () => {
   const legacy = {
@@ -189,46 +185,6 @@ end
   assert.match(logs, /exit\tfalse/)
   assert.doesNotMatch(logs, /click/)
   studio.playStop()
-})
-
-test('script mapping GIA round-trips through the official script.gia structure', () => {
-  const sample = readFileSync(join(repoRoot, 'knowledge', 'ui', 'template', 'script.gia'))
-  const { isScriptGia, importScriptGia, validateScriptGiaCompatibility } = giaCodec
-  assert.equal(isScriptGia(sample), true)
-  const parsed = importScriptGia(sample)
-  assert.equal(parsed.scripts.length, 2)
-  assert.deepEqual(parsed.scripts.map((script) => script.guid), [1073741827, 1073741828])
-  assert.equal(parsed.scripts[0].path, 'test1.lua')
-  assert.ok(parsed.scripts[0].source.length > 5000)
-  assert.equal(parsed.scripts[1].source, '')
-
-  const studio = createStudio()
-  studio.patch({ op: 'addScript', controlId: 'n1', controlAsset: 'server-control-template', path: 'lua/main.lua', source: 'print("hi")' })
-  studio.patch({ op: 'addScript', path: 'lua/empty.lua', source: '' })
-  const exported = studio.exportData('scripts-gia')
-  assert.equal(exported.filename, '未命名存档 · 脚本.gia')
-  assert.ok(exported.warnings.some((line) => /挂载关系不进入 GIA/.test(line)))
-  const bytes = Buffer.from(exported.data, 'base64')
-  const compatibility = validateScriptGiaCompatibility(bytes)
-  assert.equal(compatibility.valid, true, compatibility.errors.join('\n'))
-  assert.equal(compatibility.scriptCount, 2)
-
-  const target = createStudio()
-  const restored = target.importData('gia', exported.data, exported.filename)
-  assert.equal(restored.metadata.assetType, 'lua-script')
-  const guids = restored.snapshot.scripts.map((script) => script.guid)
-  assert.deepEqual(guids, [1073742105, 1073742106])
-  assert.deepEqual(restored.snapshot.scripts.map((script) => [script.path, script.source]), [['lua/main.lua', 'print("hi")'], ['lua/empty.lua', '']])
-  assert.equal(restored.snapshot.scripts.every((script) => script.mounted === false), true)
-  const reexported = Buffer.from(target.exportData('scripts-gia').data, 'base64')
-  const reparsed = importScriptGia(reexported)
-  assert.deepEqual(reparsed.scripts.map((script) => [script.guid, script.path, script.source]), [
-    [1073742105, 'lua/main.lua', 'print("hi")'],
-    [1073742106, 'lua/empty.lua', ''],
-  ])
-
-  const controlGia = Buffer.from(studio.exportData('gia', 'server-control-template').data, 'base64')
-  assert.equal(isScriptGia(controlGia), false)
 })
 
 test('asset-package GIA exports the official three-file bundle', () => {

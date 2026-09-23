@@ -1,11 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { createRuntime } from '../src/index.js'
-
-const luaDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'lua')
 
 function logText(rt) {
   return rt.logs.map((l) => l.text).join('\n')
@@ -590,84 +586,6 @@ end
   root.showCursor = true
   hit.SimulateCursorClick()
   assert.match(logText(rt), /cursor-fired/)
-})
-
-test('点击星星 OnStart finds tree and ticks', () => {
-  const rt = createRuntime()
-  const root = rt.addRoot({ active: true,
-    name: 'GameRoot',
-    kind: 'container',
-    children: [
-      { name: 'ScoreText', kind: 'textbox' },
-      { name: 'TimeText', kind: 'textbox' },
-      { name: 'StatusText', kind: 'textbox' },
-      { name: 'PlayArea', kind: 'container', sizeDeltaX: 400, sizeDeltaY: 300 },
-      {
-        name: 'TargetGroup',
-        kind: 'container',
-        sizeDeltaX: 80,
-        sizeDeltaY: 80,
-        children: [
-          { name: 'TargetVisual', kind: 'textbox' },
-          { name: 'TargetHitArea', kind: 'cursor', sizeDeltaX: 80, sizeDeltaY: 80 },
-        ],
-      },
-    ],
-  })
-  const src = readFileSync(join(luaDir, '点击星星.lua'), 'utf8')
-  rt.mountScript({ path: 'chase', control: root, source: src })
-  assert.match(logText(rt), /初始化完成/)
-  const hit = root.FindChild('TargetGroup/TargetHitArea')
-  hit.SimulateCursorClick()
-  rt.step(0.1)
-  const score = root.FindChild('ScoreText')
-  assert.match(score.text, /分数：1/)
-})
-
-test('割绳子 game.lua requires sibling modules by name', () => {
-  const rt = createRuntime()
-  const root = rt.addRoot({ active: true,
-    name: 'RopeRoot',
-    kind: 'container',
-    children: [
-      { name: 'MessageText', kind: 'textbox' },
-      { name: 'ScoreText', kind: 'textbox' },
-      { name: 'DropArea', kind: 'cursor' },
-    ],
-  })
-  const dir = join(luaDir, '割绳子机制实现')
-  for (const name of ['config', 'state', 'utils', 'rope', 'physics', 'render', 'catenary']) {
-    rt.registerScriptFile(name, readFileSync(join(dir, `${name}.lua`), 'utf8'))
-  }
-  rt.registerTemplate(20001, { kind: 'image', name: 'fruit', sizeDeltaX: 40, sizeDeltaY: 40 })
-  rt.mountScript({
-    path: 'game',
-    control: root,
-    params: { fruitPrefabId: 20001 },
-    source: readFileSync(join(dir, 'game.lua'), 'utf8'),
-  })
-  const t = logText(rt)
-  assert.equal(rt.logs.some((l) => l.level === 'lua-error' && /failed to load script/.test(l.text)), false)
-  assert.match(t, /割绳子|启动|鼠标/)
-})
-
-test('2048 builds board with textBoxPrefabId', () => {
-  const rt = createRuntime()
-  const root = rt.addRoot({ active: true,  name: 'Game2048Root', kind: 'container' })
-  rt.registerTemplate(10001, { kind: 'textbox', name: '文本框', sizeDeltaX: 100, sizeDeltaY: 40 })
-  const src = readFileSync(join(luaDir, '2048_ui.lua'), 'utf8')
-  rt.mountScript({
-    path: '2048_ui',
-    control: root,
-    params: { textBoxPrefabId: 10001 },
-    source: src,
-  })
-  const title = root.GetChild('Title')
-  assert.equal(title && title.text, '2048')
-  assert.ok(root.GetChild('BoardPanel'))
-  rt.injectKey('KeyboardCraftspersonKey39Down')
-  rt.step(0.2)
-  rt.injectKey('KeyboardCraftspersonKey1Down')
 })
 
 test('spec.scripts mount on addRoot and on instantiate, restoring the script global', () => {

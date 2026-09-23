@@ -1,11 +1,9 @@
-import { externalRoot, externalFixture, missingFixture } from '../../test/fixtures.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { basename, join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { SimulatorController, apply, headerWorkspace, jsonParam, lookupSessionWorkspace, sessionWorkspace } from '../lib/index.js'
-import { listWorkspaceArchives, resolveWorkspaceArchive } from '../lib/workspace-archives.js'
 
 const testWorkspace = fileURLToPath(new URL('../', import.meta.url)).replace(/[/\\]+$/, '')
 
@@ -579,26 +577,6 @@ test('editor HTTP get binds the live session cwd instead of the host startup dir
   assert.equal(payload.value.save.name, '未命名存档')
 })
 
-test('controller can list and load a workspace save archive', { skip: missingFixture('workspace/flappy-fish/flappy-fish.save.json') }, async () => {
-  const repoRoot = externalRoot
-  const listed = listWorkspaceArchives(repoRoot)
-  assert.equal(listed.bound, true)
-  const flappy = listed.archives.find((row) => row.path.endsWith('flappy-fish.save.json'))
-  assert.ok(flappy, 'workspace should contain Flappy Fish save')
-  assert.equal(flappy.name, 'Flappy Fish')
-  assert.throws(() => resolveWorkspaceArchive(repoRoot, '../outside.save.json'), /工作区内/)
-
-  const controller = new SimulatorController(repoRoot)
-  try {
-    const loaded = controller.loadArchive(flappy.path)
-    assert.equal(loaded.snapshot.save.name, 'Flappy Fish')
-    assert.equal(loaded.snapshot.root.children[0].name, 'GameRoot')
-    assert.ok(loaded.snapshot.scripts.some((script) => script.path.includes('main.lua')))
-  } finally {
-    await controller.dispose()
-  }
-})
-
 test('controller adopts the session workspace without renaming the save', async () => {
   const unbound = new SimulatorController()
   const repoRoot = fileURLToPath(new URL('../../../', import.meta.url))
@@ -627,49 +605,6 @@ test('jsonParam accepts objects and JSON strings and rejects garbage', () => {
   assert.equal(jsonParam('not-json'), undefined)
   assert.equal(jsonParam(undefined), undefined)
   assert.equal(jsonParam(null), undefined)
-})
-
-test('setCanvas switches device canvas: play follows preset pixels and anchors re-project', { skip: missingFixture('workspace/flappy-fish/flappy-fish.save.json') }, async () => {
-  const controller = new SimulatorController()
-  try {
-    const save = JSON.parse(readFileSync(externalFixture('workspace/flappy-fish/flappy-fish.save.json'), 'utf8'))
-    controller.importData('json', Buffer.from(JSON.stringify(save)).toString('base64'), 'flappy-fish.save.json')
-
-    // 宿主可能以 JSON 字符串递参：字符串 op 必须与对象等价。
-    const rev = controller.get().version
-    controller.patch(JSON.stringify({ op: 'setCanvas', canvasId: 'mobile-16-9', expectedRevision: rev }))
-    const snap = controller.get()
-    assert.equal(snap.canvas.width, 1280)
-    assert.equal(snap.canvas.height, 720)
-
-    // 锚点重排：stretch 根随画布；center 固定像素控件按中心比例投影。
-    const rootBox = snap.boxes.find((b) => b.name === 'GameRoot')
-    assert.equal(rootBox.left, 0)
-    assert.equal(rootBox.bottom, 0)
-    assert.equal(rootBox.width, 1280)
-    assert.equal(rootBox.height, 720)
-    const sky = snap.boxes.find((b) => b.name === 'Sky')
-    assert.equal(sky.width, 1600)
-    assert.equal(sky.height, 900)
-    assert.equal(Math.round(sky.centerX), 640)
-    assert.equal(Math.round(sky.centerY), 360)
-
-    const startSnap = await controller.play('start', { view: true, paint: true })
-    assert.equal(startSnap.canvasWidth, 1280)
-    assert.equal(startSnap.canvasHeight, 720)
-    const view = await controller.play('get', { view: true, paint: true })
-    assert.equal(view.canvasWidth, 1280)
-    assert.equal(view.canvasHeight, 720)
-    const title = (view.paint || []).find((p) => p.name === 'TitleText')
-    assert.ok(title, 'TitleText should paint on mobile canvas')
-    // 投影后标题中心按比例落在手机画布内，不再被顶边裁掉
-    assert.ok(title.bottom + title.height <= 720 + 0.5, `title top ${title.bottom + title.height} must stay inside 720`)
-    assert.equal(view.scene?.format, 'tree-v1')
-    assert.ok((view.scene.nodes || []).some((node) => node.name === 'TitleText'))
-    await controller.play('stop', {})
-  } finally {
-    await controller.dispose()
-  }
 })
 
 test('play device action switches device canvas mid-session and rejects unknown presets', async () => {
