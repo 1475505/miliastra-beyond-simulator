@@ -17,6 +17,9 @@ const client = await readFile(require.resolve('dsh-plugin-beyond-simulator/clien
 let clientModule
 new Function('window', client)({ __ModuleLoader__: { load(value) { clientModule = value } } })
 assert.equal(clientModule.id, manifest.name)
+const clientExports = clientModule.factory(name => { assert.equal(name, 'react'); return { createElement() {} } })
+assert.deepEqual(clientExports.inject, ['slots'])
+assert.equal(typeof clientExports.apply, 'function')
 await access(join(packageRoot, 'dsh-plugin/lib/play.html'))
 await access(join(packageRoot, 'dsh-plugin/dist/play-renderer.js'))
 await access(join(packageRoot, 'dsh-plugin/presets/wonderland-lua-builder/preset.yml'))

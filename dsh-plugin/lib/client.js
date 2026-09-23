@@ -2,7 +2,8 @@ import { createEditor } from 'qxqy-editor-ui'
 
 window.__ModuleLoader__.load({
   id: 'dsh-plugin-beyond-simulator',
-  factory: (require, module, exports) => {
+  factory: require => {
+    const exports = {}
     const React = require('react')
     const editor = createEditor(React, {
       async api(sessionId, action, body) {
@@ -19,6 +20,6 @@ window.__ModuleLoader__.load({
       ctx.effect(() => editor.removeStyle, 'qxqy-simulator: style cleanup')
       ctx.slots.inject('conversation.view', () => ctx.slots.register({ name: 'conversation.view', id: 'qxqy-simulator', order: 20, label: () => '模拟器' }, editor.SimulatorView))
     }
-    return module.exports
+    return exports
   },
 })

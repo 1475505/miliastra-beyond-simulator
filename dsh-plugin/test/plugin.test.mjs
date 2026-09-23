@@ -408,10 +408,9 @@ test('client bundle parses and includes editor-grade controls and workflow', () 
   assert.doesNotThrow(() => new Function(readFileSync(new URL('../dist/client.js', import.meta.url), 'utf8')))
   let clientModule
   new Function('window', readFileSync(new URL('../dist/client.js', import.meta.url), 'utf8'))({ __ModuleLoader__: { load: value => { clientModule = value } } })
-  const module = { exports: {} }
-  clientModule.factory(name => { assert.equal(name, 'react'); return { createElement() {} } }, module, module.exports)
-  assert.deepEqual(module.exports.inject, ['slots'])
-  assert.equal(typeof module.exports.apply, 'function')
+  const exports = clientModule.factory(name => { assert.equal(name, 'react'); return { createElement() {} } })
+  assert.deepEqual(exports.inject, ['slots'])
+  assert.equal(typeof exports.apply, 'function')
   assert.match(source, /field\.type === 'color'/)
   assert.match(source, /field\.type === 'enum'/)
   assert.match(source, /e\('input', \{ type: 'color'/)

@@ -10,6 +10,14 @@ import { SimulatorController } from 'dsh-plugin-beyond-simulator'
 import { apply as registerSkill } from 'dsh-plugin-beyond-simulator/skill'
 
 const require = createRequire(import.meta.url)
+let clientModule
+new Function('window', await readFile(require.resolve('dsh-plugin-beyond-simulator/client'), 'utf8'))({
+  __ModuleLoader__: { load(value) { clientModule = value } },
+})
+assert.equal(clientModule.id, 'dsh-plugin-beyond-simulator')
+const clientExports = clientModule.factory(name => { assert.equal(name, 'react'); return { createElement() {} } })
+assert.deepEqual(clientExports.inject, ['slots'])
+assert.equal(typeof clientExports.apply, 'function')
 const workspace = join(process.cwd(), 'workspace')
 await mkdir(workspace)
 for (const name of ['qxqy-studio', 'qxqy-lua-runtime', 'qxqy-server']) {

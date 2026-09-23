@@ -56,7 +56,7 @@ Harness 插件附带“千星 2D+Lua 游戏制作”Agent 预设。新建会话�
 
 ```sh
 # 从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-1.0.5.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-1.0.6.tgz
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 

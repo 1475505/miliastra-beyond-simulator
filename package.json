@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-beyond-simulator",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "千星奇域客户端 UI 编辑与试玩模拟器 for DeepSeek Harness",
   "private": true,
   "type": "module",
