@@ -429,6 +429,9 @@ function applyPatchMutating(project, op) {
       if ((node.kind === 'textbox' || node.kind === 'textwindow') && key === 'horizontalAlignment') {
         node.giaRaw.textAlign = { Left: 0, Middle: 1, Right: 2 }[value]
       }
+      if ((node.kind === 'textbox' || node.kind === 'textwindow') && key === 'verticalAlignment') {
+        delete node.giaRaw.textVerticalAlign
+      }
       if (node.kind === 'image' && key === 'fillType') {
         const rawFillType = { Horizontal: 1, Vertical: 2, Radial90: 3, Radial180: 4, Radial360: 5 }[value]
         if (rawFillType) node.giaRaw.imageFillType = rawFillType

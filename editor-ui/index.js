@@ -606,6 +606,8 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       async function exportFile(format, arg = '') {
         try {
           await queueRef.current.catch(() => {})
+          await saveScriptDraft()
+          await saveLogicDraft()
           const result = await callApi(sessionId, 'export', { format, assetType: arg })
           if (Array.isArray(result?.files) && result.files.length) {
             for (const file of result.files) downloadBase64(file)

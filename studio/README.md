@@ -79,3 +79,9 @@ Studio 全套96/96、Web全套2/2通过；原页面刷新接入后仍保留两�
 旧实现的图片代理 `100002` 圆形和 `100006` 圆环在 Pixi 试玩与 PNG 中使用 `min(宽, 高)` 生成正圆，而编辑画布通过百分比圆角在 340×60 控件上显示椭圆。可追溯到 2026-09-05 提交 `6e32354`，9 月 22 日的 Sprite 路径沿用了较短边直径，与本次四平台布局迁移无关。现统一按控件宽、高分别绘制椭圆及椭圆环：无填充圆形保留共享圆形纹理 Sprite 并分别设置两轴尺寸，有填充圆形和圆环走 Pixi ellipse，PNG 使用 Canvas ellipse。父级变换、颜色、透明度与填充遮罩路径保留。编辑画布的矩形、三角形、四角星、五角星与 Pixi/PNG 都按宽高分别生成外框或顶点，未发现相同的较短边截断。这里是模拟器代理图元的内部一致性修复，不宣称官方素材的拉伸规则已由真机核实。
 
 回归：`test/pixi-circle.test.mjs` 断言 340×60 的 Sprite 双轴尺寸、填充圆形及圆环的 Pixi ellipse 半轴；`test/primitive-stretch.test.mjs` 对 PNG 的椭圆/椭圆环像素、旋转后的椭圆/矩形以及另外四种代理图元进行独立坐标检查。`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`；真机素材行为仍待原生观察。
+
+## GIA rotation, visibility and vertical alignment
+
+GIA import/export preserves Z rotation in `RectTransform.field508` and initial client visibility in `Details.field14.field17`. Export also saves the current script and logic drafts before creating the file.
+
+Official 7.1.0 sample bytes confirm Z angles 0/30/90, hidden image/container state, and `TextConfig.509` values Top=0 and Bottom=2. Middle=1 is inferred with user authorization and retains an export warning pending device validation. `studio/test/gia-observed-fields.test.mjs` uses independent synthetic wire fixtures; simulator round trips do not establish device correctness.

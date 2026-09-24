@@ -90,6 +90,11 @@ export function createNode(kind, extras = {}) {
     node.outlineColor = extras.outlineColor ?? COLOR.outline
     node.horizontalAlignment = extras.horizontalAlignment || 'Left'
     node.verticalAlignment = extras.verticalAlignment || 'Top'
+    // Retain future enum values across import/save/export. Explicit semantic
+    // edits clear this override in project.js.
+    if (Number.isInteger(extras.giaRaw?.textVerticalAlign) && ![0, 1, 2].includes(extras.giaRaw.textVerticalAlign)) {
+      node.giaRaw.textVerticalAlign = extras.giaRaw.textVerticalAlign
+    }
     node.text = extras.text ?? ''
     if (!Object.hasOwn(extras.giaRaw || {}, 'textAlign')) {
       node.giaRaw.textAlign = { Left: 0, Middle: 1, Right: 2 }[node.horizontalAlignment] ?? node.giaRaw.textAlign

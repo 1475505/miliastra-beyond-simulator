@@ -57,11 +57,12 @@ message WrapperInt32 { int32 value = 501; }
 message WrapperGuid { uint32 value = 501; }
 message WrapperGuidList { repeated uint32 value = 501; }
 message NodeRef { int32 class = 2; int32 type = 3; int32 id = 4; }
-message Field14 { optional string empty15 = 15; optional string field17 = 17; int32 field501 = 501; }
+message Field14 { optional string empty15 = 15; ClientInitialState field17 = 17; int32 field501 = 501; }
+message ClientInitialState { bool initiallyHidden = 503; }
 message Vector3 { float x = 1; float y = 2; float z = 3; }
 message RectTransform {
   Vector3 scale = 501; Vector2 anchorMin = 502; Vector2 anchorMax = 503; Vector2 offset = 504;
-  Vector2 size = 505; Vector2 pivot = 506; optional string field508 = 508;
+  Vector2 size = 505; Vector2 pivot = 506; Vector3 field508 = 508;
   message Vector2 { float x = 501; float y = 502; }
 }
 message Transform {
@@ -80,7 +81,7 @@ message GenericSlot {
 }
 message TextConfig {
   int32 field501 = 501; int32 adaptive = 502; int32 field503 = 503; uint32 color = 504;
-  uint32 color2 = 505; int32 outlineOff = 506; uint32 color3 = 507; int32 align = 508;
+  uint32 color2 = 505; int32 outlineOff = 506; uint32 color3 = 507; int32 align = 508; int32 verticalAlign = 509;
   WrapperString text = 510; int32 field511 = 511; int32 fontSize = 512; int32 minimumFontSize = 513; ViewFlags viewFlags = 62;
   message ViewFlags { int32 field502 = 502; int32 field503 = 503; }
 }
@@ -232,7 +233,7 @@ function rectTransform(rt) {
     offset: { x: rt.offset.x, y: rt.offset.y },
     size: { x: rt.size.x, y: rt.size.y },
     pivot: { x: rt.pivot.x, y: rt.pivot.y },
-    field508: '',
+    field508: rt.rotation.z ? { z: rt.rotation.z } : {},
   }
 }
 
@@ -260,14 +261,17 @@ function transformData(node, guid) {
 function commonData(node, guid, isGroup) {
   const marker = isGroup
     ? { empty15: '', field501: 5 }
-    : { field17: '', field501: 7 }
+    : { field17: {}, field501: 7 }
+  const stateMarker = !isGroup && node.visible === false
+    ? { ...marker, field17: { initiallyHidden: true } }
+    : marker
   return [
     { name: { value: node.name }, field501: 2, field502: 15 },
     {
       field14: marker,
       field501: 4,
       field502: isGroup ? 23 : 86,
-      details: detail(guid, 5, isGroup ? 23 : 86, { field14: marker }),
+      details: detail(guid, 5, isGroup ? 23 : 86, { field14: stateMarker }),
     },
     transformData(node, guid),
   ]
@@ -291,7 +295,9 @@ function typeData(node, guid, guidById, warnings) {
     return [generic, ref(68, 91, 'empty78', 'containerNodeSlot', raw.containerNodeSlot ?? ''), footer]
   }
   if (node.kind === 'textbox' || node.kind === 'textwindow') {
-    if (node.verticalAlignment !== 'Top') warnings.push(`${node.name}: 垂直对齐暂不支持写入 GIA。`)
+    // Official 7.1.0 sample confirms Top=0 and Bottom=2. Middle=1 is
+    // inferred from the enum sequence and still needs device confirmation.
+    if (node.verticalAlignment === 'Middle') warnings.push(`${node.name}: 垂直居中按推定值导出，尚待实机确认。`)
     const semanticAlign = { Left: 0, Middle: 1, Right: 2 }[node.horizontalAlignment] ?? 0
     const align = Number.isFinite(raw.textAlign) ? Math.trunc(raw.textAlign) : semanticAlign
     const textConfig = {
@@ -306,6 +312,7 @@ function typeData(node, guid, guidById, warnings) {
       ...(node.adaptiveFontSize ? { adaptive: 1 } : {}),
       ...(node.enableOutline === false ? { outlineOff: 1 } : {}),
       ...(align ? { align } : {}),
+      verticalAlign: raw.textVerticalAlign ?? ({ Top: 0, Middle: 1, Bottom: 2 }[node.verticalAlignment] ?? 0),
     }
     if (node.kind === 'textwindow') {
       textConfig.field511 = raw.textField511 ?? 1
@@ -508,17 +515,6 @@ function collectClientNodes(project) {
   return clientNodes
 }
 
-function rotationWarnings(clientNodes, warnings) {
-  for (const { node } of clientNodes) {
-    for (const platform of PLATFORMS) {
-      if (Math.abs(node.transformByPlatform[platform].rotation.z) > 1e-6) {
-        warnings.push(`${node.name}: 旋转 Z 暂无 GIA RectTransform 线号，Authoring JSON 已保留，GIA 未写入。`)
-        break
-      }
-    }
-  }
-}
-
 function scriptMounts(scripts, targetAsset) {
   const mounts = new Map()
   for (const script of scripts || []) {
@@ -561,7 +557,6 @@ function rootModeFields(project) {
 
 function buildClientTemplateRootObject(project, guidById, warnings, filePath, scripts = []) {
   const clientNodes = collectClientNodes(project)
-  rotationWarnings(clientNodes, warnings)
   const templateEntries = clientNodes.filter(({ parent }) => parent?.kind === 'server-container')
   if (!templateEntries.length) throw new Error('客户端控件模板列表至少需要一个模板')
   const templateIds = new Set(templateEntries.map(({ node }) => node.id))
@@ -582,7 +577,6 @@ function buildClientTemplateRootObject(project, guidById, warnings, filePath, sc
 
 function buildServerGroupRootObject(project, guidById, extra, warnings, filePath) {
   const clientNodes = collectClientNodes(project)
-  rotationWarnings(clientNodes, warnings)
   const serverAccessories = [clientNodes[0], ...clientNodes.slice(1).reverse()]
   const allClientGuids = serverAccessories.map(({ node }) => guidById.get(node.id))
   return withScriptMounts(project, extra.scripts, SERVER_CONTROL_ASSET, () => ({
@@ -855,7 +849,7 @@ function transformMaps(unit) {
       scale: rt.scale
         ? { x: rt.scale.x ?? 0, y: rt.scale.y ?? 0, z: rt.scale.z ?? 0 }
         : { x: 1, y: 1, z: 1 },
-      rotation: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: rt.field508?.z ?? 0 },
       anchorMin: { x: rt.anchorMin?.x ?? 0, y: rt.anchorMin?.y ?? 0 },
       anchorMax: { x: rt.anchorMax?.x ?? 0, y: rt.anchorMax?.y ?? 0 },
       offset: { x: rt.offset?.x ?? 0, y: rt.offset?.y ?? 0 },
@@ -915,6 +909,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
       giaRelatedGuids: (unit.ui?.content?.info || [])
         .find((entry) => entry.field501 === 4 && entry.field502 === 4)?.related?.value || [],
       name: unit.name || kind,
+      visible: dataDetails(unit, 'field14')?.field17?.initiallyHidden !== true,
       scriptMappingIds: (generic?.field502 || []).map((entry) => Number(entry?.field1?.id)).filter((id) => Number.isSafeInteger(id) && id > 0),
       transformByPlatform: transformMaps(unit),
       syncAllDevices: dataDetails(unit, 'transform')?.multiPlatform?.field504 === 1,
@@ -926,6 +921,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
           textField501: text?.field501 ?? 20,
           textField503: text?.field503 ?? 12,
           textAlign: text?.align ?? 0,
+          ...(![undefined, 0, 1, 2].includes(text?.verticalAlign) ? { textVerticalAlign: text.verticalAlign } : {}),
           ...(kind === 'textwindow' ? {
             textField511: text?.field511 ?? 1,
             textViewField502: text?.viewFlags?.field502 ?? 1,
@@ -962,7 +958,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
         fontColor: text?.color ?? 0xffffffff, bgColor: text?.color2 ?? 0,
         enableOutline: text?.outlineOff !== 1, outlineColor: text?.color3 ?? 0x33333333,
         horizontalAlignment: text?.align === 1 ? 'Middle' : text?.align === 2 ? 'Right' : 'Left',
-        verticalAlignment: 'Top',
+        verticalAlignment: { 0: 'Top', 1: 'Middle', 2: 'Bottom' }[text?.verticalAlign ?? 0] || 'Top',
         ...(kind === 'textwindow' ? { interactable: true, showScrollBar: true } : {}),
       } : {}),
       ...(kind === 'image' ? {
@@ -1003,6 +999,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
     })
     nodes.set(unit.id?.id, node)
     if ((kind === 'textbox' || kind === 'textwindow') && ![undefined, 0, 1, 2].includes(text?.align)) warnings.push(`${node.name}: 水平对齐枚举 ${text.align} 的含义未知，已原样保留。`)
+    if ((kind === 'textbox' || kind === 'textwindow') && ![undefined, 0, 1, 2].includes(text?.verticalAlign)) warnings.push(`${node.name}: 垂直对齐枚举 ${text.verticalAlign} 的含义未知，已原样保留。`)
     if (kind === 'image' && ![undefined, 0, 1, 2, 3, 4, 5].includes(image?.fillType)) warnings.push(`${node.name}: 填充形状枚举 ${image.fillType} 未识别，已保留原值。`)
     if (kind === 'button') {
       pendingStateGuids.set(node.id, {
