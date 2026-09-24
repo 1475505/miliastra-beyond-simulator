@@ -16,9 +16,7 @@ const COMMON_FIELDS = Object.freeze([
 ])
 
 const KIND_FIELDS = Object.freeze({
-  container: [
-    { key: 'containerNodeSlot', label: '容器节点槽', type: 'string', defaultValue: '', wire: 'Details.containerNodeSlot' },
-  ],
+  container: [],
   textbox: [
     { key: 'textField501', label: '文本配置 field501', type: 'number', defaultValue: 20, wire: 'TextConfig.field501' },
     { key: 'textField503', label: '文本配置 field503', type: 'number', defaultValue: 12, wire: 'TextConfig.field503' },

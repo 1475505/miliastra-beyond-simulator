@@ -43,7 +43,7 @@ message UiControlGroup {
       oneof value {
         Transform transform = 13; Field14 field14 = 14; RootChildRef rootChildRef = 73;
         GenericSlot genericSlot = 74; TextConfig textConfig = 75; CursorConfig cursorConfig = 76;
-        string templateRefSlot = 77; FooterSlot footerSlot = 78; string containerNodeSlot = 79;
+        string templateRefSlot = 77; FooterSlot footerSlot = 78; ContainerNodeConfig containerNodeSlot = 79;
         GridViewConfig gridView = 80; ButtonPresetConfig buttonPreset = 81; KeyHintConfig keyHint = 83;
         ImageSlotConfig imageSlot = 84; ImageConfig image = 85; string effectSlot = 86;
         string fullscreenEffectSlot = 87;
@@ -57,7 +57,8 @@ message WrapperInt32 { int32 value = 501; }
 message WrapperGuid { uint32 value = 501; }
 message WrapperGuidList { repeated uint32 value = 501; }
 message NodeRef { int32 class = 2; int32 type = 3; int32 id = 4; }
-message Field14 { optional string empty15 = 15; ClientInitialState field17 = 17; int32 field501 = 501; }
+message Field14 { optional string empty15 = 15; ClientInitialState field17 = 17; int32 field501 = 501; bool initiallyInactive = 502; }
+message ContainerNodeConfig { bool isolateNavigation = 501; bool disableKeyEventPassthrough = 502; bool disableCursorEventPassthrough = 503; bool showCursor = 504; }
 message ClientInitialState { bool initiallyHidden = 503; }
 message Vector3 { float x = 1; float y = 2; float z = 3; }
 message RectTransform {
@@ -262,9 +263,11 @@ function commonData(node, guid, isGroup) {
   const marker = isGroup
     ? { empty15: '', field501: 5 }
     : { field17: {}, field501: 7 }
-  const stateMarker = !isGroup && node.visible === false
-    ? { ...marker, field17: { initiallyHidden: true } }
-    : marker
+  const stateMarker = isGroup ? marker : {
+    ...marker,
+    ...(node.visible === false ? { field17: { initiallyHidden: true } } : {}),
+    ...(node.active === false ? { initiallyInactive: true } : {}),
+  }
   return [
     { name: { value: node.name }, field501: 2, field502: 15 },
     {
@@ -290,9 +293,17 @@ function typeData(node, guid, guidById, warnings) {
       }
     : { field501: raw.genericField501 ?? 0 }
   const generic = ref(63, 83, 'empty73', 'genericSlot', genericPayload)
-  const footer = ref(67, 90, 'empty77', 'footerSlot', { field505: raw.footerField505 ?? 0 })
+  const footer = ref(67, 90, 'empty77', 'footerSlot', {
+    field505: ![undefined, 0, 1].includes(raw.footerField505)
+      ? raw.footerField505 : (node.canControllerFocus ? 1 : 0),
+  })
   if (node.kind === 'container') {
-    return [generic, ref(68, 91, 'empty78', 'containerNodeSlot', raw.containerNodeSlot ?? ''), footer]
+    return [generic, ref(68, 91, 'empty78', 'containerNodeSlot', {
+      ...(node.isolateNavigation ? { isolateNavigation: true } : {}),
+      ...(node.disableKeyEventPassthrough ? { disableKeyEventPassthrough: true } : {}),
+      ...(node.disableCursorEventPassthrough ? { disableCursorEventPassthrough: true } : {}),
+      ...(node.showCursor ? { showCursor: true } : {}),
+    }), footer]
   }
   if (node.kind === 'textbox' || node.kind === 'textwindow') {
     // Official 7.1.0 sample confirms Top=0 and Bottom=2. Middle=1 is
@@ -392,7 +403,10 @@ function typeData(node, guid, guidById, warnings) {
     ]
   }
   if (node.kind === 'cursor') {
-    return [generic, ref(65, 85, 'empty75', 'cursorConfig', { field501: raw.cursorField501 ?? 1 }), footer]
+    return [generic, ref(65, 85, 'empty75', 'cursorConfig', {
+      field501: ![undefined, 0, 1].includes(raw.cursorField501)
+        ? raw.cursorField501 : (node.raycastTarget !== false ? 1 : 0),
+    }), footer]
   }
   if (node.kind === 'reference') {
     return [generic, ref(66, 89, 'empty76', 'templateRefSlot', raw.templateRefSlot ?? ''), footer]
@@ -910,13 +924,14 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
         .find((entry) => entry.field501 === 4 && entry.field502 === 4)?.related?.value || [],
       name: unit.name || kind,
       visible: dataDetails(unit, 'field14')?.field17?.initiallyHidden !== true,
+      active: dataDetails(unit, 'field14')?.initiallyInactive !== true,
+      canControllerFocus: footer?.field505 === 1,
       scriptMappingIds: (generic?.field502 || []).map((entry) => Number(entry?.field1?.id)).filter((id) => Number.isSafeInteger(id) && id > 0),
       transformByPlatform: transformMaps(unit),
       syncAllDevices: dataDetails(unit, 'transform')?.multiPlatform?.field504 === 1,
       giaRaw: {
         genericField501: generic?.field501 ?? 0,
         footerField505: footer?.field505 ?? 0,
-        ...(kind === 'container' ? { containerNodeSlot: containerNodeSlot ?? '' } : {}),
         ...((kind === 'textbox' || kind === 'textwindow') ? {
           textField501: text?.field501 ?? 20,
           textField503: text?.field503 ?? 12,
@@ -928,7 +943,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
             textViewField503: text?.viewFlags?.field503 ?? 1,
           } : {}),
         } : {}),
-        ...(kind === 'cursor' ? { cursorField501: cursor?.field501 ?? 1 } : {}),
+        ...(kind === 'cursor' ? { cursorField501: cursor?.field501 ?? 0 } : {}),
         ...(kind === 'reference' ? { templateRefSlot: templateRefSlot ?? '' } : {}),
         ...(kind === 'grid' ? {
           gridField501: grid?.field501 ?? 1,
@@ -952,6 +967,13 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
         ...(kind === 'animation' ? { effectSlot: effectSlot ?? '' } : {}),
         ...(kind === 'fullscreen' ? { fullscreenEffectSlot: fullscreenEffectSlot ?? '' } : {}),
       },
+      ...(kind === 'container' ? {
+        isolateNavigation: containerNodeSlot?.isolateNavigation === true,
+        disableKeyEventPassthrough: containerNodeSlot?.disableKeyEventPassthrough === true,
+        disableCursorEventPassthrough: containerNodeSlot?.disableCursorEventPassthrough === true,
+        showCursor: containerNodeSlot?.showCursor === true,
+      } : {}),
+      ...(kind === 'cursor' ? { raycastTarget: cursor?.field501 === 1 } : {}),
       ...((kind === 'textbox' || kind === 'textwindow') ? {
         text: text?.text?.value ?? '', fontSize: text?.fontSize ?? 20,
         minimumFontSize: text?.minimumFontSize ?? 20, adaptiveFontSize: text?.adaptive === 1,

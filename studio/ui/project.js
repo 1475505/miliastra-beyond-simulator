@@ -376,6 +376,8 @@ function applyPatchMutating(project, op) {
       if (!definition) throw new Error(`unknown raw GIA field for ${node.kind}: ${rawKey}`)
       node.giaRaw ||= {}
       node.giaRaw[rawKey] = sanitizeRawFieldValue(definition, value)
+      if (rawKey === 'footerField505' && [0, 1].includes(node.giaRaw[rawKey])) node.canControllerFocus = node.giaRaw[rawKey] === 1
+      if (node.kind === 'cursor' && rawKey === 'cursorField501' && [0, 1].includes(node.giaRaw[rawKey])) node.raycastTarget = node.giaRaw[rawKey] === 1
       if ((node.kind === 'textbox' || node.kind === 'textwindow') && rawKey === 'textAlign') {
         const alignment = { 0: 'Left', 1: 'Middle', 2: 'Right' }[node.giaRaw[rawKey]]
         if (alignment) node.horizontalAlignment = alignment
@@ -426,6 +428,8 @@ function applyPatchMutating(project, op) {
         }
       }
       node[key] = value
+      if (key === 'canControllerFocus') node.giaRaw.footerField505 = value ? 1 : 0
+      if (node.kind === 'cursor' && key === 'raycastTarget') node.giaRaw.cursorField501 = value ? 1 : 0
       if ((node.kind === 'textbox' || node.kind === 'textwindow') && key === 'horizontalAlignment') {
         node.giaRaw.textAlign = { Left: 0, Middle: 1, Right: 2 }[value]
       }

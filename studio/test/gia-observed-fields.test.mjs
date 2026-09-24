@@ -104,3 +104,83 @@ test('semantic vertical alignment edits replace an imported unknown enum', () =>
   assert.equal(node.verticalAlignment, 'Bottom')
   assert.equal(node.giaRaw.textVerticalAlign, undefined)
 })
+
+// Official second tmp.gia (7.1.0), SHA256
+// 8f5ec41e9a27fd5350c5f7180a0a968e9518ea8c186f6c0b7c87fa390f774193.
+const flagCases = [
+  ['base', 79, '', '', '', {}],
+  ['cursor-on', 79, 'c01f01', '', '', { showCursor: true }],
+  ['inactive', 79, '', 'b01f01', '', { active: false }],
+  ['isolate', 79, 'a81f01', '', '', { isolateNavigation: true }],
+  ['key-stop', 79, 'b01f01', '', '', { disableKeyEventPassthrough: true }],
+  ['cursor-stop', 79, 'b81f01', '', '', { disableCursorEventPassthrough: true }],
+  ['focus', 79, '', '', 'c81f01', { canControllerFocus: true }],
+  ['hit-on', 76, 'a81f01', '', '', { raycastTarget: true }],
+  ['hit-off', 76, '', '', '', { raycastTarget: false }],
+]
+function flagFixture() {
+  return envelope(cat(...flagCases.map(([name, tag, config, state, footer], i) => {
+    const id = 1073745000 + i
+    const content = cat(num(501, id),
+      slot(13, msg(12, msg(501, msg(502, msg(508, Buffer.alloc(0)))))),
+      slot(14, cat(msg(17, Buffer.alloc(0)), num(501, 7), hex(state))),
+      slot(tag, hex(config)), slot(78, hex(footer)))
+    return msg(1, cat(msg(1, num(4, id)), str(3, name), num(5, 70), msg(19, msg(1, content))))
+  })))
+}
+
+test('imports official container flags and cursor raycast defaults independently', () => {
+  const { project } = importGia(flagFixture())
+  for (const [i, c] of flagCases.entries()) {
+    const n = project.root.children[i]
+    for (const [key, value] of Object.entries(c[5])) assert.equal(n[key], value, `${n.name}.${key}`)
+    assert.equal(n.active, c[0] !== 'inactive')
+    assert.equal(n.canControllerFocus, c[0] === 'focus')
+    if (n.kind === 'container') for (const key of ['showCursor', 'isolateNavigation', 'disableKeyEventPassthrough', 'disableCursorEventPassthrough']) {
+      assert.equal(n[key], c[5][key] ?? false, `${n.name}.${key}`)
+    }
+  }
+})
+
+test('client and combined exports retain observed flags and support turning them off', () => {
+  const { project } = importGia(flagFixture())
+  for (const format of ['gia', 'combined']) {
+    const s = createStudio(project)
+    const exported = s.exportData(format)
+    const payload = Buffer.from(exported.data, 'base64').subarray(20, -4)
+    const units = [...all(payload, 1), ...all(payload, 2)]
+    for (const [name, tag, config, state, footer] of flagCases) {
+      const u = units.find(u => first(u, 3).toString() === name)
+      assert.ok(u, name)
+      const ds = details(u)
+      const readSlot = tag => ds.flatMap(d => all(d, tag))[0]
+      assert.equal(readSlot(tag).toString('hex'), config, name)
+      assert.equal(readSlot(78).toString('hex'), footer, name)
+      assert.equal(all(readSlot(14), 502)[0] ?? 0, state ? 1 : 0, name)
+      const outer = all(first(first(u, 19), 1), 505).flatMap(d => all(d, 14))
+      assert.equal(all(outer[0], 502).length, 0, 'activation override belongs only in Details')
+    }
+    for (const [i, c] of flagCases.entries()) for (const [key, value] of Object.entries(c[5])) {
+      s.patch({ op: 'set', id: project.root.children[i].id, key, value: !value })
+    }
+    const restored = importGia(Buffer.from(s.exportData(format).data, 'base64'))
+    const root = restored.clientProject?.root ?? restored.project.root
+    const nodes = new Map(root.children.map(n => [n.name, n]))
+    for (const c of flagCases) for (const [key, value] of Object.entries(c[5])) assert.equal(nodes.get(c[0])[key], !value)
+  }
+})
+
+test('server-group GIA preserves the same client flags under its container', () => {
+  const source = importGia(flagFixture()).project.root.children
+  const archive = createStudio().archiveData()
+  archive.assets.server.root.children[0].children = source
+  const s = createStudio(archive)
+  for (const format of ['gia', 'combined']) {
+    const exported = s.exportData(format)
+    const target = createStudio()
+    target.importData('gia', exported.data, exported.filename)
+    const children = target.archiveData().assets.server.root.children[0].children
+    const nodes = new Map(children.map(n => [n.name, n]))
+    for (const c of flagCases) for (const [key, value] of Object.entries(c[5])) assert.equal(nodes.get(c[0])[key], value)
+  }
+})

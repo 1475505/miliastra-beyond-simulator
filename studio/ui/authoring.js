@@ -65,7 +65,7 @@ export function createNode(kind, extras = {}) {
       : {}),
     active: extras.active !== false,
     visible: extras.visible !== false,
-    canControllerFocus: extras.canControllerFocus === true,
+    canControllerFocus: extras.canControllerFocus ?? (extras.giaRaw?.footerField505 === 1),
     syncAllDevices: extras.syncAllDevices !== false,
     giaRaw: createGiaRaw(kind, extras.giaRaw),
     transformByPlatform,
@@ -136,7 +136,7 @@ export function createNode(kind, extras = {}) {
     node.pressedChildId = extras.pressedChildId ?? null
     node.selectedChildId = extras.selectedChildId ?? null
   }
-  if (kind === 'cursor') node.raycastTarget = extras.raycastTarget !== false
+  if (kind === 'cursor') node.raycastTarget = extras.raycastTarget ?? (extras.giaRaw?.cursorField501 !== 0)
   if (kind === 'reference') {
     node.referencedPrefabId = extras.referencedPrefabId ?? extras.giaRaw?.templateRefSlot ?? null
     if (!Object.hasOwn(extras.giaRaw || {}, 'templateRefSlot')) {
