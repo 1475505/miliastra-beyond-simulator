@@ -34,7 +34,7 @@ end
   assert.match(t, /failed to load script 'os'/)
 })
 
-test('sandbox matches the client capability cuts used by the native probe', () => {
+test('sandbox matches the official client capability cuts', () => {
   const rt = createRuntime()
   const root = rt.addRoot({ active: true, name: 'R', kind: 'container' })
   rt.mountScript({
@@ -100,11 +100,11 @@ test('script.path exposes the mounted script short name', () => {
   const rt = createRuntime()
   const root = rt.addRoot({ active: true, name: 'R', kind: 'container' })
   rt.mountScript({
-    path: 'projects/labs/Lua-Native/LuaNativeProbe.lua',
+    path: 'workspace/path/Example.lua',
     control: root,
-    source: 'function OnStart() print("path", script.path) end',
+    source: 'function OnStart() if script.path ~= "Example" then error("unexpected script path") end end',
   })
-  assert.match(logText(rt), /path\tLuaNativeProbe/)
+  assert.equal(rt.mountErrors.length, 0)
 })
 
 test('Instantiate nil in OnInit, object in OnStart; FindChild path', () => {

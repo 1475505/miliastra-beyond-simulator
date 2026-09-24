@@ -20,4 +20,4 @@
 15. Lua 表面只开放官方 API 文档列出的字段/方法。文档未写的（`script.tickEnabled`、`EnumItem.__kind`、`enableFill`、按钮四态等）读为 nil，写报 `cannot set`。
 16. 控件标识字段：`Id`（客户端控件运行时ID，首字母大写）/ `prefabIndex`；Script 字段 `scriptMappingId`（GetScript 参数同名）；grid 的 `itemPrefabIndex`；reference 的 `referencedPrefabIndex`。InstantiateClientUIControl / GetClientUIControl 仅形参名变化。旧 probe 中的 `control.id` / `prefabId` 是旧版本接口，不作为兼容口径。
 17. math 沙箱：按正式服探针保留 modf、ult；额外提供 isnan、isinf。文档异常行提到的 `math.isnaf` 语义无处记载——按反编造政策不提供（读为 nil）。
-18. Native probe fidelity: load/loadfile/dofile/package/coroutine/collectgarbage、string.dump/pack/unpack 按正式服裁剪；字符串方法语法保留，但全局 getmetatable 对字符串按正式服隐藏。普通 Lua 表的 typeof 返回 table，挂载脚本的 script.path 暴露短名。Fengari 的整数仍是 32 位，这是已知的底层限制，不能作为正式服整数结论。
+18. Runtime capability fidelity: load/loadfile/dofile/package/coroutine/collectgarbage、string.dump/pack/unpack 按客户端裁剪；字符串方法语法保留，但全局 getmetatable 对字符串隐藏。普通 Lua 表的 typeof 返回 table，挂载脚本的 script.path 暴露短名。Fengari 的整数仍是 32 位，这是已知的底层限制，不能作为客户端整数结论。
