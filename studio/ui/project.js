@@ -26,6 +26,7 @@ import { hitTest, inspectorDto, layoutTree, painterBoxes, treeRows } from './ins
 import { rawFieldDefinition, sanitizeRawFieldValue } from '../gia/raw-fields.js'
 import { assignGuids } from '../gia/codec.js'
 import { collectUsedGuids, nextFreeGuid } from '../gia/guid.js'
+import { migrateLayout } from './migrate-layout.js'
 
 function parentBoxOf(project, nodeId, boxes, canvasId = project.canvasId) {
   const parent = findParent(project.root, nodeId)
@@ -33,8 +34,9 @@ function parentBoxOf(project, nodeId, boxes, canvasId = project.canvasId) {
   return boxes[parent.id] || canvasBox(canvasId)
 }
 
-export function createProject(seed) {
+export function createProject(seed, { warnings = [] } = {}) {
   if (!seed) return createDefaultProject()
+  seed = migrateLayout(seed, warnings)
   if ((seed.root || seed.layoutSchemaVersion !== undefined) && seed.layoutSchemaVersion !== LAYOUT_SCHEMA_VERSION) {
     throw new Error(`仅支持 layoutSchemaVersion=${LAYOUT_SCHEMA_VERSION} 的四平台布局，不支持旧画布布局或其他版本`)
   }

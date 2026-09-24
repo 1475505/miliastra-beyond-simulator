@@ -4,10 +4,10 @@ import { createStudio } from '../index.js'
 import * as giaCodec from '../gia/codec.js'
 import { join } from 'node:path'
 
-test('current save still accepts per-asset script mounts when constructing default UI assets', () => {
+test('v1 save migration preserves per-asset script mounts when constructing default UI assets', () => {
   const legacy = {
     format: 'qxqy-simulator-save',
-    version: 4,
+    version: 1,
     meta: { name: '旧存档' },
     activeAssetType: 'server-control-template',
     assets: {

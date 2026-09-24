@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { applyPatch, createProject, snapshotProject } from './ui/project.js'
+import { assertSaveVersion } from './ui/migrate-layout.js'
 import { createDefaultClientTemplateProject, createDefaultProject, findNode, walk } from './ui/authoring.js'
 import {
   startPlay,
@@ -163,19 +164,18 @@ function resolveWorkspaceFile(relOrAbs, cwd = process.cwd()) {
 }
 
 export function createStudio(seed, options = {}) {
-  if (seed?.format === SAVE_FORMAT && seed.version !== 4) {
-    throw new Error('仅支持 version=4 的四平台布局存档，不自动迁移旧布局')
-  }
+  if (seed?.format === SAVE_FORMAT) assertSaveVersion(seed.version)
+  let migrationWarnings = []
   // 显示用的工作区必须是会话 cwd 本身，缺省保持未绑定，绝不回退到宿主 process.cwd()。
   // 仓库根只用于解析相对路径脚本，不改写顶栏身份。
   let workspacePath = typeof options.workspacePath === 'string' && options.workspacePath
     ? options.workspacePath
     : ''
   const isSave = seed?.format === SAVE_FORMAT && seed.assets
-  const seededProject = isSave ? null : createProject(seed)
+  const seededProject = isSave ? null : createProject(seed, { warnings: migrationWarnings })
   const projects = {
-    server: isSave && seed.assets.server ? createProject(seed.assets.server) : defaultProject(SERVER_ASSET),
-    client: isSave && seed.assets.client ? createProject(seed.assets.client) : defaultProject(CLIENT_ASSET),
+    server: isSave && seed.assets.server ? createProject(seed.assets.server, { warnings: migrationWarnings }) : defaultProject(SERVER_ASSET),
+    client: isSave && seed.assets.client ? createProject(seed.assets.client, { warnings: migrationWarnings }) : defaultProject(CLIENT_ASSET),
   }
   if (seededProject) projects[assetKey(seededProject.meta.assetType)] = seededProject
   let activeAssetType = isSave && seed.activeAssetType === CLIENT_ASSET
@@ -413,6 +413,7 @@ export function createStudio(seed, options = {}) {
     snap.scripts = describeScripts()
     snap.mountTargets = mountTargetRows()
     snap.serverLogic = serverLogic
+    snap.migrationWarnings = [...migrationWarnings]
     assertNoUndefined(snap)
     return snap
   }
@@ -673,14 +674,15 @@ export function createStudio(seed, options = {}) {
       }
       if (next?.project) next = next.project
       if (next?.format === SAVE_FORMAT && next?.assets) {
-        if (next.version !== 4) throw new Error('仅支持 version=4 的四平台布局存档，不自动迁移旧布局')
+        assertSaveVersion(next.version)
         // Validate both assets before committing either: unsupported layouts
         // must not leave a half-imported archive in the active session.
-        const nextServer = createProject(next.assets.server || createDefaultProject())
-        const nextClient = createProject(next.assets.client || createDefaultClientTemplateProject())
+        const nextServer = createProject(next.assets.server || createDefaultProject(), { warnings })
+        const nextClient = createProject(next.assets.client || createDefaultClientTemplateProject(), { warnings })
         const nextServerLogic = normalizeServerLogic(next.serverLogic)
         projects.server = nextServer
         projects.client = nextClient
+        migrationWarnings = [...warnings]
         activeAssetType = next.activeAssetType === CLIENT_ASSET ? CLIENT_ASSET : SERVER_ASSET
         explicitSaveName = String(next.meta?.name || basename(filename).replace(/\.json$/i, '') || explicitSaveName)
         serverLogic = nextServerLogic
@@ -735,7 +737,8 @@ export function createStudio(seed, options = {}) {
     } else {
       throw new Error(`unsupported import format: ${format}`)
     }
-    const importedProject = createProject(next)
+    const importedProject = createProject(next, { warnings })
+    migrationWarnings = [...warnings]
     const key = assetKey(importedProject.meta.assetType)
     projects[key] = importedProject
     activeAssetType = importedProject.meta.assetType

@@ -128,14 +128,14 @@ test('failed cross-platform projection leaves the edit atomic', () => {
   assert.equal(studio.get().boxes.find(b => b.id === 'n2').centerX, 400)
 })
 
-test('only the new layout shape is accepted; failed archive imports leave both assets unchanged', () => {
+test('new layouts remain strict; failed archive imports leave both assets unchanged', () => {
   const studio = createStudio()
   const before = studio.archiveData()
   const invalid = structuredClone(before)
-  for (const version of [1, 3, 5]) {
+  for (const version of [0, 5]) {
     const otherVersion = { ...before, version }
-    assert.throws(() => createStudio(otherVersion), /version=4/)
-    assert.throws(() => studio.importData('json', encode(otherVersion)), /version=4/)
+    assert.throws(() => createStudio(otherVersion), /version=1–4/)
+    assert.throws(() => studio.importData('json', encode(otherVersion)), /version=1–4/)
     assert.deepEqual(studio.archiveData(), before)
   }
   invalid.assets.server.meta.name = 'must not replace existing server'
@@ -145,7 +145,7 @@ test('only the new layout shape is accepted; failed archive imports leave both a
   assert.throws(() => createStudio(invalid), /不再支持 transformByCanvas/)
   const project = createDefaultProject()
   delete project.layoutSchemaVersion
-  assert.throws(() => createProject(project), /layoutSchemaVersion=2/)
+  assert.equal(createProject(project).layoutSchemaVersion, 2)
   project.layoutSchemaVersion = 999
   assert.throws(() => createProject(project), /layoutSchemaVersion=2/)
   project.layoutSchemaVersion = 2
@@ -154,6 +154,70 @@ test('only the new layout shape is accepted; failed archive imports leave both a
   assert.throws(() => exportGia(project), /TOUCHSCREEN/)
   assert.throws(() => createNode('container', { transformByPlatform: {} }), /KEYBOARD/)
   assert.throws(() => createNode('container', { transformByCanvas: {} }), /不再支持 transformByCanvas/)
+})
+
+test('v1–v3 archives and legacy projects migrate at every read boundary without mutating input', () => {
+  const original = createStudio().archiveData()
+  for (const asset of ['server', 'client']) {
+    delete original.assets[asset].layoutSchemaVersion
+    walk(original.assets[asset].root, node => {
+      node.transformByPlatform = {}
+      node.transformByCanvas = { 'pc-16-9': rect(1600, 900, 12, 34), 'mobile-16-9': rect(1280, 720, 56, 78) }
+    })
+  }
+  const before = structuredClone(original)
+  for (const version of [1, 2, 3]) {
+    const input = { ...original, version }
+    const studio = createStudio(input)
+    const output = studio.archiveData()
+    assert.equal(output.version, 4)
+    assert.doesNotMatch(JSON.stringify(output), /transformByCanvas/)
+    assert.ok(studio.get().migrationWarnings.some(w => w.includes('自动迁移')))
+    for (const asset of ['server', 'client']) {
+      assert.equal(output.assets[asset].layoutSchemaVersion, 2)
+      walk(output.assets[asset].root, node => {
+        assert.deepEqual(node.transformByPlatform.KEYBOARD, rect(1600, 900, 12, 34))
+        assert.deepEqual(node.transformByPlatform.TOUCHSCREEN, rect(1280, 720, 56, 78))
+        assert.deepEqual(node.transformByPlatform.CONTROLLER_CONSOLE, rect(1600, 900, 12, 34))
+        assert.deepEqual(node.transformByPlatform.CONTROLLER_MOBILE, rect(1280, 720, 56, 78))
+      })
+    }
+    const fresh = createStudio()
+    assert.ok(fresh.importData('json', encode(input)).warnings.some(w => w.includes('自动迁移')))
+    assert.deepEqual(fresh.archiveData(), output)
+    assert.deepEqual(createStudio(output).archiveData(), output)
+    assert.deepEqual(createStudio(output).get().migrationWarnings, [])
+    const decoded = importGia(Buffer.from(studio.exportData('gia').data, 'base64')).project
+    assert.deepEqual(decoded.root.children[0].transformByPlatform.TOUCHSCREEN, rect(1280, 720, 56, 78))
+  }
+  assert.deepEqual(original, before)
+  const project = createProject(original.assets.server)
+  const imported = createStudio().importData('json', encode({ project: original.assets.server }))
+  assert.deepEqual(imported.snapshot.root, project.root)
+})
+
+test('migration preserves explicit platform and controller values and reports ambiguous or missing layouts', () => {
+  const old = createDefaultProject()
+  old.layoutSchemaVersion = 1
+  const node = old.root.children[0]
+  node.transformByPlatform = { KEYBOARD: rect(600, 400), CONTROLLER_MOBILE: rect(333, 222) }
+  node.transformByCanvas = { 'pc-16-9': rect(1600, 900), 'pc-21-9': rect(1800, 900), 'mobile-4-3': rect(777, 555) }
+  const warnings = []
+  const migrated = createProject(old, { warnings }).root.children[0]
+  assert.deepEqual(migrated.transformByPlatform.KEYBOARD, rect(600, 400))
+  assert.deepEqual(migrated.transformByPlatform.CONTROLLER_CONSOLE, rect(600, 400))
+  assert.deepEqual(migrated.transformByPlatform.TOUCHSCREEN, rect(777, 555))
+  assert.deepEqual(migrated.transformByPlatform.CONTROLLER_MOBILE, rect(333, 222))
+  assert.ok(warnings.some(w => w.includes('冲突')))
+  assert.ok(warnings.some(w => w.includes('缺少 mobile-16-9')))
+  node.transformByPlatform = {}
+  node.transformByCanvas = {}
+  const missing = []
+  createProject(old, { warnings: missing })
+  assert.ok(missing.some(w => w.includes('无旧布局')))
+  node.transformByCanvas = { 'pc-16-9': rect(123, 456) }
+  node.transformByCanvas['pc-16-9'].size.x = Infinity
+  assert.throws(() => createProject(old), /finite number/)
 })
 
 test('platform reads are copies and every new node carries exactly four finite transforms', () => {

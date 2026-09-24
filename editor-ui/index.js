@@ -634,7 +634,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
           await queueRef.current.catch(() => {})
           const result = await callApi(sessionId, 'import', { format, filename: file.name, data: await fileBase64(file) })
           accept(result.snapshot, { keepLogicDraft: false }); setError('')
-          setNotice(result.warnings?.length ? `已导入 ${file.name}；部分内容暂不支持编辑。` : `已导入 ${file.name}`)
+          setNotice([`已导入 ${file.name}`, ...(result.warnings || [])].join('\n'))
         } catch (reason) { setError(reason?.message || String(reason)) }
         finally { if (fileInputRef.current) fileInputRef.current.value = '' }
       }

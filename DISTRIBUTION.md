@@ -60,7 +60,7 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 ## 自动发布到 npm
 
-2026-09-24 四平台布局发布批次：DSH `2.0.0`、Web / MCP `0.2.0`，tag `npm-2026-09-24-4`。这是存档读取的不兼容更新：完整存档只接受 version 4，资产布局只接受 `layoutSchemaVersion: 2`；不读取或迁移旧 `transformByCanvas`。五种画布保留为四平台参数的派生预览。此处记录目标版本，不表示 npm 已公开上线；实际状态以 tag 工作流和 npm 暂存审核结果为准。
+2026-09-24 四平台布局发布批次：DSH `2.0.0`、Web / MCP `0.2.0`。在这些版本公开发布前补入旧存档自动迁移，沿用版本号，后续 tag 替换原 `npm-2026-09-24-4` 的暂存内容。读取支持 version 1–4，保存统一为 version 4、`layoutSchemaVersion: 2`；五种画布为四平台参数的派生预览。此处记录目标版本，不表示 npm 已公开上线；实际状态以 tag 工作流和 npm 暂存审核结果为准。
 
 工作流文件是 `.github/workflows/publish-npm.yml`，推送 `npm-*` Git tag 时触发。它在 GitHub 托管的 Ubuntu runner 上运行冻结锁文件安装、回归测试、Git 源码安装验收、三个包的构建和仓库外安装验收。`scripts/publish-npm.mjs` 在发布前校验 tarball 哈希；同版本同内容会跳过，同版本不同内容会失败并要求增加版本号。首次推送该工作流前，先把本地源码改动提交并推送到仓库；标记的提交必须包含这份工作流和要发布的版本。
 
