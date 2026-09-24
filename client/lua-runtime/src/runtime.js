@@ -32,6 +32,11 @@ function enumName(v) {
   return v.Name || v.FullName || String(v)
 }
 
+function scriptDisplayPath(path) {
+  const normalized = String(path).replace(/\\/g, '/').replace(/\.lua$/i, '')
+  return normalized.split('/').pop() || normalized
+}
+
 export class LuaRuntime {
   constructor(options = {}) {
     this.canvasWidth = options.canvasWidth ?? 1600
@@ -252,6 +257,14 @@ export class LuaRuntime {
     lua.lua_setglobal(L, sl('printerr'))
 
     lua.lua_pushcfunction(L, (LL) => {
+      // `toJs` intentionally turns ordinary Lua tables into plain JS values
+      // for the host bridge.  Preserve the Lua-facing typeof contract before
+      // that conversion: only userdata-backed host objects should report
+      // their host type name, while a native Lua table reports "table".
+      if (lua.lua_type(LL, 1) === lua.LUA_TTABLE && !hostFromLua(LL, 1)) {
+        lua.lua_pushstring(LL, sl('table'))
+        return 1
+      }
       const v = toJs(LL, rt, 1)
       lua.lua_pushstring(LL, sl(rt.typeofOf(v)))
       return 1
@@ -1150,7 +1163,11 @@ export class LuaRuntime {
       alive: true,
       scriptMappingId: this.resolveScriptMappingId(scriptMappingId),
       object: control,
-      path: this.normalizeRequirePath(path),
+      // The editor mapping may use a workspace-relative path, but the client
+      // exposes the mounted script's short name through script.path. Keep the
+      // full mapping path for diagnostics and require registration while
+      // matching the value visible to gameplay Lua.
+      path: scriptDisplayPath(path),
       enabled: true,
       updateEnabled: false,
       params,

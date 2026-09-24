@@ -256,12 +256,31 @@ export function closeLuaState(L) {
 }
 
 export function installSandbox(L) {
+  // Fengari gives strings a Lua-style metatable with `__index = string`.
+  // The official client keeps string method syntax working, but hides that
+  // metatable from the global getmetatable probe. Wrap only that observation;
+  // removing the metatable would break real scripts using p:gsub(...).
+  const hideStringMetatable = lauxlib.luaL_loadstring(L, sl([
+    'local nativeGetMetatable = getmetatable',
+    'getmetatable = function(value)',
+    '  if type(value) == "string" then return nil end',
+    '  return nativeGetMetatable(value)',
+    'end',
+  ].join('\n')))
+  if (hideStringMetatable === LUA_OK) lua.lua_pcall(L, 0, 0, 0)
+  lua.lua_settop(L, 0)
   lua.lua_pushnil(L)
   lua.lua_setglobal(L, sl('_VERSION'))
   lua.lua_getglobal(L, sl('string'))
   if (!lua.lua_isnil(L, -1)) {
-    lua.lua_pushnil(L)
-    lua.lua_setfield(L, -2, sl('dump'))
+    // The official client keeps the Lua string library, but removes all
+    // source/bytecode loading helpers.  Fengari exposes these by default;
+    // leaving them visible makes a probe report capabilities the client does
+    // not provide.
+    for (const name of ['dump', 'pack', 'unpack']) {
+      lua.lua_pushnil(L)
+      lua.lua_setfield(L, -2, sl(name))
+    }
   }
   lua.lua_pop(L, 1)
   lua.lua_pushnil(L)
@@ -290,10 +309,6 @@ export function installSandbox(L) {
   }
   lua.lua_getglobal(L, sl('math'))
   if (!lua.lua_isnil(L, -1)) {
-    for (const name of ['modf', 'ult']) {
-      lua.lua_pushnil(L)
-      lua.lua_setfield(L, -2, sl(name))
-    }
     lua.lua_pushcfunction(L, (LL) => {
       const n = lua.lua_tonumber(LL, 1)
       lua.lua_pushboolean(LL, Number.isNaN(n))
@@ -311,9 +326,13 @@ export function installSandbox(L) {
   lua.lua_pushnil(L)
   lua.lua_setglobal(L, sl('package'))
   lua.lua_pushnil(L)
+  lua.lua_setglobal(L, sl('load'))
+  lua.lua_pushnil(L)
   lua.lua_setglobal(L, sl('loadfile'))
   lua.lua_pushnil(L)
   lua.lua_setglobal(L, sl('dofile'))
+  lua.lua_pushnil(L)
+  lua.lua_setglobal(L, sl('collectgarbage'))
   lua.lua_pushnil(L)
   lua.lua_setglobal(L, sl('coroutine'))
   lua.lua_pushnil(L)
