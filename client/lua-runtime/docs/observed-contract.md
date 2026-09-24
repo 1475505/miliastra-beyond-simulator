@@ -19,4 +19,5 @@
 14. `ClientUIImageControl.imageType`：创作者确认只有部分图片支持设置。已观察：对一组刚 Instantiate 出的图片赋值报 `cannot set imageType, no such field`。在能力判定条件通过 probe/GIA 明确前，模拟器保守跟该拒绝路径，不全局开放。
 15. Lua 表面只开放官方 API 文档列出的字段/方法。文档未写的（`script.tickEnabled`、`EnumItem.__kind`、`enableFill`、按钮四态等）读为 nil，写报 `cannot set`。
 16. 控件标识字段：`Id`（客户端控件运行时ID，首字母大写）/ `prefabIndex`；Script 字段 `scriptMappingId`（GetScript 参数同名）；grid 的 `itemPrefabIndex`；reference 的 `referencedPrefabIndex`。InstantiateClientUIControl / GetClientUIControl 仅形参名变化。旧 probe 中的 `control.id` / `prefabId` 是旧版本接口，不作为兼容口径。
-17. math 沙箱：不可用清单实际只剩 modf、ult（atan2/cosh/ldexp/pow 在 Lua 5.3 本就不存在）；额外提供 isnan、isinf。文档异常行提到的 `math.isnaf` 语义无处记载——按反编造政策不提供（读为 nil）。
+17. math 沙箱：按正式服探针保留 modf、ult；额外提供 isnan、isinf。文档异常行提到的 `math.isnaf` 语义无处记载——按反编造政策不提供（读为 nil）。
+18. Native probe fidelity: load/loadfile/dofile/package/coroutine/collectgarbage、string.dump/pack/unpack 按正式服裁剪；字符串方法语法保留，但全局 getmetatable 对字符串按正式服隐藏。普通 Lua 表的 typeof 返回 table，挂载脚本的 script.path 暴露短名。Fengari 的整数仍是 32 位，这是已知的底层限制，不能作为正式服整数结论。

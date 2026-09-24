@@ -34,6 +34,35 @@ end
   assert.match(t, /failed to load script 'os'/)
 })
 
+test('sandbox matches the client capability cuts used by the native probe', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'R', kind: 'container' })
+  rt.mountScript({
+    path: 'sandbox-cuts',
+    control: root,
+    source: `
+function OnStart()
+  print("version", _VERSION)
+  print("load", load)
+  print("pack", string.pack, string.unpack)
+  print("gc", collectgarbage)
+  print("math_cuts", type(math.modf), type(math.ult))
+  print("typeof_table", typeof({}))
+  local ok, upper = pcall(function() return ("x"):upper() end)
+  print("string_meta", getmetatable("x") == nil, ok, upper)
+end
+`,
+  })
+  const t = logText(rt)
+  assert.match(t, /version\tnil/)
+  assert.match(t, /load\tnil/)
+  assert.match(t, /pack\tnil\tnil/)
+  assert.match(t, /gc\tnil/)
+  assert.match(t, /math_cuts\tfunction\tfunction/)
+  assert.match(t, /typeof_table\ttable/)
+  assert.match(t, /string_meta\ttrue\ttrue\tX/)
+})
+
 test('GetParam keeps types; Color packs; typeof Script', () => {
   const rt = createRuntime()
   const root = rt.addRoot({ active: true,  name: 'R', kind: 'container' })
@@ -65,6 +94,17 @@ end
   assert.match(t, /missing\tnil/)
   assert.match(t, /rgba\t10\t20\t30\t40/)
   assert.match(t, /eq\ttrue\tfalse/)
+})
+
+test('script.path exposes the mounted script short name', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'R', kind: 'container' })
+  rt.mountScript({
+    path: 'projects/labs/Lua-Native/LuaNativeProbe.lua',
+    control: root,
+    source: 'function OnStart() print("path", script.path) end',
+  })
+  assert.match(logText(rt), /path\tLuaNativeProbe/)
 })
 
 test('Instantiate nil in OnInit, object in OnStart; FindChild path', () => {
