@@ -37,7 +37,7 @@ test('circle texture is opaque inside the analytic circle and transparent outsid
   }
 })
 
-test('circle position, radius, tint and alpha animate without replacing its sprite or texture', t => {
+test('circle position, ellipse axes, tint and alpha animate without replacing its sprite or texture', t => {
   const { renderer, root, item } = harness(t)
   renderer.updateNode(root, item, { nested: true })
   const visual = root.__visual, circle = visual.children[0], texture = circle.texture
@@ -48,7 +48,7 @@ test('circle position, radius, tint and alpha animate without replacing its spri
     assert.equal(root.__visual, visual)
     assert.equal(circle.texture, texture)
     assert.equal(circle.width, diameter)
-    assert.equal(circle.height, diameter)
+    assert.equal(circle.height, diameter + 8)
     assert.equal(circle.visible, diameter > 0)
     assert.equal(circle.tint, 0xeadfc8)
     assert.equal(circle.alpha, 128 / 255)
@@ -73,4 +73,29 @@ test('circle sprites share textures and removing one does not invalidate another
   assert.equal(circle.width, 700)
   assert.equal(renderer.circleTextures.size, 2)
   renderer.clearVisual(second)
+})
+
+test('stretched circle sprites and filled circles use both axes; ring uses an elliptical path', t => {
+  const { renderer, root, item } = harness(t)
+  renderer.updateNode(root, { ...item, sourceWidth: 340, sourceHeight: 60 })
+  const sprite = root.__visual.__circle
+  assert.equal(sprite.width, 340)
+  assert.equal(sprite.height, 60)
+  assert.equal(sprite.visible, true)
+
+  const ellipse = (primitive, fillType) => {
+    renderer.updateNode(root, { ...item, primitive, imageId: primitive === 'ring' ? 100006 : 100002,
+      sourceWidth: 340, sourceHeight: 60, fillType, fillAmount: 1 })
+    const graphic = root.__visual.children.at(-1)
+    const instruction = graphic.context.instructions[0]
+    return instruction.data.path.shapePath.shapePrimitives[0].shape
+  }
+  const filled = ellipse('circle', 'Horizontal')
+  assert.equal(filled.type, 'ellipse')
+  assert.equal(filled.halfWidth, 170)
+  assert.equal(filled.halfHeight, 30)
+  const ring = ellipse('ring', 'Unused')
+  assert.equal(ring.type, 'ellipse')
+  assert.equal(ring.halfWidth, 166.5)
+  assert.equal(ring.halfHeight, 26.5)
 })

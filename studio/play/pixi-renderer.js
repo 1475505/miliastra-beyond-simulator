@@ -204,7 +204,7 @@ export class PixiPlayRenderer {
       if (item.pressed) graphic.roundRect(-width / 2, -height / 2, width, height, 6).fill({ color: 0x000000, alpha: 0.28 })
       visual.addChild(graphic)
     } else if (spriteCircle(item)) {
-      const circle = new Sprite({ texture: this.circleTexture(Math.min(width, height)), anchor: 0.5 })
+      const circle = new Sprite({ texture: this.circleTexture(Math.max(width, height)), anchor: 0.5 })
       visual.__circle = circle
       visual.addChild(circle)
     } else {
@@ -214,9 +214,9 @@ export class PixiPlayRenderer {
         graphic.rect(-width / 2, -height / 2, width, height).fill({ color: 0x482228, alpha: 0.36 })
         graphic.rect(-width / 2 + 0.5, -height / 2 + 0.5, Math.max(0, width - 1), Math.max(0, height - 1)).stroke({ color: 0xff7481, alpha: 1, width: 1 })
       } else if (item.primitive === 'circle') {
-        graphic.circle(0, 0, Math.min(width, height) / 2).fill(color)
+        graphic.ellipse(0, 0, width / 2, height / 2).fill(color)
       } else if (item.primitive === 'ring') {
-        graphic.circle(0, 0, Math.max(1, Math.min(width, height) / 2 - 3.5)).stroke({ ...color, width: 7 })
+        graphic.ellipse(0, 0, Math.max(1, width / 2 - 3.5), Math.max(1, height / 2 - 3.5)).stroke({ ...color, width: 7 })
       } else if (item.primitive === 'triangle' || item.primitive === 'fourstar' || item.primitive === 'fivestar') {
         graphic.poly(pointsFor(item, width, height)).fill(color)
       } else {
@@ -274,13 +274,14 @@ export class PixiPlayRenderer {
     if (root.__visual) root.__visual.scale.set(item.pressed ? 0.98 : 1)
     const circle = root.__visual?.__circle
     if (circle) {
-      const diameter = Math.min(width, height)
+      const diameter = Math.max(width, height)
       const color = argb(item.imageColor, 0xffffffff)
       circle.texture = this.circleTexture(diameter)
-      circle.width = circle.height = diameter
+      circle.width = width
+      circle.height = height
       circle.tint = color.color
       circle.alpha = color.alpha
-      circle.visible = diameter > 0
+      circle.visible = width > 0 && height > 0
     }
     this.applyMatrix(root, item, nested)
   }

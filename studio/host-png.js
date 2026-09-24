@@ -183,14 +183,14 @@ function drawPrimitive(ctx, item, width, height) {
   }
   if (item.primitive === 'circle') {
     ctx.beginPath()
-    ctx.arc(0, 0, Math.min(width, height) / 2, 0, Math.PI * 2)
+    ctx.ellipse(0, 0, width / 2, height / 2, 0, 0, Math.PI * 2)
     ctx.fillStyle = cssColor(color)
     ctx.fill()
     return
   }
   if (item.primitive === 'ring') {
     ctx.beginPath()
-    ctx.arc(0, 0, Math.max(1, Math.min(width, height) / 2 - 3.5), 0, Math.PI * 2)
+    ctx.ellipse(0, 0, Math.max(1, width / 2 - 3.5), Math.max(1, height / 2 - 3.5), 0, 0, Math.PI * 2)
     ctx.strokeStyle = cssColor(color)
     ctx.lineWidth = 7
     ctx.stroke()
