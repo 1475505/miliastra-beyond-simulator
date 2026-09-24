@@ -26,6 +26,22 @@ const ENUM_FIELDS = {
 const LUA_REGISTRYINDEX = lua.LUA_REGISTRYINDEX
 const LUA_MULTRET = lua.LUA_MULTRET
 
+// `game` is a table of dot-call functions. A colon call adds an implicit
+// first argument, which the official runtime rejects even for getters.
+const GAME_ARG_COUNTS = Object.freeze({
+  InstantiateClientUIControl: 2, DestroyClientUIControl: 1,
+  GetClientUIControl: 1, FindClientUIRoot: 1, GetClientUIRoots: 0,
+  GetUICanvasSize: 0, GetCursorUIPos: 0, GetDevice: 0,
+  SetControllerFocus: 1, GetControllerFocus: 0,
+  GetControllerLeftStickAxis: 0, GetControllerRightStickAxis: 0,
+  Tween: 3, TweenSequence: 0, ServerSignal: 1,
+  GetGlobalCustomVariableValue: 2,
+  PauseLevelTime: 1, IsLevelTimePaused: 0,
+  PlayAudio2D: 1, StopAudio: 1, IsAudioAlive: 1,
+  GetLanguageType: 0, GetStageMode: 0, IsTestPlay: 0, GetText: 1,
+  PrintClientUITree: 0,
+})
+
 function enumName(v) {
   if (v == null) return ''
   if (typeof v === 'string') return v
@@ -527,7 +543,15 @@ export class LuaRuntime {
       },
     }
     for (const [name, fn] of Object.entries(methods)) {
-      lua.lua_pushcfunction(L, fn)
+      const expected = GAME_ARG_COUNTS[name]
+      if (expected === undefined) throw new Error(`missing game arity for ${name}`)
+      lua.lua_pushcfunction(L, (LL) => {
+        const actual = lua.lua_gettop(LL)
+        if (actual !== expected) {
+          return lauxlib.luaL_error(LL, sl(`bad argument count to '${name}' (${expected} expected, got ${actual})`))
+        }
+        return fn(LL)
+      })
       lua.lua_setfield(L, -2, sl(name))
     }
     lua.lua_setglobal(L, sl('game'))
@@ -1320,10 +1344,18 @@ export class LuaRuntime {
   }
 
   injectKey(typeName) {
-    for (const root of this.roots) {
-      walk(root, (c) => {
-        if (c.alive && c.activeInHierarchy && c.keyListeners.has(typeName)) c.emitKey(typeName)
-      })
+    // children[] is kept in editor order: the first sibling is on top.
+    // Re-read it for each event so Lua sibling changes affect key priority.
+    const dispatch = (control) => {
+      if (!control.alive || !control.activeInHierarchy) return false
+      if (control.keyListeners.has(typeName) && control.emitKey(typeName)) return true
+      for (const child of [...control.children]) {
+        if (dispatch(child)) return true
+      }
+      return false
+    }
+    for (const root of [...this.roots]) {
+      dispatch(root)
     }
   }
 

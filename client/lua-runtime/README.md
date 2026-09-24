@@ -18,6 +18,8 @@ rt.destroy()
 
 详见 `docs/architecture.md`。
 
+按键监听的模拟器派发按当前同级显示层序从上到下进行；Lua 调整 sibling 顺序后，下一次按键也使用新顺序。此行为对应创作者提供的后续版本规则，新版真机待验。
+
 ```sh
 cd simulator/client/lua-runtime
 npm test

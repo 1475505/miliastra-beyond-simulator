@@ -1,6 +1,6 @@
 {
   "name": "beyond-simulator-web",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Self-hosted editor, preview and play surface for Qianxing simulator saves",
   "type": "module",
   "main": "dist/server.js",

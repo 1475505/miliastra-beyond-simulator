@@ -430,8 +430,9 @@ export class Control {
     const list = this.keyListeners.get(typeName) || []
     for (const fn of list) {
       const ret = fn()
-      if (ret === true) break
+      if (ret === true) return true
     }
+    return false
   }
 
   AddNavigationEventListener(typeName, fn) {

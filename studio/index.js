@@ -628,6 +628,8 @@ export function createStudio(seed, options = {}) {
       const result = exportGia(project, project.meta.assetType === CLIENT_ASSET
         ? { scripts: scriptsInProject(CLIENT_ASSET) }
         : {})
+      const excludedScripts = project.meta.assetType === CLIENT_ASSET ? [] : scriptsInProject(SERVER_ASSET)
+      if (excludedScripts.length) result.warnings.unshift(`当前服务器控件 GIA 不包含 ${excludedScripts.length} 个 Lua 脚本的源码；请使用「资产包 GIA 整合包」，或另行导入脚本包并核对挂载。`)
       return toJson({
         filename: `${baseName}.gia`,
         mimeType: 'application/octet-stream',

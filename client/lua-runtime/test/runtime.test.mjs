@@ -34,6 +34,30 @@ end
   assert.match(t, /failed to load script 'os'/)
 })
 
+test('game dot functions reject the implicit argument from colon calls', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'Root', kind: 'container' })
+  rt.mountScript({ path: 'game-arity', control: root, source: `
+function OnStart()
+  local okRoots, roots = pcall(game.GetClientUIRoots)
+  print('roots-dot', okRoots, #roots)
+  local okCanvas, w, h = pcall(game.GetUICanvasSize)
+  print('canvas-dot', okCanvas, w, h)
+  local okColonRoots, errRoots = pcall(function() return game:GetClientUIRoots() end)
+  print('roots-colon', okColonRoots, errRoots)
+  local okColonCanvas, errCanvas = pcall(function() return game:GetUICanvasSize() end)
+  print('canvas-colon', okColonCanvas, errCanvas)
+  local okColonFind, errFind = pcall(function() return game:FindClientUIRoot('Root') end)
+  print('find-colon', okColonFind, errFind)
+end` })
+  const output = logText(rt)
+  assert.match(output, /roots-dot\ttrue\t1/)
+  assert.match(output, /canvas-dot\ttrue\t1600\t900/)
+  assert.match(output, /roots-colon\tfalse\t[^\n]*bad argument count to 'GetClientUIRoots' \(0 expected, got 1\)/)
+  assert.match(output, /canvas-colon\tfalse\t[^\n]*bad argument count to 'GetUICanvasSize' \(0 expected, got 1\)/)
+  assert.match(output, /find-colon\tfalse\t[^\n]*bad argument count to 'FindClientUIRoot' \(1 expected, got 2\)/)
+})
+
 test('sandbox matches the official client capability cuts', () => {
   const rt = createRuntime()
   const root = rt.addRoot({ active: true, name: 'R', kind: 'container' })
@@ -600,6 +624,50 @@ end
   const t = logText(rt)
   assert.match(t, /first/)
   assert.doesNotMatch(t, /second/)
+})
+
+test('key listeners on the same level follow the current front-to-back sibling order', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'Root', kind: 'container', children: [
+    { active: true, name: 'Front', kind: 'container' },
+    { active: true, name: 'Middle', kind: 'container' },
+    { active: true, name: 'Back', kind: 'container' },
+  ] })
+  rt.mountScript({ path: 'key-order', control: root, source: `
+function OnStart()
+  for _, name in ipairs({ 'Back', 'Middle', 'Front' }) do
+    local label = name
+    script.object:GetChild(label):AddKeyEventListener(
+      Enum.KeyEventType.KeyboardCraftspersonKey1Down,
+      function() print(label); return false end)
+  end
+end` })
+  const key = 'KeyboardCraftspersonKey1Down'
+  rt.injectKey(key)
+  assert.deepEqual(rt.logs.map(entry => entry.text), ['Front', 'Middle', 'Back'])
+  assert.equal(root.GetChild('Back').SetAsLastSibling(), true)
+  rt.logs.length = 0
+  rt.injectKey(key)
+  assert.deepEqual(rt.logs.map(entry => entry.text), ['Back', 'Front', 'Middle'])
+})
+
+test('a handled key event at the upper sibling stops lower controls in the container', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'Root', kind: 'container', children: [
+    { active: true, name: 'Front', kind: 'container' },
+    { active: true, name: 'Back', kind: 'container' },
+  ] })
+  rt.mountScript({ path: 'key-consume', control: root, source: `
+function OnStart()
+  script.object:GetChild('Back'):AddKeyEventListener(
+    Enum.KeyEventType.KeyboardCraftspersonKey1Down,
+    function() print('Back'); return false end)
+  script.object:GetChild('Front'):AddKeyEventListener(
+    Enum.KeyEventType.KeyboardCraftspersonKey1Down,
+    function() print('Front'); return true end)
+end` })
+  rt.injectKey('KeyboardCraftspersonKey1Down')
+  assert.deepEqual(rt.logs.map(entry => entry.text), ['Front'])
 })
 
 test('cursor callbacks require showCursor on an ancestor container', () => {

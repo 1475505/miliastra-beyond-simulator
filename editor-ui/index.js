@@ -471,6 +471,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       const [savePath, setSavePath] = React.useState(null)
       const [saving, setSaving] = React.useState(false)
       const [notice, setNotice] = React.useState(''); const fileInputRef = React.useRef(null)
+      const [exportWarnings, setExportWarnings] = React.useState([])
       const [archives, setArchives] = React.useState([])
       const [page, setPage] = React.useState('ui'); const [inspectorTab, setInspectorTab] = React.useState('base')
       const [zoom, setZoom] = React.useState('fit'); const [hiddenCanvasIds, setHiddenCanvasIds] = React.useState({}); const [search, setSearch] = React.useState(''); const [addMode, setAddMode] = React.useState('template')
@@ -609,6 +610,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
           await saveScriptDraft()
           await saveLogicDraft()
           const result = await callApi(sessionId, 'export', { format, assetType: arg })
+          setExportWarnings([...new Set([...(result.warnings || []), ...(result.files || []).flatMap(file => file.warnings || [])])])
           if (Array.isArray(result?.files) && result.files.length) {
             for (const file of result.files) downloadBase64(file)
             setError('')
@@ -616,7 +618,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
             return
           }
           downloadBase64(result)
-          setError(''); setNotice(result.warnings?.length ? `已导出 ${result.filename}；部分内容暂不支持 GIA。` : `已导出 ${result.filename}`)
+          setError(''); setNotice(result.warnings?.length ? `已导出 ${result.filename}；请查看上方导出说明。` : `已导出 ${result.filename}`)
         } catch (reason) { setError(reason?.message || String(reason)) }
       }
       async function loadWorkspaceArchive(path) {
@@ -626,6 +628,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
           const result = await callApi(sessionId, 'load-archive', { path })
           accept(result.snapshot, { keepLogicDraft: false }); setError('')
           setNotice(`已从工作区拉取 ${path}`)
+          setExportWarnings([])
         } catch (reason) { setError(reason?.message || String(reason)) }
       }
       async function importFile(file) {
@@ -637,6 +640,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
           const result = await callApi(sessionId, 'import', { format, filename: file.name, data: await fileBase64(file) })
           accept(result.snapshot, { keepLogicDraft: false }); setError('')
           setNotice([`已导入 ${file.name}`, ...(result.warnings || [])].join('\n'))
+          setExportWarnings([])
         } catch (reason) { setError(reason?.message || String(reason)) }
         finally { if (fileInputRef.current) fileInputRef.current.value = '' }
       }
@@ -737,6 +741,10 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
             e('button', { className: 'qxsim-action primary', title: '在独立标签页中试玩', onClick: startPlay }, '▷ 试玩 ↗'),
             e('button', { className: 'qxsim-iconbtn', title: '重新载入', onClick: reload }, '↻'))),
         e('nav', { className: 'qxsim-editor-nav', 'aria-label': '编辑页面' }, e('button', { className: page === 'ui' ? 'active' : '', onClick: () => leavePage('ui') }, 'UI 编辑'), e('button', { className: page === 'script' ? 'active' : '', onClick: () => leavePage('script') }, 'Lua 脚本'), e('button', { className: page === 'logic' ? 'active' : '', onClick: () => leavePage('logic') }, '服务端逻辑'), e('span', { className: 'save-summary' }, '一个存档 · 服务器控件模板 + 客户端控件模板 + Lua 脚本 + 服务端逻辑')),
+        exportWarnings.length ? e('details', { className: 'qxsim-export-warnings', open: true, role: 'status', style: { flexShrink: 0, maxHeight: 180, overflow: 'auto', padding: '8px 16px', borderBottom: '1px solid currentColor' } },
+          e('summary', { style: { cursor: 'pointer' } }, `上次导出说明（${exportWarnings.length} 项，请核对导入后的效果）`),
+          e('button', { className: 'qxsim-action', onClick: () => setExportWarnings([]) }, '关闭导出说明'),
+          e('ul', null, exportWarnings.map((warning, index) => e('li', { key: index }, warning)))) : null,
         page === 'ui' ? e('div', { className: 'qxsim-main' },
           e('aside', { className: 'qxsim-tree' },
             e('div', { className: 'qxsim-asset-switch', 'aria-label': '编辑资源类型' },

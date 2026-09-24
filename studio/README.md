@@ -35,6 +35,12 @@ DSH 正式交付位于 `../dsh-plugin/`，编辑路径进程内，试玩使用�
 
 新增回归还暴露了 `gia/codec.js` 的零值问题：protobuf 已存在向量中省略的标量分量表示 0，旧实现把 pivot.x=0 读为 0.5、scale 的 0 分量读为 1。现区分整个向量缺失与向量分量缺失，左上锚点的 240×60 控件不再在 GIA 往返后横移 120。整向量缺失的原有默认策略保持不变。
 
+## 2026-09-25 GIA 图元与初始状态
+
+按官方 7.1.0 对照样本补齐 Z 旋转、初始可见性及客户端初始激活的 GIA 读写；文本垂直对齐的上/下有样本，居中值 1 是待实机验证的推断，导出时仍提示。导出前保存 Lua/服务端逻辑草稿；单独导出服务器 UI 时提示脚本源码未包含在包内。官方字段与样本哈希见完整知识工作区 `knowledge/ui/05_验证与不确定性.md` §8–9。
+
+`gia-observed-fields.test.mjs` 以独立观测字节构造输入；`gia-loss-warnings.test.mjs` 覆盖千图元往返与独立 UI GIA 的脚本遗漏提示。用户旧整合包虽含脚本和挂载，实机初始化原因仍需设备日志，模拟器启动通过不代表真机通过。
+
 ## 试玩场景与文字对齐
 
 Runtime 控件内部保留 Lua `EnumItem` 身份；[`play/session.js`](play/session.js) 在 `paintList` / scene 输出边界把文字水平、垂直对齐统一为枚举 `Name` 字符串。Authoring 中已有的字符串保持原值。PNG 和 Pixi 消费同一场景表示，对齐变化也参与 scene fingerprint，因而只有对齐变化时仍产生增量更新。
@@ -80,8 +86,6 @@ Studio 全套96/96、Web全套2/2通过；原页面刷新接入后仍保留两�
 
 回归：`test/pixi-circle.test.mjs` 断言 340×60 的 Sprite 双轴尺寸、填充圆形及圆环的 Pixi ellipse 半轴；`test/primitive-stretch.test.mjs` 对 PNG 的椭圆/椭圆环像素、旋转后的椭圆/矩形以及另外四种代理图元进行独立坐标检查。`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`；真机素材行为仍待原生观察。
 
-## GIA rotation, visibility and vertical alignment
+## 2026-09-25 GIA 输入开关
 
-GIA import/export preserves Z rotation in `RectTransform.field508` and initial client visibility in `Details.field14.field17`. Export also saves the current script and logic drafts before creating the file.
-
-Official 7.1.0 sample bytes confirm Z angles 0/30/90, hidden image/container state, and `TextConfig.509` values Top=0 and Bottom=2. Middle=1 is inferred with user authorization and retains an export warning pending device validation. `studio/test/gia-observed-fields.test.mjs` uses independent synthetic wire fixtures; simulator round trips do not establish device correctness.
+官方 7.1.0 的 9 个对照模板确认容器常驻光标、隔离导航、按键/点击穿透屏蔽、初始激活、手柄聚焦及光标射线检测开关。模拟器按字段读写，保留 footer/cursor 的未知原始非布尔值。回归覆盖官方样本往返、合成字节与 Web API 的整合包导出→导入→Lua 点击；实机点击仍待验证。
