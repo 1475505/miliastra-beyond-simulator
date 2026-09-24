@@ -28,6 +28,7 @@ Lua VM 只放在 Runtime，Authoring/GIA 只放在 Studio，接入层复用共�
 - 仅客户端控件/模板允许挂脚本，以 `controlAsset` 区分两棵树同名 ID；模板脚本随实例化运行。11 类控件按 GIA 证据分级，N/U 字段只读，不伪造。
 - 图片 `100001–100006` 分别用矩形、圆、等腰三角、四角星、五角星、圆环（内外径比 0.8）代理，其他 ID 显示缺失框；代理不代表官方素材。
 - 五档画布与 `GetUICanvasSize` 同源，尺寸见根 [fact.md](../knowledge/fact.md)“模拟器画布预设”。原点左下、锚点相对父矩形；手机 16:9（1280×720）完整可见，PC 等比放大/留边。
+- 布局只保存 GIA 四平台 `transformByPlatform`，五种画布从平台参数派生显示；不恢复 `transformByCanvas` 或旧布局回退。完整存档 version 4，资产 `layoutSchemaVersion: 2`；细则见 [Studio 布局](studio/layout-authority-plan.md)。
 - 独立脚本 GIA 与整合包的挂载能力不同；按根本地 [GIA 数据结构](../knowledge/ui/02_UI核心数据结构.md) §5“通用关联槽”/§8 和 `studio/gia/codec.js` 实施，不写未观察字段。排错见 [P11](../knowledge/pitfalls.md)。
 
 ## 验证

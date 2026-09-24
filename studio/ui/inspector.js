@@ -8,9 +8,11 @@ import {
   identityMatrix,
   invertMatrix,
   inspectorFromRect,
+  platformOfPreset,
   transformedRectMetrics,
 } from './layout.js'
 import { readCurrentTransform } from './sync.js'
+import { getPlatformTransform } from './transforms.js'
 
 export function painterBoxes(root, boxes) {
   const out = []
@@ -23,11 +25,11 @@ export function painterBoxes(root, boxes) {
   return out
 }
 
-export function layoutTree(root, canvasId) {
+export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)) {
   const canvas = canvasBox(canvasId)
   const boxes = {}
   function rec(node, parentBox, parentMatrix) {
-    const transform = readCurrentTransform(node.transformByPlatform, canvasId, node.transformByCanvas)
+    const transform = getPlatformTransform(node.transformByPlatform, platform)
     const box = computeRect(parentBox, transform)
     // A server container is an authoring-only bridge to the client root: its
     // rect is deliberately skipped for child layout, so skip its visual
@@ -132,7 +134,7 @@ function field(key, label, type, value, extra = {}) {
 
 export function inspectorDto(node, canvasId, box, guidById) {
   if (!node) return null
-  const transform = readCurrentTransform(node.transformByPlatform, canvasId, node.transformByCanvas)
+  const transform = readCurrentTransform(node.transformByPlatform, canvasId)
   const vis = inspectorFromRect(box)
   const fields = [
     field('name', '名称', 'string', node.name),

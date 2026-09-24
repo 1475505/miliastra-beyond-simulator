@@ -86,7 +86,7 @@ test('save keeps server UI, client templates and Lua together while supporting s
     const saveFile = source.exportData('save')
     const save = JSON.parse(Buffer.from(saveFile.data, 'base64').toString('utf8'))
     assert.equal(save.format, 'qxqy-simulator-save')
-    assert.equal(save.version, 3)
+    assert.equal(save.version, 4)
     assert.equal(save.serverLogic.rules[0].signalName, 'EarnGold')
     assert.equal(save.assets.server.root.children[0].children.find((node) => node.id === 'n2').text, '存档服务端文本')
     assert.equal(save.assets.client.root.children[0].children.find((node) => node.id === 'n2').text, '存档客户端模板')

@@ -4,10 +4,10 @@ import { createStudio } from '../index.js'
 import * as giaCodec from '../gia/codec.js'
 import { join } from 'node:path'
 
-test('archive v1 save with per-asset scripts migrates into the script asset', () => {
+test('current save still accepts per-asset script mounts when constructing default UI assets', () => {
   const legacy = {
     format: 'qxqy-simulator-save',
-    version: 1,
+    version: 4,
     meta: { name: '旧存档' },
     activeAssetType: 'server-control-template',
     assets: {
@@ -39,7 +39,7 @@ test('archive v1 save with per-asset scripts migrates into the script asset', ()
   assert.equal(clientScript.controlName, 'Lua实例化面板')
 
   const roundTrip = JSON.parse(Buffer.from(studio.exportData('save').data, 'base64').toString('utf8'))
-  assert.equal(roundTrip.version, 3)
+  assert.equal(roundTrip.version, 4)
   assert.equal(roundTrip.assets.scripts.length, 2)
   const restored = createStudio(structuredClone(roundTrip))
   assert.equal(restored.get().scripts.length, 2)

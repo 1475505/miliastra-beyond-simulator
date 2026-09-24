@@ -1,11 +1,10 @@
 /**
- * Device synchronization keeps an exact RectTransform per preview canvas.
- * GIA's four platform slots are derived from canonical preview canvases.
+ * Four platform transforms are authoritative. Canvases are viewports only.
+ * Projection happens once per explicit edit, never while reading a preview.
  */
 
 import {
   CANONICAL_CANVAS_BY_PLATFORM,
-  CANVAS_PRESETS,
   PLATFORMS,
 } from '../constants.js'
 import {
@@ -15,32 +14,13 @@ import {
   computeRect,
   platformOfPreset,
 } from './layout.js'
+import { assertPlatformTransforms, getPlatformTransform } from './transforms.js'
 
 const EPS = 1e-4
 
 function isStretchAxis(transform, axis) {
   return Math.abs(transform.anchorMax[axis] - transform.anchorMin[axis]) > EPS
     && Math.abs(transform.size[axis]) <= EPS
-}
-
-function clonePlatformMap(transformByPlatform, fallback) {
-  const out = {}
-  for (const platform of PLATFORMS) {
-    out[platform] = cloneRectTransform(transformByPlatform?.[platform] || fallback)
-  }
-  return out
-}
-
-function cloneCanvasMap(transformByCanvas, transformByPlatform, fallback) {
-  const out = {}
-  for (const [canvasId, preset] of Object.entries(CANVAS_PRESETS)) {
-    out[canvasId] = cloneRectTransform(
-      transformByCanvas?.[canvasId]
-      || transformByPlatform?.[preset.platform]
-      || fallback,
-    )
-  }
-  return out
 }
 
 /** Project the edited visual center by parent ratio while preserving pixel size. */
@@ -72,48 +52,35 @@ export function projectRectTransform(source, sourceParentBox, targetParentBox) {
   return projected
 }
 
-export function syncTransformMaps({
+export function syncPlatformTransforms({
   transformByPlatform,
-  transformByCanvas,
   source,
   canvasId,
   syncAllDevices,
   sourceParentBox = canvasBox(canvasId),
-  targetParentBoxByCanvas = {},
+  targetParentBoxByPlatform = {},
 }) {
-  const platformMap = clonePlatformMap(transformByPlatform, source)
-  const canvasMap = cloneCanvasMap(transformByCanvas, transformByPlatform, source)
-  canvasMap[canvasId] = cloneRectTransform(source)
-
-  if (syncAllDevices !== false) {
-    for (const targetCanvasId of Object.keys(CANVAS_PRESETS)) {
-      if (targetCanvasId === canvasId) continue
-      canvasMap[targetCanvasId] = projectRectTransform(
+  assertPlatformTransforms(transformByPlatform)
+  const sourcePlatform = platformOfPreset(canvasId)
+  const platformMap = {}
+  for (const platform of PLATFORMS) {
+    if (platform === sourcePlatform) {
+      // Keep edits made in a wide/tall viewport at their entered position.
+      platformMap[platform] = cloneRectTransform(source)
+    } else if (syncAllDevices !== false) {
+      platformMap[platform] = projectRectTransform(
         source,
         sourceParentBox,
-        targetParentBoxByCanvas[targetCanvasId] || canvasBox(targetCanvasId),
+        targetParentBoxByPlatform[platform] || canvasBox(CANONICAL_CANVAS_BY_PLATFORM[platform]),
       )
+    } else {
+      platformMap[platform] = getPlatformTransform(transformByPlatform, platform)
     }
-    for (const platform of PLATFORMS) {
-      platformMap[platform] = cloneRectTransform(canvasMap[CANONICAL_CANVAS_BY_PLATFORM[platform]])
-    }
-  } else {
-    platformMap[platformOfPreset(canvasId)] = cloneRectTransform(source)
   }
-
-  return { transformByPlatform: platformMap, transformByCanvas: canvasMap }
+  assertPlatformTransforms(platformMap)
+  return platformMap
 }
 
-/** Backwards-compatible platform-only helper used by older callers. */
-export function applySyncPolicy(args) {
-  return syncTransformMaps(args).transformByPlatform
-}
-
-export function readCurrentTransform(transformByPlatform, canvasId, transformByCanvas) {
-  const slot = platformOfPreset(canvasId)
-  const src = transformByCanvas?.[canvasId]
-    || transformByPlatform?.[slot]
-    || transformByPlatform?.KEYBOARD
-    || null
-  return cloneRectTransform(src)
+export function readCurrentTransform(transformByPlatform, canvasId) {
+  return getPlatformTransform(transformByPlatform, platformOfPreset(canvasId))
 }

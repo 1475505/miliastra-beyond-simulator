@@ -24,7 +24,7 @@ const KIND_TO_RUNTIME = {
 }
 
 export function compileControl(node, canvasId, scriptsByNode = null) {
-  const rt = readCurrentTransform(node.transformByPlatform, canvasId, node.transformByCanvas)
+  const rt = readCurrentTransform(node.transformByPlatform, canvasId)
   const spec = {
     authoringId: node.id,
     kind: KIND_TO_RUNTIME[node.kind] || 'container',

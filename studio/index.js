@@ -163,6 +163,9 @@ function resolveWorkspaceFile(relOrAbs, cwd = process.cwd()) {
 }
 
 export function createStudio(seed, options = {}) {
+  if (seed?.format === SAVE_FORMAT && seed.version !== 4) {
+    throw new Error('仅支持 version=4 的四平台布局存档，不自动迁移旧布局')
+  }
   // 显示用的工作区必须是会话 cwd 本身，缺省保持未绑定，绝不回退到宿主 process.cwd()。
   // 仓库根只用于解析相对路径脚本，不改写顶栏身份。
   let workspacePath = typeof options.workspacePath === 'string' && options.workspacePath
@@ -326,7 +329,6 @@ export function createStudio(seed, options = {}) {
         fillAmount: node.fillAmount ?? null,
         syncAllDevices: node.syncAllDevices !== false,
         transformByPlatform: node.transformByPlatform || null,
-        transformByCanvas: node.transformByCanvas || null,
       }))
     })
     return rows.join('/')
@@ -384,7 +386,7 @@ export function createStudio(seed, options = {}) {
   function archiveData() {
     return toJson({
       format: SAVE_FORMAT,
-      version: 3,
+      version: 4,
       meta: { name: currentSaveName() },
       activeAssetType,
       serverLogic,
@@ -671,11 +673,17 @@ export function createStudio(seed, options = {}) {
       }
       if (next?.project) next = next.project
       if (next?.format === SAVE_FORMAT && next?.assets) {
-        projects.server = createProject(next.assets.server || createDefaultProject())
-        projects.client = createProject(next.assets.client || createDefaultClientTemplateProject())
+        if (next.version !== 4) throw new Error('仅支持 version=4 的四平台布局存档，不自动迁移旧布局')
+        // Validate both assets before committing either: unsupported layouts
+        // must not leave a half-imported archive in the active session.
+        const nextServer = createProject(next.assets.server || createDefaultProject())
+        const nextClient = createProject(next.assets.client || createDefaultClientTemplateProject())
+        const nextServerLogic = normalizeServerLogic(next.serverLogic)
+        projects.server = nextServer
+        projects.client = nextClient
         activeAssetType = next.activeAssetType === CLIENT_ASSET ? CLIENT_ASSET : SERVER_ASSET
         explicitSaveName = String(next.meta?.name || basename(filename).replace(/\.json$/i, '') || explicitSaveName)
-        serverLogic = normalizeServerLogic(next.serverLogic)
+        serverLogic = nextServerLogic
         scripts = []
         usedScriptGuids.clear()
         absorbScripts(seedScriptList(next))

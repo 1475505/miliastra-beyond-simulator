@@ -1,5 +1,6 @@
 import protobuf from 'protobufjs'
-import { PLATFORMS } from '../constants.js'
+import { PLATFORMS, LAYOUT_SCHEMA_VERSION } from '../constants.js'
+import { assertPlatformNode } from '../ui/transforms.js'
 import { toJson } from '../json.js'
 import { createNode, walk } from '../ui/authoring.js'
 import { GUID_BASE, collectUsedGuids, isValidGuid, nextFreeGuid } from './guid.js'
@@ -605,6 +606,7 @@ function encodeAndValidate(rootObject, validate) {
 }
 
 export function exportGia(project, options = {}) {
+  walk(project.root, assertPlatformNode)
   const guidById = assignGuids(toJson(project))
   const warnings = []
   const isClientTemplates = project.meta?.assetType === 'client-control-template'
@@ -621,6 +623,8 @@ export function exportGia(project, options = {}) {
 }
 
 export function exportCombinedGia(serverProject, clientProject, options = {}) {
+  walk(serverProject.root, assertPlatformNode)
+  if (clientProject) walk(clientProject.root, assertPlatformNode)
   const warnings = [
     '整合包把服务端 UIControlGroup 与客户端 UIControlTemplate 并排写入同一 GIA 的 Root.graph；导入时拆回两类资产，模板边界、脚本映射与控件挂载关系会保留。',
   ]
@@ -846,13 +850,19 @@ function transformMaps(unit) {
     const platform = INDEX_PLATFORM[item.platformType || 0]
     const rt = item.transform || {}
     out[platform] = {
-      scale: { x: rt.scale?.x ?? 1, y: rt.scale?.y ?? 1, z: rt.scale?.z ?? 1 },
+      // Present protobuf vectors omit zero-valued scalar components. Defaults
+      // for a missing vector must not turn an encoded zero into 1 or 0.5.
+      scale: rt.scale
+        ? { x: rt.scale.x ?? 0, y: rt.scale.y ?? 0, z: rt.scale.z ?? 0 }
+        : { x: 1, y: 1, z: 1 },
       rotation: { x: 0, y: 0, z: 0 },
       anchorMin: { x: rt.anchorMin?.x ?? 0, y: rt.anchorMin?.y ?? 0 },
       anchorMax: { x: rt.anchorMax?.x ?? 0, y: rt.anchorMax?.y ?? 0 },
       offset: { x: rt.offset?.x ?? 0, y: rt.offset?.y ?? 0 },
       size: { x: rt.size?.x ?? 0, y: rt.size?.y ?? 0 },
-      pivot: { x: rt.pivot?.x ?? 0.5, y: rt.pivot?.y ?? 0.5 },
+      pivot: rt.pivot
+        ? { x: rt.pivot.x ?? 0, y: rt.pivot.y ?? 0 }
+        : { x: 0.5, y: 0.5 },
     }
   }
   const fallback = out.KEYBOARD || out[Object.keys(out)[0]]
@@ -1076,6 +1086,7 @@ export function importGia(input) {
     }
     project = {
       version: 1,
+      layoutSchemaVersion: LAYOUT_SCHEMA_VERSION,
       meta: {
         name: graphGroup?.name || '导入的界面控件组',
         assetType: 'server-control-template',
@@ -1103,6 +1114,7 @@ export function importGia(input) {
     holder.children = forest.rootCandidates
     clientProject = {
       version: 1,
+      layoutSchemaVersion: LAYOUT_SCHEMA_VERSION,
       meta: {
         name: forest.rootCandidates.length === 1 ? forest.rootCandidates[0].name : '客户端控件模板列表',
         assetType: 'client-control-template',

@@ -1,4 +1,4 @@
-import { CANVAS_PRESETS, DEFAULT_CANVAS_ID } from '../constants.js'
+import { CANVAS_PRESETS, DEFAULT_CANVAS_ID, CANONICAL_CANVAS_BY_PLATFORM, PLATFORMS, LAYOUT_SCHEMA_VERSION } from '../constants.js'
 import { toJson } from '../json.js'
 import {
   addChild,
@@ -18,27 +18,32 @@ import {
   applyInspectorToTransform,
   canvasBox,
   computeRect,
+  platformOfPreset,
   setAnchorPreset,
 } from './layout.js'
-import { readCurrentTransform, syncTransformMaps } from './sync.js'
+import { readCurrentTransform, syncPlatformTransforms } from './sync.js'
 import { hitTest, inspectorDto, layoutTree, painterBoxes, treeRows } from './inspector.js'
 import { rawFieldDefinition, sanitizeRawFieldValue } from '../gia/raw-fields.js'
 import { assignGuids } from '../gia/codec.js'
 import { collectUsedGuids, nextFreeGuid } from '../gia/guid.js'
 
-function parentBoxOf(project, nodeId, boxes) {
+function parentBoxOf(project, nodeId, boxes, canvasId = project.canvasId) {
   const parent = findParent(project.root, nodeId)
-  if (!parent || parent.kind === 'server-container') return canvasBox(project.canvasId)
-  return boxes[parent.id] || canvasBox(project.canvasId)
+  if (!parent || parent.kind === 'server-container') return canvasBox(canvasId)
+  return boxes[parent.id] || canvasBox(canvasId)
 }
 
 export function createProject(seed) {
   if (!seed) return createDefaultProject()
+  if ((seed.root || seed.layoutSchemaVersion !== undefined) && seed.layoutSchemaVersion !== LAYOUT_SCHEMA_VERSION) {
+    throw new Error(`仅支持 layoutSchemaVersion=${LAYOUT_SCHEMA_VERSION} 的四平台布局，不支持旧画布布局或其他版本`)
+  }
   const assetType = seed.meta?.assetType === 'client-control-template'
     ? 'client-control-template'
     : 'server-control-template'
   const base = assetType === 'client-control-template' ? createDefaultClientTemplateProject() : createDefaultProject()
   const project = {
+    layoutSchemaVersion: LAYOUT_SCHEMA_VERSION,
     version: Number.isSafeInteger(seed.version) && seed.version > 0 ? seed.version : 1,
     meta: {
       name: String(seed.meta?.name || base.meta.name),
@@ -95,7 +100,7 @@ function reparentPreservingCurrentCanvas(project, node, oldParent, newParent) {
   const newParentBox = newParent.kind === 'server-container'
     ? canvasBox(project.canvasId)
     : after.boxes[newParent.id] || canvasBox(project.canvasId)
-  const current = readCurrentTransform(node.transformByPlatform, project.canvasId, node.transformByCanvas)
+  const current = readCurrentTransform(node.transformByPlatform, project.canvasId)
   const next = applyInspectorToTransform(newParentBox, current, {
     posX: oldBox.centerX,
     posY: oldBox.centerY,
@@ -125,6 +130,7 @@ export function snapshotProject(project) {
   const selected = findNode(project.root, project.selectedId)
   const selectedBox = selected ? boxes[selected.id] : null
   return toJson({
+    layoutSchemaVersion: LAYOUT_SCHEMA_VERSION,
     version: project.version,
     meta: { ...project.meta },
     canvasId: project.canvasId,
@@ -159,23 +165,23 @@ export function snapshotProject(project) {
 function writeTransform(project, node, nextRt) {
   const sourceLayout = layoutTree(project.root, project.canvasId)
   const sourceParentBox = parentBoxOf(project, node.id, sourceLayout.boxes)
-  const targetParentBoxByCanvas = {}
-  for (const canvasId of Object.keys(CANVAS_PRESETS)) {
-    if (canvasId === project.canvasId) continue
-    const targetLayout = layoutTree(project.root, canvasId)
-    targetParentBoxByCanvas[canvasId] = parentBoxOf(project, node.id, targetLayout.boxes)
+  const targetParentBoxByPlatform = {}
+  if (node.syncAllDevices !== false) {
+    for (const platform of PLATFORMS) {
+      if (platform === platformOfPreset(project.canvasId)) continue
+      const canvasId = CANONICAL_CANVAS_BY_PLATFORM[platform]
+      const targetLayout = layoutTree(project.root, canvasId, platform)
+      targetParentBoxByPlatform[platform] = parentBoxOf(project, node.id, targetLayout.boxes, canvasId)
+    }
   }
-  const maps = syncTransformMaps({
+  node.transformByPlatform = syncPlatformTransforms({
     transformByPlatform: node.transformByPlatform,
-    transformByCanvas: node.transformByCanvas,
     source: nextRt,
     canvasId: project.canvasId,
     syncAllDevices: node.syncAllDevices !== false,
     sourceParentBox,
-    targetParentBoxByCanvas,
+    targetParentBoxByPlatform,
   })
-  node.transformByPlatform = maps.transformByPlatform
-  node.transformByCanvas = maps.transformByCanvas
 }
 
 const DIRECT_FIELDS = new Set([
@@ -383,7 +389,7 @@ function applyPatchMutating(project, op) {
     if (key === 'syncAllDevices') {
       node.syncAllDevices = booleanValue(value)
       if (node.syncAllDevices) {
-        const current = readCurrentTransform(node.transformByPlatform, project.canvasId, node.transformByCanvas)
+        const current = readCurrentTransform(node.transformByPlatform, project.canvasId)
         writeTransform(project, node, current)
       }
       return project
@@ -436,7 +442,7 @@ function applyPatchMutating(project, op) {
     }
     const { boxes } = layoutTree(project.root, project.canvasId)
     const pBox = parentBoxOf(project, node.id, boxes)
-    const current = readCurrentTransform(node.transformByPlatform, project.canvasId, node.transformByCanvas)
+    const current = readCurrentTransform(node.transformByPlatform, project.canvasId)
     if (key === 'anchorType') {
       const vis = inspectorFromRectSafe(boxes[node.id])
       let next = setAnchorPreset(current, value)

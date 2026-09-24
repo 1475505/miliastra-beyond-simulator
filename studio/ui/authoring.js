@@ -1,12 +1,13 @@
 import {
-  CANVAS_PRESETS,
   COLOR,
   DEFAULT_CLICK_AUDIO_ID,
   DEFAULT_SIZE,
   KIND_LABELS,
+  LAYOUT_SCHEMA_VERSION,
   PLATFORMS,
 } from '../constants.js'
-import { createRectTransform, cloneRectTransform, emptyCanvasMap, emptyPlatformMap } from './layout.js'
+import { createRectTransform, emptyPlatformMap } from './layout.js'
+import { assertPlatformNode, assertPlatformTransforms, getPlatformTransform } from './transforms.js'
 import { createGiaRaw } from '../gia/raw-fields.js'
 import { stampMissingGuids } from '../gia/guid.js'
 
@@ -33,35 +34,23 @@ function fourPlatforms(kind, opts) {
   return emptyPlatformMap(() => defaultLayoutForKind(kind, opts))
 }
 
-function fiveCanvases(kind, opts) {
-  return emptyCanvasMap(() => defaultLayoutForKind(kind, opts))
-}
-
-function clonePlatformMap(src, kind, opts) {
-  const fallback = defaultLayoutForKind(kind, opts)
+function clonePlatformMap(src) {
+  assertPlatformTransforms(src)
   const out = {}
   for (const p of PLATFORMS) {
-    out[p] = cloneRectTransform((src && src[p]) || fallback)
+    out[p] = getPlatformTransform(src, p)
   }
   return out
 }
 
-
-function cloneCanvasMap(src, platformMap, kind, opts) {
-  const fallback = defaultLayoutForKind(kind, opts)
-  const out = {}
-  for (const [id, preset] of Object.entries(CANVAS_PRESETS)) {
-    out[id] = cloneRectTransform((src && src[id]) || (platformMap && platformMap[preset.platform]) || fallback)
-  }
-  return out
-}
 
 export function createNode(kind, extras = {}) {
   if (!KIND_LABELS[kind]) throw new Error(`unknown kind: ${kind}`)
+  if (Object.hasOwn(extras, 'transformByCanvas')) assertPlatformNode(extras)
   const isRootContainer = extras.isRootContainer === true
   const id = extras.id || nextId(kind === 'server-container' ? 'sc' : 'n')
-  const transformByPlatform = extras.transformByPlatform
-    ? clonePlatformMap(extras.transformByPlatform, kind, { isRootContainer })
+  const transformByPlatform = Object.hasOwn(extras, 'transformByPlatform')
+    ? clonePlatformMap(extras.transformByPlatform)
     : fourPlatforms(kind, { isRootContainer })
   const node = {
     id,
@@ -80,14 +69,6 @@ export function createNode(kind, extras = {}) {
     syncAllDevices: extras.syncAllDevices !== false,
     giaRaw: createGiaRaw(kind, extras.giaRaw),
     transformByPlatform,
-    transformByCanvas: extras.transformByCanvas
-      ? cloneCanvasMap(extras.transformByCanvas, transformByPlatform, kind, { isRootContainer })
-      // GIA stores four platform RectTransforms.  Preview/editing reads the
-      // five canvas transforms, so an imported GIA must seed each canvas from
-      // its corresponding platform slot instead of falling back to defaults.
-      : extras.transformByPlatform
-        ? cloneCanvasMap(null, transformByPlatform, kind, { isRootContainer })
-        : fiveCanvases(kind, { isRootContainer }),
     children: [],
     scriptMappingIds: Array.isArray(extras.scriptMappingIds)
       ? extras.scriptMappingIds.filter((guid) => Number.isSafeInteger(Number(guid)) && Number(guid) > 0).map(Number)
@@ -224,7 +205,6 @@ export function createDefaultProject() {
   const fullscreen = createNode('fullscreen', { id: 'n11', name: '全屏动效' })
   const place = (node, x, y) => {
     for (const rt of Object.values(node.transformByPlatform)) rt.offset = { x, y }
-    for (const rt of Object.values(node.transformByCanvas)) rt.offset = { x, y }
   }
   place(text, -300, 250)
   place(cursor, -300, 140)
@@ -241,6 +221,7 @@ export function createDefaultProject() {
   stampMissingGuids(server)
   return {
     version: 1,
+    layoutSchemaVersion: LAYOUT_SCHEMA_VERSION,
     meta: {
       name: '未命名界面控件组',
       assetType: 'server-control-template',
@@ -290,11 +271,9 @@ export function createDefaultClientTemplateProject() {
   })
   const place = (node, x, y) => {
     for (const rt of Object.values(node.transformByPlatform)) rt.offset = { x, y }
-    for (const rt of Object.values(node.transformByCanvas)) rt.offset = { x, y }
   }
   const resize = (node, x, y) => {
     for (const rt of Object.values(node.transformByPlatform)) rt.size = { x, y }
-    for (const rt of Object.values(node.transformByCanvas)) rt.size = { x, y }
   }
   resize(root, 520, 320)
   place(title, 0, 110)
@@ -306,6 +285,7 @@ export function createDefaultClientTemplateProject() {
   resetIdSeq(6)
   return {
     version: 1,
+    layoutSchemaVersion: LAYOUT_SCHEMA_VERSION,
     meta: {
       name: 'Lua实例化面板',
       assetType: 'client-control-template',
@@ -368,6 +348,7 @@ export function selectedTemplateRoot(project) {
 }
 
 export function sanitizeNode(node) {
+  assertPlatformNode(node)
   const extras = {
     id: node.id,
     name: node.name,
@@ -380,14 +361,7 @@ export function sanitizeNode(node) {
     visible: node.visible,
     canControllerFocus: node.canControllerFocus,
     syncAllDevices: node.syncAllDevices,
-    transformByPlatform: {},
-    transformByCanvas: {},
-  }
-  for (const [plat, rt] of Object.entries(node.transformByPlatform || {})) {
-    extras.transformByPlatform[plat] = cloneRectTransform(rt)
-  }
-  for (const [canvasId, rt] of Object.entries(node.transformByCanvas || {})) {
-    extras.transformByCanvas[canvasId] = cloneRectTransform(rt)
+    transformByPlatform: node.transformByPlatform,
   }
   if (node.kind === 'container') {
     extras.isolateNavigation = node.isolateNavigation

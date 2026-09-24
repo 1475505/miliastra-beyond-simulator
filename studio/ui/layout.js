@@ -335,9 +335,3 @@ export function emptyPlatformMap(factory) {
   for (const p of PLATFORMS) out[p] = factory(p)
   return out
 }
-
-export function emptyCanvasMap(factory) {
-  const out = {}
-  for (const id of Object.keys(CANVAS_PRESETS)) out[id] = factory(id)
-  return out
-}

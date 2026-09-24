@@ -60,6 +60,8 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 ## 自动发布到 npm
 
+2026-09-24 四平台布局发布批次：DSH `2.0.0`、Web / MCP `0.2.0`，tag `npm-2026-09-24-4`。这是存档读取的不兼容更新：完整存档只接受 version 4，资产布局只接受 `layoutSchemaVersion: 2`；不读取或迁移旧 `transformByCanvas`。五种画布保留为四平台参数的派生预览。此处记录目标版本，不表示 npm 已公开上线；实际状态以 tag 工作流和 npm 暂存审核结果为准。
+
 工作流文件是 `.github/workflows/publish-npm.yml`，推送 `npm-*` Git tag 时触发。它在 GitHub 托管的 Ubuntu runner 上运行冻结锁文件安装、回归测试、Git 源码安装验收、三个包的构建和仓库外安装验收。`scripts/publish-npm.mjs` 在发布前校验 tarball 哈希；同版本同内容会跳过，同版本不同内容会失败并要求增加版本号。首次推送该工作流前，先把本地源码改动提交并推送到仓库；标记的提交必须包含这份工作流和要发布的版本。
 
 在 npm 的以下三个包页面分别进入 **Settings → Trusted publishing → GitHub Actions**，配置相同的发布者：[DSH 插件](https://www.npmjs.com/package/dsh-plugin-beyond-simulator)、[Web](https://www.npmjs.com/package/beyond-simulator-web)、[MCP](https://www.npmjs.com/package/beyond-simulator-mcp)。填写 **Organization or user** `1475505`、**Repository** `miliastra-beyond-simulator`、**Workflow filename** `publish-npm.yml`；**Environment name** 留空，**Allow npm publish** 保持不勾选，只允许 `npm stage publish`。不需要在 GitHub 配置 `NPM_TOKEN`。工作流使用 `id-token: write` 获取 npm 的短期 OIDC 凭据。

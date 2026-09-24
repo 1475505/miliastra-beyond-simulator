@@ -141,7 +141,7 @@ end
   assert.match(snap.logs.map((row) => row.text).join('\n'), /ack\tGoldChanged\t7\tok/)
 
   const archive = JSON.parse(Buffer.from(studio.exportData('save').data, 'base64').toString('utf8'))
-  assert.equal(archive.version, 3)
+  assert.equal(archive.version, 4)
   const restored = createStudio(archive)
   assert.deepEqual(restored.get().serverLogic, configured.serverLogic)
   studio.playStop()

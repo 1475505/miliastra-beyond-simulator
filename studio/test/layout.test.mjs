@@ -12,7 +12,7 @@ import {
   inspectorFromRect,
   setAnchorPreset,
 } from '../ui/layout.js'
-import { applySyncPolicy, readCurrentTransform, syncTransformMaps } from '../ui/sync.js'
+import { readCurrentTransform, syncPlatformTransforms } from '../ui/sync.js'
 import { createDefaultProject, createNode, walk } from '../ui/authoring.js'
 import { hitTest, layoutTree } from '../ui/inspector.js'
 import { createProject, snapshotProject } from '../ui/project.js'
@@ -51,9 +51,9 @@ test('authoring preview and selection inherit parent scale while retaining local
   const root = createNode('container', { id: 'scale-root', isRootContainer: true })
   const child = createNode('image', { id: 'scale-child' })
   root.children.push(child)
-  const rootTransform = root.transformByCanvas['pc-16-9']
+  const rootTransform = root.transformByPlatform.KEYBOARD
   rootTransform.scale = { x: 2, y: 0.5, z: 1 }
-  const childTransform = child.transformByCanvas['pc-16-9']
+  const childTransform = child.transformByPlatform.KEYBOARD
   childTransform.offset = { x: 100, y: 50 }
   childTransform.size = { x: 100, y: 100 }
 
@@ -73,18 +73,17 @@ test('authoring preview and selection inherit parent scale while retaining local
 
 test('sync preserves fluid stretch axes across device canvases', () => {
   const source = createRectTransform({ layout: 'stretch' })
-  const maps = syncTransformMaps({
-    transformByPlatform: {},
-    transformByCanvas: {},
+  const maps = syncPlatformTransforms({
+    transformByPlatform: createNode('image').transformByPlatform,
     source,
     canvasId: 'pc-16-9',
     syncAllDevices: true,
   })
-  const mobile = computeRect(canvasBox('mobile-16-9'), maps.transformByCanvas['mobile-16-9'])
+  const mobile = computeRect(canvasBox('mobile-16-9'), maps.TOUCHSCREEN)
   assert.equal(mobile.width, 1280)
   assert.equal(mobile.height, 720)
-  assert.equal(maps.transformByCanvas['mobile-16-9'].size.x, 0)
-  assert.equal(maps.transformByCanvas['mobile-16-9'].size.y, 0)
+  assert.equal(maps.TOUCHSCREEN.size.x, 0)
+  assert.equal(maps.TOUCHSCREEN.size.y, 0)
 })
 
 test('one unchanged top-left RectTransform preserves its pixel inset', () => {
@@ -100,21 +99,20 @@ test('one unchanged top-left RectTransform preserves its pixel inset', () => {
   assert.ok(Math.abs(vis21.posY - 860) < 1e-4, `y ${vis21.posY}`)
 })
 
-test('sync projects a top-left anchored visual center by screen ratio', () => {
+test('sync projects between platforms while same-platform viewports share the pixel inset', () => {
   const sourceParent = canvasBox('pc-16-9')
   let source = setAnchorPreset(createRectTransform({ layout: 'center', size: [200, 40] }), 'top-left')
   source = applyInspectorToTransform(sourceParent, source, { posX: 120, posY: 860, width: 200, height: 40 })
-  const maps = syncTransformMaps({
-    transformByPlatform: {},
-    transformByCanvas: {},
+  const maps = syncPlatformTransforms({
+    transformByPlatform: createNode('image').transformByPlatform,
     source,
     canvasId: 'pc-16-9',
     syncAllDevices: true,
   })
-  const wide = inspectorFromRect(computeRect(canvasBox('pc-21-9'), maps.transformByCanvas['pc-21-9']))
-  const mobile = inspectorFromRect(computeRect(canvasBox('mobile-16-9'), maps.transformByCanvas['mobile-16-9']))
-  assert.equal(classifyAnchor(maps.transformByCanvas['pc-21-9']), 'top-left')
-  assert.equal(wide.posX, 157.5)
+  const wide = inspectorFromRect(computeRect(canvasBox('pc-21-9'), maps.KEYBOARD))
+  const mobile = inspectorFromRect(computeRect(canvasBox('mobile-16-9'), maps.TOUCHSCREEN))
+  assert.equal(classifyAnchor(maps.KEYBOARD), 'top-left')
+  assert.equal(wide.posX, 120)
   assert.equal(wide.posY, 860)
   assert.equal(mobile.posX, 96)
   assert.equal(mobile.posY, 688)
@@ -122,27 +120,28 @@ test('sync projects a top-left anchored visual center by screen ratio', () => {
 
 test('sync on projects position to canonical platform canvas ratios', () => {
   const source = createRectTransform({ layout: 'center', size: [80, 80], offset: [10, 20] })
-  const map = applySyncPolicy({
-    transformByPlatform: {},
+  const map = syncPlatformTransforms({
+    transformByPlatform: createNode('image').transformByPlatform,
     source,
     canvasId: 'pc-16-9',
     syncAllDevices: true,
   })
   assert.deepEqual(map.KEYBOARD.offset, { x: 10, y: 20 })
-  assert.deepEqual(map.CONTROLLER_CONSOLE.offset, { x: 10, y: 20 })
+  assert.ok(Math.abs(map.CONTROLLER_CONSOLE.offset.x - 10) < 1e-4)
+  assert.ok(Math.abs(map.CONTROLLER_CONSOLE.offset.y - 20) < 1e-4)
   assert.deepEqual(map.TOUCHSCREEN.offset, { x: 8, y: 16 })
   assert.deepEqual(map.CONTROLLER_MOBILE.offset, { x: 8, y: 16 })
   for (const p of PLATFORMS) assert.deepEqual(map[p].size, { x: 80, y: 80 })
 })
 
 test('sync off writes only the current platform slot', () => {
-  const initial = applySyncPolicy({
-    transformByPlatform: {},
+  const initial = syncPlatformTransforms({
+    transformByPlatform: createNode('image').transformByPlatform,
     source: createRectTransform({ layout: 'center', size: [80, 80], offset: [0, 0] }),
     canvasId: 'pc-16-9',
     syncAllDevices: true,
   })
-  const next = applySyncPolicy({
+  const next = syncPlatformTransforms({
     transformByPlatform: initial,
     source: createRectTransform({ layout: 'center', size: [80, 80], offset: [40, 5] }),
     canvasId: 'pc-16-9',
@@ -253,14 +252,14 @@ end
   studio.playStop()
 })
 
-test('changing pos on current canvas syncs by parent ratio across five previews', () => {
+test('changing pos syncs between platform parent rectangles', () => {
   const studio = createStudio()
   studio.patch({ op: 'select', id: 'n2' })
   studio.patch({ op: 'set', key: 'posX', value: 200 })
   studio.patch({ op: 'set', key: 'posY', value: 100 })
   const node = studio._project.root.children[0].children.find((c) => c.id === 'n2')
-  const kb = readCurrentTransform(node.transformByPlatform, 'pc-16-9', node.transformByCanvas)
-  const touch = readCurrentTransform(node.transformByPlatform, 'mobile-16-9', node.transformByCanvas)
+  const kb = readCurrentTransform(node.transformByPlatform, 'pc-16-9')
+  const touch = readCurrentTransform(node.transformByPlatform, 'mobile-16-9')
   const pcRect = inspectorFromRect(computeRect(canvasBox('pc-16-9'), kb))
   const mobileRect = inspectorFromRect(computeRect(canvasBox('mobile-16-9'), touch))
   assert.equal(pcRect.posX, 200)
@@ -282,7 +281,7 @@ test('rotation Z follows transform ordering, syncs to every canvas, and compiles
   assert.equal(snap.boxes.find((box) => box.id === 'n2').rotationZ, 30)
   const node = studio._project.root.children[0].children.find((control) => control.id === 'n2')
   for (const canvasId of Object.keys(CANVAS_PRESETS)) {
-    assert.equal(readCurrentTransform(node.transformByPlatform, canvasId, node.transformByCanvas).rotation.z, 30, canvasId)
+    assert.equal(readCurrentTransform(node.transformByPlatform, canvasId).rotation.z, 30, canvasId)
   }
   const compiled = compileProject(studio._project)
   assert.equal(compiled.root.children.find((control) => control.authoringId === 'n2').localRotationZ, 30)
@@ -803,6 +802,7 @@ test('new asset exports all eleven client controls as independently validated te
   }))
   const studio = createStudio({
     version: 1,
+    layoutSchemaVersion: 2,
     meta: {
       name: '全部客户端控件', assetType: 'client-control-template', sourceFormat: 'authoring',
       gameVersion: '7.0.50', giaOwnerUid: 114514, giaTimestamp: 1787410000,
@@ -958,6 +958,7 @@ test('missing GUIDs start from 1073741850 without rewriting stored ids', () => {
   server.children.push(root)
   const project = createProject({
     version: 1,
+    layoutSchemaVersion: 2,
     meta: { name: 'guid-base', assetType: 'server-control-template' },
     canvasId: 'pc-16-9',
     selectedId: 'n1',
@@ -977,6 +978,7 @@ test('assignGuids keeps later stored ids instead of filling from 1073742000', ()
   server.children.push(root)
   const project = createProject({
     version: 1,
+    layoutSchemaVersion: 2,
     meta: { name: 'guid-preserve', assetType: 'server-control-template' },
     canvasId: 'pc-16-9',
     selectedId: 'n2',

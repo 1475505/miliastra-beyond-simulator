@@ -19,6 +19,18 @@ node studio/cli.mjs --in job.json --out out.json
 
 DSH 正式交付位于 `../dsh-plugin/`，编辑路径进程内，试玩使用持久 `worker_threads.Worker`。旧动态原型（`dsh-host-kernel.js`、`frontend/dsh/`）已删除，业务逻辑以本目录模块为唯一来源。
 
+## JSON 画布布局与 GIA 平台槽
+
+当前只保存四平台 `transformByPlatform`。五种画布仅提供视口尺寸，预览、检视器、试玩和 GIA 使用同一份平台参数。完整存档为 version 4，资产为 `layoutSchemaVersion: 2`（与编辑 revision 分开）；拒绝旧布局、未知布局版本、缺失平台槽及非有限分量，不进行布局迁移。GIA 导入直接生成新版模型。此前的 [布局唯一来源研究稿](layout-authority-plan.md) 保留为历史背景，其中旧格式迁移方案未采纳。
+
+2026-09-24 排查 `diary2.save.json` → `测试的· 整合包.gia`：服务端树 37 个节点的 `transformByPlatform` 均为空，实际布局在 `transformByCanvas`。导入时 `createNode` 为缺失平台槽填入控件默认值，预览读取画布布局而 GIA 读取平台布局，造成 STAGE 的 1280×720 导出为 150×150，子控件尺寸和偏移也被默认值替代。以原 JSON 重导出，修复前全部 37 个节点的平台变换与问题 GIA 一致。
+
+最初采用“缺失平台槽从标准画布补齐”的局部修复；该方案已由本次四平台唯一来源重构替代（`superseded_by=四平台唯一来源`）。当前不会读取 `transformByCanvas`，原始日记旧格式不能直接导入。同步关闭仅写当前平台；同步开启将修改投影到另外三个平台，使用各平台自身父矩形。切换宽高比不写入参数，同平台共享锚点布局。
+
+证据：2026-09-24，Windows / Node 22.23.2，`evidence_source=observed`，运行端 `simulator`，`device_status=pending`（新版 GIA 尚未真机导入）。自包含回归 `test/platform-layout.test.mjs` 覆盖四平台独立值、五视口 × 同步开关 × 独立/整合 GIA 往返、独立手柄父矩形、失败导入及编辑不部分提交、读取不改变数据和零分量保留；相关布局测试 52/52，`pnpm install --frozen-lockfile`、根 `pnpm test` 通过。位置/尺寸含固定几何断言；GIA 编解码往返只证明模拟器支持字段的一致性，不代表真机像素一致。
+
+新增回归还暴露了 `gia/codec.js` 的零值问题：protobuf 已存在向量中省略的标量分量表示 0，旧实现把 pivot.x=0 读为 0.5、scale 的 0 分量读为 1。现区分整个向量缺失与向量分量缺失，左上锚点的 240×60 控件不再在 GIA 往返后横移 120。整向量缺失的原有默认策略保持不变。
+
 ## 试玩场景与文字对齐
 
 Runtime 控件内部保留 Lua `EnumItem` 身份；[`play/session.js`](play/session.js) 在 `paintList` / scene 输出边界把文字水平、垂直对齐统一为枚举 `Name` 字符串。Authoring 中已有的字符串保持原值。PNG 和 Pixi 消费同一场景表示，对齐变化也参与 scene fingerprint，因而只有对齐变化时仍产生增量更新。

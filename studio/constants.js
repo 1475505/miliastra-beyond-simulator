@@ -61,8 +61,9 @@ export const CANVAS_PRESETS = Object.freeze({
 })
 
 export const DEFAULT_CANVAS_ID = 'pc-16-9'
+export const LAYOUT_SCHEMA_VERSION = 2
 
-/** Canonical preview used when a GIA platform slot must be materialized. */
+/** Reference viewport for cross-platform edit projection, not stored layouts. */
 export const CANONICAL_CANVAS_BY_PLATFORM = Object.freeze({
   KEYBOARD: 'pc-16-9',
   TOUCHSCREEN: 'mobile-16-9',
