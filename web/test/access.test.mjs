@@ -14,7 +14,7 @@ test('password covers files and API, while health reveals no workspace informati
   const app = await createWebServer({ workspace, port: 0, password: 'test-secret' })
   t.after(async () => { await app.close(); rmSync(workspace, { recursive: true, force: true }) })
   const authorization = 'Basic ' + Buffer.from('simulator:test-secret').toString('base64')
-  for (const path of ['/', '/app.js', '/api/state', '/api/editor.png', '/editor', '/editor.js', '/editor/play', '/editor/api/get']) assert.equal((await fetch(app.url + path)).status, 401)
+  for (const path of ['/', '/app.js', '/api/state', '/api/preview', '/api/editor.png', '/editor', '/editor.js', '/editor/play', '/editor/api/get']) assert.equal((await fetch(app.url + path)).status, 401)
   assert.deepEqual(await (await fetch(app.url + '/health')).json(), { status: 'ok' })
   assert.equal((await fetch(app.url + '/api/state', { headers: { authorization } })).status, 200)
   const wrong = 'Basic ' + Buffer.from('simulator:wrong-secret').toString('base64')

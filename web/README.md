@@ -42,7 +42,19 @@ beyond-simulator-web --workspace /absolute/path/to/workspace --open
 
 ## 与 MCP 配合
 
-MCP 显式调用 `qxqy_project_save` 保存工作区 JSON 后，`/` 每 700ms 检查当前文件，停止旧试玩、加载新存档并通过 SSE 刷新浏览器。该预览不写文件。`/editor` 不自动用磁盘内容覆盖正在编辑的草稿，需要手动“从工作区拉取存档”。
+MCP 显式调用 `qxqy_project_save` 保存工作区 JSON 后，`/` 每 700ms 检查当前文件。还没有打开存档时，每 5 秒重新发现存档并自动打开最新的 `qxqy-simulator-save`；已经打开时，只在该文件变化后停止旧试玩、重新加载，并通过 SSE 刷新浏览器。不会自动改看另一个路径。顶部刷新按钮可立即扫描。该预览不写文件。`/editor` 不自动用磁盘内容覆盖正在编辑的草稿，需要手动“从工作区拉取存档”。
+
+MCP 0.3.0 起提供 `qxqy_preview_status()` 和 `qxqy_preview_open({ path: "game.save.json" })`：前者查询 Web 实际版本、工作区、当前存档和加载错误，后者直接让预览服务读取指定存档，无需重新保存。MCP 默认连接 `http://127.0.0.1:4173`，其他端口使用 MCP 的 `--web-url` 或 `QXQY_WEB_URL`；Web 启用口令时，在 MCP 环境中配置相同的 `QXQY_WEB_PASSWORD`。两边必须使用同一工作区，桥接会在读取和打开时校验。工具回执确认服务端已加载，浏览器通过 SSE 或定期状态同步刷新。
+
+页面“预览连接”显示 Web 版本、工作区、加载错误与扫描警告。发现列表只读取 JSON 的前 4 KiB，不再排除超过 8 MiB 的合法存档；在扫描预算内按修改时间取最新 50 项。自动扫描跳过隐藏条目及依赖/生成目录，最多 8 层、10,000 条目和 1,000 目录；达到限制或读取失败会显示汇总警告。明确指定的 `--file` / 预览工具路径不受列表筛选限制，但仍受工作区边界保护。损坏 JSON 会显示加载错误并继续重试；初始文件缺失不会导致整个 Web 服务无法启动。
+
+源码更新后需运行 `pnpm build` 并重启 Web/MCP；`pnpm start:web` 直接运行已有 `web/dist`，不会自动构建。npm 安装用户更新包后也需重启进程。
+
+### 2026-09-26 预览同步修复记录
+
+Web/MCP 0.3.0、共享宿主所在 DSH 2.0.3：修复空工作区启动后跳过新文件发现、默认保存路径与打开路径脱节、大文件不出现在列表及前 50 项截断遗漏最新文件。补充显式预览桥接、加载错误与版本信息。证据为仓库内 `web/test/preview-state.test.mjs`、`studio/test/workspace.test.mjs`、`studio/test/controller-archive.test.mjs` 与实际启动两个进程的 `mcp/test/web-integration.test.mjs`；`evidence_source: observed`，运行端 `simulator`，`device_status: not_required`。包公开状态以 npm 审核结果为准。
+
+同日浏览器实测：启动试玩后将临时存档替换为损坏 JSON，页面显示加载错误并停止旧试玩；恢复原文件（保留原大小与时间戳）后错误清除并自动回到编辑预览。轮询不得因旧试玩状态屏蔽错误事件；存在加载错误时，即使文件时间戳与上次成功加载相同也需要重试。
 
 试玩使用固定 30 FPS Worker、增量场景和 Pixi/WebGL；刷新试玩页会接回已有 Worker，保留暂停和当前玩家。截图仍由 Host 根据统一场景输出 PNG。
 

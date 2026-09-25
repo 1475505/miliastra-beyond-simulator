@@ -16,7 +16,7 @@
 |---|---|
 | 真机导出的 `.gia` 文件 | 引导用户在"模拟器"标签顶栏点"导入"选择该文件；导入后调 `qxqy_studio_get` 读取转换出的 Authoring JSON 树 |
 | 口头描述 / 截图 | 用 `qxqy_studio_patch` 从零构建：`newAsset` 重置工程 → `add` 逐个加控件 → `set` 改字段（每步后 `get` 验证） |
-| 已有 Authoring JSON / 完整存档包 | 工作区里的 `qxqy-simulator-save` 用 `qxqy_studio_load` 拉取；也可让用户在顶栏选「工作区存档」，或「导入」本地文件 |
+| 已有 Authoring JSON / 完整存档包 | 工作区里的 `qxqy-simulator-save` 用 `qxqy_studio_load` 拉取到当前会话；也可让用户在顶栏选「工作区存档」，或「导入」本地文件。`qxqy_studio_load` 不会刷新独立 Web 预览页 |
 | 只有 Lua 脚本 | 引导用户"导入" `.lua`，只更新当前脚本，不影响其他资产 |
 
 ### 2. 构建与校验
@@ -164,3 +164,4 @@ play 动作：`start`（重建运行时；可带 `canvasId` 指定设备画布�
 | revision conflict | 重新 `get` 后重算编辑 |
 | `play session has not started` | 先 `start` 再发其他动作 |
 | 路径脚本不生效 | 路径相对工作区；先用内联 source 排除路径问题 |
+| Web 预览停在「等待工作区存档」 | 该页不在本插件进程里。`qxqy_studio_load` 只载入当前会话；MCP 编辑后用 `qxqy_project_save` 保存，省略路径会沿用最近打开/保存路径。MCP 0.3.0 起可用 `qxqy_preview_status` 核对 Web 版本、工作区和当前文件，再用 `qxqy_preview_open({path})` 显式打开已保存文件。Web 已看 A 时保存 B 不会自动切换；没有这些工具时可用顶部存档列表选择。详见 `mcp/README.md` 和 `web/README.md` |

@@ -1,6 +1,6 @@
 // This file is copied outside the source checkout before it is executed.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, readdir } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
@@ -23,8 +23,10 @@ await mkdir(workspace)
 for (const name of ['qxqy-studio', 'qxqy-lua-runtime', 'qxqy-server']) {
   assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' })
 }
+const manifests = new Map()
 for (const name of ['dsh-plugin-beyond-simulator', 'beyond-simulator-mcp', 'beyond-simulator-web']) {
   const manifest = JSON.parse(await readFile(join(process.cwd(), 'node_modules', name, 'package.json'), 'utf8'))
+  manifests.set(name, manifest)
   assert.equal(manifest.devDependencies, undefined)
   for (const script of ['prepare', 'preinstall', 'install', 'postinstall', 'prepack']) assert.equal(manifest.scripts?.[script], undefined)
   assert.ok(!JSON.stringify(manifest.dependencies).match(/workspace:|file:|link:/))
@@ -65,12 +67,28 @@ try {
 } finally { await app.close() }
 console.log('PASS installed Web: HTTP, editor save, static resources, PNG and Worker')
 
-const child = spawn(process.execPath, [require.resolve('beyond-simulator-mcp'), '--workspace', workspace], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+// Exercise the installed Web bundle and installed MCP executable together.
+// Starting on a different file makes accidental process-local "opens" visible.
+const previewApp = await createWebServer({ workspace, port: 0, initialPath: 'editor.save.json', password: '' })
+const child = spawn(process.execPath, [require.resolve('beyond-simulator-mcp'), '--workspace', workspace, '--web-url', previewApp.url], {
+  env: { ...process.env, QXQY_WEB_PASSWORD: '' },
+  stdio: ['pipe', 'pipe', 'pipe'],
+  windowsHide: true,
+})
 let buffer = ''
 let diagnostics = ''
 let nextId = 0
 const pending = new Map()
 child.stderr.on('data', chunk => { diagnostics += chunk })
+child.on('error', error => {
+  for (const request of pending.values()) request.reject(error)
+})
+child.stdin.on('error', error => {
+  for (const request of pending.values()) request.reject(error)
+})
+child.on('exit', (code, signal) => {
+  for (const request of pending.values()) request.reject(new Error(`MCP exited (${code ?? signal}): ${diagnostics}`))
+})
 child.stdout.setEncoding('utf8')
 child.stdout.on('data', chunk => {
   buffer += chunk
@@ -80,7 +98,7 @@ child.stdout.on('data', chunk => {
     buffer = buffer.slice(end + 1)
     if (!line.trim()) continue
     const response = JSON.parse(line)
-    pending.get(response.id)?.(response)
+    pending.get(response.id)?.resolve(response)
     pending.delete(response.id)
   }
 })
@@ -89,27 +107,70 @@ async function request(method, params) {
   let timer
   try {
     return await Promise.race([
-      new Promise(resolve => { pending.set(id, resolve); child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n') }),
+      new Promise((resolve, reject) => { pending.set(id, { resolve, reject }); child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n') }),
       new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`MCP timeout: ${diagnostics}`)), 15000) }),
     ])
   } finally { clearTimeout(timer); pending.delete(id) }
 }
+async function callTool(name, args = {}) {
+  const response = await request('tools/call', { name, arguments: args })
+  assert.equal(response.error, undefined, JSON.stringify(response))
+  assert.notEqual(response.result.isError, true, JSON.stringify(response))
+  assert.ok(response.result.structuredContent, name)
+  return response.result.structuredContent
+}
 try {
   const init = await request('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'package-smoke', version: '1' } })
   assert.equal(init.result.serverInfo.name, 'beyond-simulator-mcp')
+  assert.equal(init.result.serverInfo.version, manifests.get('beyond-simulator-mcp').version)
   const tools = await request('tools/list', {})
-  assert.ok(tools.result.tools.some(tool => tool.name === 'qxqy_project_save'))
-  const opened = await request('tools/call', { name: 'qxqy_project_open', arguments: { path: 'demo.save.json' } })
-  const handle = opened.result.structuredContent.handle
+  for (const name of ['qxqy_project_save', 'qxqy_preview_status', 'qxqy_preview_open']) {
+    assert.ok(tools.result.tools.some(tool => tool.name === name), name)
+  }
+  const initialPreview = await callTool('qxqy_preview_status')
+  assert.equal(initialPreview.status, 'connected')
+  assert.equal(initialPreview.service, 'beyond-simulator-web')
+  assert.equal(initialPreview.version, manifests.get('beyond-simulator-web').version)
+  assert.equal(initialPreview.activePath, 'editor.save.json')
+
+  const { handle } = await callTool('qxqy_project_open', { path: 'demo.save.json' })
+  assert.equal((await callTool('qxqy_preview_status')).activePath, 'editor.save.json')
+  const snapshot = await callTool('qxqy_studio_get', { handle })
+  await callTool('qxqy_studio_patch', { handle, op: { op: 'renameSave', name: 'Installed MCP update', expectedRevision: snapshot.version } })
+  const saved = await callTool('qxqy_project_save', { handle })
+  assert.equal(saved.path, 'demo.save.json')
+  assert.equal(saved.preview.status, 'not-requested')
+  assert.equal(JSON.parse(await readFile(join(workspace, saved.path), 'utf8')).meta.name, 'Installed MCP update')
+  assert.ok(!(await readdir(workspace)).includes('qxqy-simulator.save.json'))
+  assert.equal((await callTool('qxqy_preview_status')).activePath, 'editor.save.json')
+
+  const savePath = join(workspace, saved.path)
+  const beforeBytes = await readFile(savePath)
+  const beforeMtime = (await stat(savePath, { bigint: true })).mtimeNs
+  const openedPreview = await callTool('qxqy_preview_open', { path: saved.path })
+  assert.equal(openedPreview.status, 'opened')
+  assert.equal(openedPreview.activePath, saved.path)
+  assert.equal(openedPreview.name, 'Installed MCP update')
+  assert.equal(openedPreview.version, manifests.get('beyond-simulator-web').version)
+  const webResponse = await fetch(`${previewApp.url}/api/preview`, { signal: AbortSignal.timeout(5_000) })
+  assert.equal(webResponse.status, 200)
+  const webPreview = (await webResponse.json()).value
+  assert.equal(webPreview.activePath, saved.path)
+  assert.equal(webPreview.name, 'Installed MCP update')
+  assert.equal(webPreview.lastError, '')
+  assert.deepEqual(await readFile(savePath), beforeBytes)
+  assert.equal((await stat(savePath, { bigint: true })).mtimeNs, beforeMtime)
   const played = await request('tools/call', { name: 'qxqy_studio_play', arguments: { handle, action: 'start', args: { view: true } } })
   assert.ok(!played.result.isError, JSON.stringify(played))
   const screenshot = await request('tools/call', { name: 'qxqy_studio_play_screenshot', arguments: { handle } })
   assert.ok(screenshot.result.content.some(item => item.type === 'image'))
 } finally {
-  if (child.exitCode === null && child.signalCode === null) {
-    const exited = once(child, 'exit')
-    child.kill()
-    await exited
-  }
+  try {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = once(child, 'exit', { signal: AbortSignal.timeout(5_000) })
+      child.kill()
+      try { await exited } catch (error) { child.kill('SIGKILL'); throw error }
+    }
+  } finally { await previewApp.close() }
 }
-console.log('PASS installed MCP: handshake, tools, project open, Worker and image response')
+console.log('PASS installed MCP + Web: package versions, default save path, explicit preview without rewriting, Worker and image response')

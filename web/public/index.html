@@ -115,7 +115,13 @@
           <div class="log-heading"><span>Runtime Logs</span><button id="clear-logs">清空</button></div>
           <pre id="runtime-logs">试玩启动后显示 Lua 日志。</pre>
         </section>
-        <p class="watch-note"><span>●</span> 正在监听磁盘。MCP 保存当前 JSON 后，预览会自动重新加载。</p>
+        <section class="info-card connection-details">
+          <span class="info-label">预览连接</span>
+          <div id="server-version">正在连接服务…</div>
+          <div id="workspace-path"></div>
+          <div id="preview-diagnostics" role="status" aria-live="polite" hidden></div>
+        </section>
+        <p class="watch-note"><span>●</span> 当前存档保存后自动刷新；首次存档会自动发现。切换其他存档请使用顶部列表或 MCP 预览工具。</p>
       </aside>
     </main>
 

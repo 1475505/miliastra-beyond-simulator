@@ -67,6 +67,9 @@ test('MCP handshake exposes simulator tools and supports an edit/save round trip
     })
     assert.equal(initialized.result.protocolVersion, '2024-11-05')
     assert.equal(initialized.result.serverInfo.name, 'beyond-simulator-mcp')
+    assert.match(initialized.result.instructions, /qxqy_project_save/)
+    assert.match(initialized.result.instructions, /do not update the browser/)
+    assert.match(initialized.result.instructions, /qxqy_preview_open/)
     assert.ok(initialized.result.capabilities.tools)
     server.notify('notifications/initialized')
 
@@ -75,6 +78,7 @@ test('MCP handshake exposes simulator tools and supports an edit/save round trip
     assert.deepEqual(names, [
       'qxqy_project_open', 'qxqy_project_save', 'qxqy_studio_get', 'qxqy_studio_patch',
       'qxqy_studio_play', 'qxqy_studio_ui_screenshot', 'qxqy_studio_play_screenshot', 'qxqy_studio_load',
+      'qxqy_preview_status', 'qxqy_preview_open',
     ])
 
     const archives = await server.request('tools/call', {
@@ -101,6 +105,7 @@ test('MCP handshake exposes simulator tools and supports an edit/save round trip
     })
     assert.ok(saved.result.structuredContent, JSON.stringify(saved))
     assert.equal(saved.result.structuredContent.path, 'nested/test.save.json')
+    assert.equal(saved.result.structuredContent.preview.status, 'not-requested')
     const savedJson = JSON.parse(readFileSync(join(workspace, 'nested', 'test.save.json'), 'utf8'))
     assert.equal(savedJson.format, 'qxqy-simulator-save')
     assert.equal(savedJson.meta.name, 'MCP test')

@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { basename } from 'node:path'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { basename, relative } from 'node:path'
 import { SimulatorController as SharedSimulatorController } from 'qxqy-studio/host/controller'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { listWorkspaceArchives, resolveWorkspaceArchive } from './workspace-archives.js'
@@ -60,7 +60,9 @@ export class SimulatorController extends SharedSimulatorController {
     const workspace = this.studio.get().workspace?.path || ''
     const abs = resolveWorkspaceArchive(workspace, path)
     const bytes = readFileSync(abs)
-    return this.studio.importData('json', bytes.toString('base64'), basename(abs))
+    const result = this.studio.importData('json', bytes.toString('base64'), basename(abs))
+    this.archivePath = relative(realpathSync(workspace), abs).replaceAll('\\', '/')
+    return result
   }
 
   async play(action, rawArgs = {}, signal) {

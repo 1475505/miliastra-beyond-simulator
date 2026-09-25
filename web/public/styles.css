@@ -256,6 +256,10 @@ button:focus-visible, select:focus-visible, .stage-shell:focus-visible, .tree-ro
 .log-card pre { min-height: 130px; max-height: 34vh; margin: 0; padding: 9px; overflow: auto; color: var(--muted); background: var(--input); white-space: pre-wrap; word-break: break-word; font: 10px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .watch-note { margin: 10px 11px 16px; padding: 7px 8px; border-left: 2px solid #477cf0; background: color-mix(in srgb, var(--blue) 8%, var(--panel-2)); color: var(--muted); font-size: 9px; line-height: 1.5; }
 .watch-note span { color: #62d398; }
+.connection-details { font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+#workspace-path { color: var(--muted); }
+#preview-diagnostics { margin-top: 7px; white-space: pre-wrap; }
+#preview-diagnostics.error { color: var(--danger); }
 
 .toast { position: fixed; left: 50%; bottom: 18px; z-index: 20; max-width: min(520px, calc(100vw - 32px)); padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); box-shadow: 0 12px 32px var(--shadow); color: var(--text); font-size: 10px; opacity: 0; pointer-events: none; transform: translate(-50%, 8px); transition: 160ms ease; }
 .toast.visible { opacity: 1; transform: translate(-50%, 0); }

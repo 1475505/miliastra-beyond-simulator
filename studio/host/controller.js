@@ -28,6 +28,7 @@ export class SimulatorController {
     this.pending = new Map()
     this.sequence = 1
     this.lock = Promise.resolve()
+    this.archivePath = ''
   }
 
   /** Serialize calls for one project handle, including worker operations. */
@@ -60,19 +61,22 @@ export class SimulatorController {
     if (!workspacePath) throw new Error('workspace is not bound')
     const absolute = resolveWorkspaceFile(workspacePath, path)
     const bytes = readFileSync(absolute)
-    return this.studio.importData('json', bytes.toString('base64'), basename(absolute))
+    const result = this.studio.importData('json', bytes.toString('base64'), basename(absolute))
+    this.archivePath = String(path).trim().replaceAll('\\', '/')
+    return result
   }
 
-  saveArchive(path = 'qxqy-simulator.save.json') {
-    const requestedPath = String(path)
+  saveArchive(path = this.archivePath || 'qxqy-simulator.save.json') {
+    const requestedPath = String(path).trim()
     const workspacePath = this.activeWorkspacePath()
     if (!workspacePath) throw new Error('workspace is not bound')
     const absolute = resolveWorkspaceOutput(workspacePath, requestedPath)
     mkdirSync(dirname(absolute), { recursive: true })
     const data = Buffer.from(JSON.stringify(this.studio.archiveData(), null, 2) + '\n', 'utf8')
     writeFileSync(absolute, data)
+    this.archivePath = requestedPath.replaceAll('\\', '/')
     return {
-      path: requestedPath.replaceAll('\\', '/'),
+      path: this.archivePath,
       bytes: data.length,
       revision: this.studio.get().version,
       name: this.studio.get().save?.name || '',

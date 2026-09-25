@@ -36,7 +36,7 @@ test('web preview loads, renders, plays and follows an MCP-style file save', asy
   const savePath = join(saveDir, 'demo.save.json')
   mkdirSync(saveDir, { recursive: true })
   writeArchive(savePath, 'Web Preview A', workspace)
-  const app = await createWebServer({ workspace, port: 0, watchIntervalMs: 100 })
+  const app = await createWebServer({ workspace, port: 0, watchIntervalMs: 100, discoveryIntervalMs: 100 })
   try {
     const first = await json(`${app.url}/api/state`)
     assert.equal(first.response.status, 200)
@@ -82,6 +82,28 @@ test('web preview loads, renders, plays and follows an MCP-style file save', asy
     })
     assert.equal(escaped.response.status, 400)
     assert.match(escaped.body.error, /inside the configured workspace|file does not exist/)
+  } finally {
+    await app.close()
+    rmSync(workspace, { recursive: true, force: true })
+  }
+})
+
+test('web preview adopts a Codex save created after an empty startup', async () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'qxqy-web-late-'))
+  const app = await createWebServer({ workspace, port: 0, watchIntervalMs: 100, discoveryIntervalMs: 100 })
+  try {
+    const first = await json(`${app.url}/api/state`)
+    assert.equal(first.body.value.activePath, '')
+    assert.equal(first.body.value.snapshot.save.name, '未命名存档')
+
+    const saveDir = join(workspace, 'workspace', 'demo')
+    mkdirSync(saveDir, { recursive: true })
+    writeArchive(join(saveDir, 'demo.save.json'), 'Late Codex Save', workspace)
+    await eventually(async () => {
+      const current = await json(`${app.url}/api/state`)
+      return current.body.value.activePath === 'workspace/demo/demo.save.json'
+        && current.body.value.snapshot.save.name === 'Late Codex Save'
+    })
   } finally {
     await app.close()
     rmSync(workspace, { recursive: true, force: true })

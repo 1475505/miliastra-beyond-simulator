@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { WebSession } from './lib/session.js'
 import { EditorSessions } from './lib/editor-sessions.js'
+import { resolveWorkspaceRoot } from 'qxqy-studio/host/workspace'
 
 const moduleDir = fileURLToPath(new URL('.', import.meta.url))
 const publicDir = resolve(moduleDir, 'public')
@@ -149,7 +150,12 @@ export async function createWebServer(options = {}) {
         return
       }
       if (request.method === 'GET' && requestUrl.pathname === '/api/state') {
+        if (requestUrl.searchParams.get('refresh') === '1') session.archives(true)
         sendJson(response, 200, { ok: true, value: await session.currentState(abort.signal) })
+        return
+      }
+      if (request.method === 'GET' && requestUrl.pathname === '/api/preview') {
+        sendJson(response, 200, { ok: true, value: session.previewStatus() })
         return
       }
       if (request.method === 'GET' && requestUrl.pathname === '/api/editor.png') {
@@ -168,7 +174,14 @@ export async function createWebServer(options = {}) {
       }
       if (request.method === 'POST' && requestUrl.pathname === '/api/open') {
         const body = await readBody(request)
-        sendJson(response, 200, { ok: true, value: await session.open(body.path) })
+        if (body.expectedWorkspace !== undefined) {
+          const expected = resolveWorkspaceRoot(body.expectedWorkspace)
+          const same = process.platform === 'win32'
+            ? expected.toLowerCase() === session.workspace.toLowerCase()
+            : expected === session.workspace
+          if (!same) throw new Error(`Web workspace mismatch: ${session.workspace}`)
+        }
+        sendJson(response, 200, { ok: true, value: await session.open(body.path, body.expectedWorkspace === undefined ? 'manual' : 'mcp-preview') })
         return
       }
       if (request.method === 'POST' && requestUrl.pathname.startsWith('/editor/api/')) {

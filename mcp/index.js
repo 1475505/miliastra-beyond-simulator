@@ -2,6 +2,7 @@
 
 import { SimulatorController } from './lib/controller.js'
 import { listWorkspaceArchives, resolveWorkspaceRoot } from './lib/workspace.js'
+import { createPreviewClient } from './lib/preview.js'
 import manifest from './package.json' with { type: 'json' }
 
 const SERVER_NAME = 'beyond-simulator-mcp'
@@ -27,6 +28,12 @@ function workspaceFromArgs() {
 }
 
 const workspaceRoot = resolveWorkspaceRoot(workspaceFromArgs())
+const webUrlIndex = process.argv.indexOf('--web-url')
+const preview = createPreviewClient({
+  workspace: workspaceRoot,
+  webUrl: webUrlIndex >= 0 ? process.argv[webUrlIndex + 1] : process.env.QXQY_WEB_URL,
+  password: process.env.QXQY_WEB_PASSWORD || '',
+})
 const projects = new Map()
 let nextHandle = 1
 const requests = new Map()
@@ -48,17 +55,17 @@ const handleProperty = {
 const tools = [
   {
     name: 'qxqy_project_open',
-    description: '打开工作区中的千星模拟器存档，或创建一个新的空工程。返回后续工具使用的工程句柄；path 必须是工作区内相对路径。',
+    description: '在本 MCP 进程打开工作区存档，或创建一个新的空工程。不会刷新 Web 预览；显示已有存档请调用 qxqy_preview_open。返回后续工具使用的工程句柄；path 必须是工作区内相对路径。',
     inputSchema: objectSchema({
       path: { type: 'string', description: '可选的 qxqy-simulator-save JSON 相对路径；省略则创建空工程。' },
     }),
   },
   {
     name: 'qxqy_project_save',
-    description: '将工程当前状态保存为 qxqy-simulator-save JSON。会创建缺失的工作区子目录；path 必须是工作区内相对路径。',
+    description: '把当前工程句柄中的修改保存为工作区内的 qxqy-simulator-save JSON。保存回执只确认写盘；需切换或确认 Web 预览时，随后调用 qxqy_preview_open。path 必须是工作区内相对路径。',
     inputSchema: objectSchema({
       ...handleProperty,
-      path: { type: 'string', description: '可选输出路径，默认 qxqy-simulator.save.json。' },
+      path: { type: 'string', description: '可选输出路径；省略时沿用最近成功打开或保存的路径，新工程默认 qxqy-simulator.save.json。' },
     }, ['handle']),
   },
   {
@@ -98,11 +105,21 @@ const tools = [
   },
   {
     name: 'qxqy_studio_load',
-    description: '列出工作区内的 qxqy-simulator-save JSON，或将指定相对路径的存档载入已有工程句柄。',
+    description: '列出工作区内的 qxqy-simulator-save JSON，或把指定相对路径载入本 MCP 进程的已有工程句柄。不会刷新 Web 预览；显示已有存档请调用 qxqy_preview_open，无需再次保存。',
     inputSchema: objectSchema({
       ...handleProperty,
       path: { type: 'string', description: '省略时列出存档；传入工作区内相对路径时载入该存档。' },
     }),
+  },
+  {
+    name: 'qxqy_preview_status',
+    description: '查询独立 Web 预览服务的版本、工作区、当前存档和加载错误。连接到 --web-url / QXQY_WEB_URL（默认 http://127.0.0.1:4173），必须与 MCP 使用同一工作区。无需工程句柄。',
+    inputSchema: objectSchema({}),
+  },
+  {
+    name: 'qxqy_preview_open',
+    description: '让独立 Web 预览打开或重新加载已保存的存档，返回 Web 确认的路径、名称和 revision；不会保存 MCP 内未落盘的修改。path 为工作区内相对路径，不受自动列表筛选限制。需要已启动同一工作区的 Web 服务，无需工程句柄。',
+    inputSchema: objectSchema({ path: { type: 'string', description: '已保存的 qxqy-simulator-save JSON 工作区相对路径。' } }, ['path']),
   },
 ]
 
@@ -138,6 +155,8 @@ function projectSummary(handle, controller, openedPath = '') {
 }
 
 async function callTool(name, args = {}, signal) {
+  if (name === 'qxqy_preview_status') return preview.status(signal)
+  if (name === 'qxqy_preview_open') return preview.open(args.path, signal)
   if (name === 'qxqy_project_open') {
     const handle = `project-${nextHandle++}`
     const controller = new SimulatorController(workspaceRoot)
@@ -158,7 +177,10 @@ async function callTool(name, args = {}, signal) {
 
   const controller = controllerFor(args.handle)
   return controller.exclusive(async () => {
-    if (name === 'qxqy_project_save') return controller.saveArchive(args.path)
+    if (name === 'qxqy_project_save') return {
+      ...controller.saveArchive(args.path),
+      preview: { status: 'not-requested', message: 'Saved to disk. Call qxqy_preview_open with the returned path to switch or confirm the Web preview.' },
+    }
     if (name === 'qxqy_studio_get') return controller.get()
     if (name === 'qxqy_studio_patch') return controller.patch(args.op)
     if (name === 'qxqy_studio_play') return controller.play(args.action, args.args || {}, signal)
@@ -195,7 +217,7 @@ async function handleRequest(request) {
       protocolVersion: negotiateProtocolVersion(params.protocolVersion),
       capabilities: { tools: { listChanged: false } },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
-      instructions: 'Optionally call qxqy_studio_load without a handle to find saves, then use qxqy_project_open. Keep the returned handle and call qxqy_project_save after edits. Paths are workspace-relative.',
+      instructions: 'The Web preview is a separate process. qxqy_project_open and qxqy_studio_load only change this MCP process and do not update the browser. Save handle edits with qxqy_project_save, then call qxqy_preview_open with its returned path to switch or confirm the Web preview. Existing saved files, including externally generated saves, can be previewed directly without rewriting them. qxqy_preview_status checks the Web version, workspace and active file. Start Web with the same --workspace and configure --web-url / QXQY_WEB_URL if it is not at http://127.0.0.1:4173. Saving succeeds independently of Web connectivity.',
     }
   }
   if (method === 'ping') return {}

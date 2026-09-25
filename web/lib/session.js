@@ -1,4 +1,5 @@
 import { statSync } from 'node:fs'
+import manifest from '../package.json' with { type: 'json' }
 import { CANVAS_PRESETS } from 'qxqy-studio/constants'
 import { SimulatorController } from 'qxqy-studio/host/controller'
 import {
@@ -50,7 +51,7 @@ function playSummary(previous, value, action) {
 }
 
 export class WebSession {
-  constructor({ workspace, initialPath = '', watchIntervalMs = 700 } = {}) {
+  constructor({ workspace, initialPath = '', watchIntervalMs = 700, discoveryIntervalMs = 5000 } = {}) {
     this.workspace = resolveWorkspaceRoot(workspace)
     this.controller = new SimulatorController(this.workspace)
     this.initialPath = normalizePath(initialPath)
@@ -72,61 +73,110 @@ export class WebSession {
     }
     this.timer = null
     this.refreshing = false
+    this.discoveryIntervalMs = Math.max(100, Number(discoveryIntervalMs) || 5000)
+    this.archiveCache = null
+    this.archiveCacheTime = 0
+    this.openGeneration = 0
+    this.disposed = false
   }
 
   async initialize() {
     const archives = this.archives().archives
     const path = this.initialPath || archives[0]?.path || ''
-    if (path) await this.open(path, 'startup')
+    if (path) {
+      try { await this.open(path, 'startup') } catch { /* Keep the page available to show the error and retry. */ }
+    }
     this.timer = setInterval(() => { void this.refreshFromDisk() }, this.watchIntervalMs)
     return this.state()
   }
 
-  archives() {
-    return listWorkspaceArchives(this.workspace)
+  archives(force = false) {
+    if (force || !this.archiveCache || Date.now() - this.archiveCacheTime >= this.discoveryIntervalMs) {
+      this.archiveCache = listWorkspaceArchives(this.workspace)
+      this.archiveCacheTime = Date.now()
+    }
+    return this.archiveCache
   }
 
-  state() {
+  previewStatus() {
+    const snapshot = this.controller.get()
     return {
+      service: 'beyond-simulator-web',
+      version: manifest.version,
       workspace: this.workspace,
       activePath: this.activePath,
       lastLoadedAt: this.lastLoadedAt,
       lastError: this.lastError,
-      archives: this.archives().archives,
+      revision: this.activePath ? snapshot.version : null,
+      name: this.activePath ? snapshot.save?.name || '' : '',
+    }
+  }
+
+  state() {
+    const listing = this.archives()
+    return {
+      ...this.previewStatus(),
+      archives: listing.archives,
+      discovery: listing.discovery,
       snapshot: compactSnapshot(this.controller.get()),
       play: this.playState,
     }
   }
 
-  async open(path, reason = 'manual') {
+  recordError(error) {
+    const message = error?.message || String(error)
+    const changed = message !== this.lastError
+    this.lastError = message
+    if (changed) this.emit({ type: 'error', error: message })
+  }
+
+  async open(path, reason = 'manual', expectedGeneration = this.openGeneration) {
     const requestedPath = normalizePath(path)
     if (!requestedPath) throw new Error('path is required')
-    this.playState = { ...this.playState, running: false, paused: false }
-    const value = await this.controller.exclusive(async () => {
-      await this.controller.play('stop')
-      return this.controller.loadArchive(requestedPath)
+    return this.controller.exclusive(async () => {
+      if (this.disposed || (reason === 'external-change' && expectedGeneration !== this.openGeneration)) return this.state()
+      try {
+        await this.controller.play('stop')
+        this.playState = playSummary(this.playState, { running: false, logs: [] }, 'stop')
+        // Stamp before reading: a concurrent disk write must trigger another reload.
+        const stamp = fileStamp(this.workspace, requestedPath)
+        const value = this.controller.loadArchive(requestedPath)
+        this.activePath = requestedPath
+        this.activeStamp = stamp
+        this.initialPath = ''
+        this.openGeneration++
+        this.lastLoadedAt = new Date().toISOString()
+        this.lastError = ''
+        this.archiveCache = null
+        this.emit({ type: 'archive', reason, path: requestedPath, revision: value.version })
+        return this.state()
+      } catch (error) {
+        this.recordError(error)
+        throw error
+      }
     })
-    this.activePath = requestedPath
-    this.activeStamp = fileStamp(this.workspace, requestedPath)
-    this.lastLoadedAt = new Date().toISOString()
-    this.lastError = ''
-    this.playState = playSummary(this.playState, { running: false, logs: [] }, 'stop')
-    this.emit({ type: 'archive', reason, path: requestedPath, revision: value.version })
-    return this.state()
   }
 
   async refreshFromDisk() {
-    if (!this.activePath || this.refreshing) return false
+    if (this.refreshing || this.disposed) return false
     this.refreshing = true
     try {
+      // Startup with an empty workspace leaves activePath blank. The preview
+      // promises that a later Codex/MCP save will appear on its own, so keep
+      // scanning until the first archive exists. After that, only the open
+      // file is watched; switching archives stays manual.
+      if (!this.activePath) {
+        const newest = this.initialPath || this.archives().archives[0]?.path || ''
+        if (!newest) return false
+        await this.open(newest, 'external-change')
+        return true
+      }
       const nextStamp = fileStamp(this.workspace, this.activePath)
-      if (nextStamp === this.activeStamp) return false
+      if (nextStamp === this.activeStamp && !this.lastError) return false
       await this.open(this.activePath, 'external-change')
       return true
     } catch (error) {
-      const message = error?.message || String(error)
-      if (message !== this.lastError) this.emit({ type: 'error', error: message })
-      this.lastError = message
+      this.recordError(error)
       return false
     } finally {
       this.refreshing = false
@@ -151,7 +201,6 @@ export class WebSession {
     if (!PLAY_ACTIONS.has(action)) throw new Error(`unknown play action: ${action || '(empty)'}`)
     const value = await this.controller.exclusive(() => this.controller.play(action, args, signal))
     this.playState = playSummary(this.playState, value, action)
-    this.lastError = ''
     this.emit({ type: 'play', action, frame: this.playState.frame })
     // Match the DSH standalone play page: return only the worker snapshot.
     // Editor tree / archive listing stay on /api/state, not the 30 FPS path.
@@ -180,9 +229,10 @@ export class WebSession {
   }
 
   async dispose() {
+    this.disposed = true
     if (this.timer) clearInterval(this.timer)
     this.timer = null
     this.listeners.clear()
-    await this.controller.dispose()
+    await this.controller.exclusive(() => this.controller.dispose())
   }
 }

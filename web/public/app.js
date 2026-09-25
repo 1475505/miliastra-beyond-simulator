@@ -39,6 +39,9 @@ const elements = {
   runtimeLogs: byId('runtime-logs'),
   clearLogs: byId('clear-logs'),
   toast: byId('toast'),
+  serverVersion: byId('server-version'),
+  workspacePath: byId('workspace-path'),
+  diagnostics: byId('preview-diagnostics'),
 }
 
 const kindIcons = {
@@ -110,7 +113,7 @@ function renderArchives() {
   const previous = elements.archive.value
   elements.archive.replaceChildren()
   const archives = model?.archives || []
-  if (!archives.length) {
+  if (!archives.length && !model?.activePath) {
     const empty = option('', '未发现 qxqy-simulator-save')
     empty.disabled = true
     elements.archive.append(empty)
@@ -118,6 +121,9 @@ function renderArchives() {
   }
   for (const archive of archives) {
     elements.archive.append(option(archive.path, `${archive.name} · ${archive.path}`))
+  }
+  if (model.activePath && !archives.some(archive => archive.path === model.activePath)) {
+    elements.archive.prepend(option(model.activePath, `${model.snapshot?.save?.name || '当前存档'} · ${model.activePath}`))
   }
   elements.archive.value = model.activePath || previous || archives[0].path
 }
@@ -133,7 +139,7 @@ function renderDevices() {
 }
 
 function renderTree() {
-  const rows = model?.snapshot?.tree || []
+  const rows = model?.activePath ? (model?.snapshot?.tree || []) : []
   elements.tree.replaceChildren()
   elements.treeCount.textContent = String(rows.length)
   elements.treeTitle.textContent = model?.snapshot?.asset?.type === 'client-control-template' ? '模板与子控件' : '控件树'
@@ -178,7 +184,7 @@ function addDetail(label, value) {
 }
 
 function renderNodeDetails() {
-  const row = model?.snapshot?.tree?.find((item) => item.id === selectedId)
+  const row = model?.activePath && model?.snapshot?.tree?.find((item) => item.id === selectedId)
   elements.nodeDetails.replaceChildren()
   elements.nodeName.textContent = row?.name || '未选择'
   if (!row) return
@@ -209,17 +215,20 @@ function renderStage() {
   elements.stageEmpty.hidden = showEditor || showPlay
   elements.stageShell.classList.toggle('playing', mode === 'play' && Boolean(model?.play?.running))
   if (!hasArchive) {
-    elements.stageEmpty.querySelector('strong').textContent = '等待工作区存档'
-    elements.stageEmpty.querySelector('p').textContent = 'Codex 保存 qxqy-simulator-save JSON 后会自动出现在这里。'
+    elements.stageEmpty.querySelector('strong').textContent = model?.lastError ? '存档加载失败' : '等待工作区存档'
+    const watched = model?.workspace ? `正在监听 ${model.workspace}。` : ''
+    elements.stageEmpty.querySelector('p').textContent = model?.lastError
+      ? model.lastError
+      : `${watched}Codex 保存 qxqy-simulator-save JSON 后会自动出现在这里。`
   } else if (mode === 'play' && !model.play.running) {
     elements.stageEmpty.querySelector('strong').textContent = '试玩尚未启动'
     elements.stageEmpty.querySelector('p').textContent = '选择设备并点击“启动”，即可运行 Lua 和交互逻辑。'
   }
   if (showEditor) refreshEditorImage()
-  elements.assetLabel.textContent = snapshot?.asset?.label || '等待存档'
-  elements.saveName.textContent = snapshot?.save?.name || '未命名存档'
-  elements.canvasLabel.textContent = snapshot?.canvas ? `${snapshot.canvas.label} · ${snapshot.canvas.width}×${snapshot.canvas.height}` : '—'
-  elements.revisionLabel.textContent = `Revision ${snapshot?.version ?? '—'}`
+  elements.assetLabel.textContent = hasArchive ? (snapshot?.asset?.label || '等待存档') : '等待存档'
+  elements.saveName.textContent = hasArchive ? (snapshot?.save?.name || '未命名存档') : '未命名存档'
+  elements.canvasLabel.textContent = hasArchive && snapshot?.canvas ? `${snapshot.canvas.label} · ${snapshot.canvas.width}×${snapshot.canvas.height}` : '—'
+  elements.revisionLabel.textContent = hasArchive ? `Revision ${snapshot?.version ?? '—'}` : 'Revision —'
   elements.activePath.textContent = model?.activePath || '尚未打开存档'
   elements.playReadout.textContent = mode === 'play'
     ? model?.play?.running
@@ -309,7 +318,7 @@ function renderControls() {
   elements.playStop.disabled = busy || !running
   elements.asset.disabled = busy || mode === 'play'
   elements.device.disabled = busy || !hasArchive
-  elements.archive.disabled = busy || !(model?.archives?.length)
+  elements.archive.disabled = busy || !(model?.archives?.length || model?.activePath)
   elements.reload.disabled = busy
 }
 
@@ -319,20 +328,27 @@ function render() {
   renderTree()
   renderNodeDetails()
   const snapshot = model?.snapshot
+  const hasArchive = Boolean(model?.activePath)
   elements.asset.value = snapshot?.asset?.type || 'server-control-template'
-  elements.metricControls.textContent = String(snapshot?.tree?.length || 0)
-  elements.metricScripts.textContent = String(snapshot?.scriptCount || 0)
-  elements.metricCanvas.textContent = snapshot?.canvas ? `${snapshot.canvas.width}×${snapshot.canvas.height}` : '—'
+  elements.metricControls.textContent = hasArchive ? String(snapshot?.tree?.length || 0) : '0'
+  elements.metricScripts.textContent = hasArchive ? String(snapshot?.scriptCount || 0) : '0'
+  elements.metricCanvas.textContent = hasArchive && snapshot?.canvas ? `${snapshot.canvas.width}×${snapshot.canvas.height}` : '—'
   elements.runtimeLogs.textContent = formatLogs(model?.play?.logs)
+  elements.serverVersion.textContent = model?.version ? `Web ${model.version}` : '服务版本未知，请更新 Web'
+  elements.workspacePath.textContent = model?.workspace ? `工作区：${model.workspace}` : ''
+  elements.diagnostics.textContent = [model?.lastError, ...(model?.discovery?.warnings || [])].filter(Boolean).join('\n')
+  elements.diagnostics.hidden = !elements.diagnostics.textContent
+  elements.diagnostics.classList.toggle('error', Boolean(model?.lastError))
   renderControls()
   renderStage()
   syncPlayPolling()
 }
 
-async function refreshState({ quiet = false } = {}) {
-  if (mode === 'play' && model?.play?.running && quiet) return
+async function refreshState({ quiet = false, force = false, forceDiscovery = false } = {}) {
+  if (mode === 'play' && model?.play?.running && play.running && quiet && !force) return
   try {
-    model = await requestJson('/api/state')
+    model = await requestJson(forceDiscovery ? '/api/state?refresh=1' : '/api/state')
+    if (!model?.play?.running && play.running) play.reset()
     if (!quiet && model?.play?.running && !play.running) {
       mode = 'play'
       await play.attach()
@@ -389,7 +405,15 @@ elements.reload.addEventListener('click', () => run(async () => {
     render()
     notify('已重新读取磁盘存档')
   } else {
-    await refreshState()
+    await refreshState({ forceDiscovery: true })
+    const newest = model?.archives?.[0]?.path
+    if (newest && !model?.activePath) {
+      model = await requestJson('/api/open', { method: 'POST', body: JSON.stringify({ path: newest }) })
+      mode = 'editor'
+      selectedId = ''
+      render()
+      notify('已打开存档')
+    }
   }
 }))
 
@@ -447,13 +471,14 @@ events.addEventListener('error', () => setConnection('error', '正在重连'))
 events.addEventListener('state', (event) => {
   let change = {}
   try { change = JSON.parse(event.data) } catch {}
-  if (change.reason === 'external-change') {
+  if (change.type === 'archive') {
     mode = 'editor'
+    selectedId = ''
     play.reset()
-    notify('检测到 Codex/MCP 保存，预览已更新')
+    notify(change.reason === 'external-change' ? '检测到存档变化，预览已更新' : '预览存档已打开')
   }
   // 试玩画面有独立的轻量状态轮询；忽略 play 事件，避免重复刷新。
-  if (change.type !== 'play') void refreshState({ quiet: true })
+  if (change.type !== 'play') void refreshState({ quiet: true, force: true })
 })
 
 setInterval(() => { void refreshState({ quiet: true }) }, 5000)
