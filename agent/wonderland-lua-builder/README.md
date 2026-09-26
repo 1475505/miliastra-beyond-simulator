@@ -18,4 +18,6 @@
 
 DSH 0.1.7-rc.1 起，本仓库根包 `dsh-plugin-beyond-simulator` 在构建时读取这里的 `preset.yml` 和 `agent.cordis.yml`，生成 `dsh-plugin/cordis.patch.yml` 中的 Agent 预设注册项。旧版复制入口同时保留，启动时仅在 `$DSH_HOME/.agent-presets/wonderland-lua-builder` 不存在时复制包内预设，不覆盖用户修改。通过仓库根目录的 `dsh plugin --profile web add github:1475505/miliastra-beyond-simulator` 安装插件后，在 DSH 的 **设置 → Agent 预设** 中查找本预设；新任务可选择它，已有任务不会自动切换。
 
-写 Lua 之前，Agent 工作区需要用户提供的千星 2D API 文档与 `AGENTS.md`；本预设不捆绑官方知识库。模拟器只预览 `100001–100006` 六种基础图元，其他官方图片 ID 在模拟器中显示缺失框，需在真机确认。行为评估见 [agent-behavior.md](evals/agent-behavior.md)。
+建议用户提前安装 [dsh-plugin-miliastra-toolbox 插件](https://github.com/1475505/dsh-plugin-miliastra-toolbox)，或在本地工作区提供千星奇域 Lua 编程相关知识库和实战经验，以优化模型对千星奇域 Lua 的理解。写 Lua 之前，Agent 会检查插件实际可用的 2D/Lua 资料或本地 API 文档，并遵守工作区 `AGENTS.md`；本预设不捆绑官方知识库。
+
+模拟器只预览 `100001–100006` 六种基础图元，其他官方图片 ID 在模拟器中显示缺失框，需在真机确认。行为评估见 [agent-behavior.md](evals/agent-behavior.md)。
