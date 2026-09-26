@@ -128,11 +128,12 @@ function emptyPlayerView() {
   }
 }
 
-function createPlayerRuntime(compiled, templateBundle, scripts) {
+function createPlayerRuntime(compiled, templateBundle, scripts, language) {
   const rt = createRuntime({
     canvasWidth: compiled.canvasWidth,
     canvasHeight: compiled.canvasHeight,
     device: compiled.device,
+    ...(language ? { language } : {}),
   })
   for (const template of [...(compiled.templates || []), ...(templateBundle?.templates || [])]) {
     if (Number.isSafeInteger(template.prefabIndex) && template.prefabIndex > 0) {
@@ -168,7 +169,7 @@ function bindCurrentView(session) {
   }
 }
 
-export function startPlay(project, { templatesProject = null, scripts = [], sceneScripts = null, templateScripts = null, serverConfig = null, canvasId = '', playerCount = 1, viewPlayerIndex = 1 } = {}) {
+export function startPlay(project, { templatesProject = null, scripts = [], sceneScripts = null, templateScripts = null, serverConfig = null, canvasId = '', playerCount = 1, viewPlayerIndex = 1, language = '' } = {}) {
   const sceneList = sceneScripts || scripts
   const templateList = templateScripts || scripts
   const compiled = compileProject(project, sceneList, canvasId)
@@ -178,7 +179,7 @@ export function startPlay(project, { templatesProject = null, scripts = [], scen
   const server = createServer({ playerCount: count, viewPlayerIndex: view })
   if (serverConfig) server.loadConfig({ ...serverConfig, playerCount: count, viewPlayerIndex: view })
   const runtimes = []
-  for (let i = 0; i < count; i += 1) runtimes.push(createPlayerRuntime(compiled, templateBundle, scripts))
+  for (let i = 0; i < count; i += 1) runtimes.push(createPlayerRuntime(compiled, templateBundle, scripts, language))
   server.attachRuntimes(runtimes)
   for (const rt of runtimes) rt.addRoot(compiled.root)
   const session = {

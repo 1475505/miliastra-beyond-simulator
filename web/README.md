@@ -42,6 +42,8 @@ beyond-simulator-web --workspace /absolute/path/to/workspace --open
 
 ## 与 MCP 配合
 
+编辑器「Lua 脚本 → 实机脚本同步」可将当前存档脚本显式复制到宿主本机的千星沙箱目录：配置随存档保存，先保存并预览差异，再人工确认复制。AI 可准备配置和源码；复制不会自动执行。详见 [目录配置、确认机制及端到端验证](../studio/docs/script-sync.md)。
+
 MCP 显式调用 `qxqy_project_save` 保存工作区 JSON 后，`/` 每 700ms 检查当前文件。还没有打开存档时，每 5 秒重新发现存档并自动打开最新的 `qxqy-simulator-save`；已经打开时，只在该文件变化后停止旧试玩、重新加载，并通过 SSE 刷新浏览器。不会自动改看另一个路径。顶部刷新按钮可立即扫描。该预览不写文件。`/editor` 不自动用磁盘内容覆盖正在编辑的草稿，需要手动“从工作区拉取存档”。
 
 MCP 0.3.0 起提供 `qxqy_preview_status()` 和 `qxqy_preview_open({ path: "game.save.json" })`：前者查询 Web 实际版本、工作区、当前存档和加载错误，后者直接让预览服务读取指定存档，无需重新保存。MCP 默认连接 `http://127.0.0.1:4173`，其他端口使用 MCP 的 `--web-url` 或 `QXQY_WEB_URL`；Web 启用口令时，在 MCP 环境中配置相同的 `QXQY_WEB_PASSWORD`。两边必须使用同一工作区，桥接会在读取和打开时校验。工具回执确认服务端已加载，浏览器通过 SSE 或定期状态同步刷新。

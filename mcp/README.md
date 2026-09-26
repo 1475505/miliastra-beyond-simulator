@@ -92,6 +92,48 @@ Web 的 `/` 预览页会监听磁盘：启动时还没有存档，会在 Codex �
 
 ## 工具边界
 
+### 实机脚本复制同步
+
+`qxqy_script_sync({ handle, action, args })` 支持 `discover`、`status`、`configure`、`preview`。配置示例：
+
+```json
+{ "handle": "project-1", "action": "configure", "args": {
+  "expectedRevision": 12,
+  "config": { "version": 1, "workspaceDir": "workspace/topo5", "clientImportRoot": "C:/Users/<用户>/AppData/LocalLow/miHoYo/原神/BeyondLocal/<UID>/Beyond_Local_Save_Level/<编辑器ID>/external_lua_file/default_import_file", "clientSubdir": "workspace/topo5" }
+} }
+```
+
+配置保存在完整存档；调用 `qxqy_project_save` 后，用户在 Web `/editor` 加载同一存档，在「Lua 脚本 → 实机脚本同步」保存并检查差异、确认复制。AI 工具不开放执行复制，MCP 预览计划不跨进程传给 Web。复制内容采用内联源码优先、否则工作区文件；若有待处理 `controlGuidChanges`，先完成索引引用核对。见 [完整流程与验证](../studio/docs/script-sync.md)。
+
+### 客户端控件索引校准
+
+真实编辑器导入 GIA 后若重新分配了客户端控件索引，可在 Web/DSH 编辑器修改选中客户端控件的「索引」，或使用当前资产的 `setControlGuid`。`id` 是存档内部控件 ID，`guid` 是用户回传的实际索引（整数 `1–2147483647`）；操作保留内部 ID 和脚本挂载，拒绝服务端容器及工程中重复的控件/脚本索引。
+
+先确认当前资产与目标控件一致；需要时调用 `selectAsset`，其 `assetType` 为 `server-control-template` 或 `client-control-template`，然后重新 `get` 读取控件及 revision。
+
+```text
+qxqy_studio_get({ handle: "project-1" })
+qxqy_studio_patch({ handle: "project-1", op: {
+  op: "setControlGuid", id: "目标控件内部 id", guid: 1073742200, expectedRevision: N
+} })
+```
+
+此操作不会自动修改 Lua。快照与完整存档的 `controlGuidChanges` 按时间保存 `{ id, controlAsset, controlId, controlName, oldGuid, newGuid }`，AI 必须结合控件身份把连续变更解析到最终索引，检查并同步相关 `scripts[].source` 和实际 `.lua` 源文件中的调用、常量、配置表及身份校验。非空内联 `source` 会优先于 `path` 文件执行，不能遗漏其中一份。模板索引、运行时控件 `Id`、图片 ID 和脚本映射 ID 各有含义，禁止全局替换同值数字；无法读取或判断的引用保留为未处理。
+
+确认引用全部同步，或该变更无 Lua 引用后，才清理对应记录。每次写操作使用当时最新的 revision，随后显式保存完整存档并重启试玩验证受影响流程：
+
+```text
+qxqy_studio_patch({ handle: "project-1", op: {
+  op: "acknowledgeControlGuidChanges", changeIds: ["已核验的变更记录 id"], expectedRevision: M
+} })
+qxqy_project_save({ handle: "project-1" })
+qxqy_studio_play({ handle: "project-1", action: "start" })
+```
+
+确认操作只清理记录，不改写脚本；未处理记录会随完整存档保存，导出时提醒同步引用。完整 AI 检查流程见 [`skill/SKILL.md`](../skill/SKILL.md#5-导入后校准客户端控件索引并同步-lua)。
+
+### 通用限制
+
 - 路径只能是配置工作区内的相对路径；server 会拒绝路径穿越和符号链接逃逸。
 - `qxqy_studio_play` 的动作和参数沿用 DSH 模拟器工具契约。
 - 未实现或未知的模拟器语义返回明确错误，不会伪造成功。

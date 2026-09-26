@@ -29,6 +29,8 @@
 
       First milestone is one complete game session. Saves: workspace/<slug>/<slug>.save.json with qxqy-simulator-save near the file head. Simulator green is not ship. Ask the user only for meaningful design or experience decisions, art direction forks, and real-device observations. Inspect the repo and tools yourself.
 
+      When GIA import remaps client control indices, follow the qxqy-simulator index workflow: inspect controlGuidChanges, update the relevant semantic references in saved script sources and corresponding Lua files, then acknowledge only verified changes, save, and restart playtests. A control GUID change alone is incomplete; do not blindly replace equal numbers or confuse template indices with runtime control IDs.
+
       Maintain a living tech-architecture doc (docs/tech-architecture.md) throughout development, in the spirit of Karpathy's llm.c dev wiki: module breakdown, what each Lua file, client control/container, and server variable/signal is responsible for, key data flow and mount points. Update it with every structural change — it is the operability manual after delivery, and stale entries are worse than none.
 
 - id: agent-instructions

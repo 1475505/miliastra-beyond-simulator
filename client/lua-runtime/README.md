@@ -1,7 +1,7 @@
 # qxqy-lua-runtime
 
 千星奇域客户端 Lua 运行时模拟器（语言层 + 宿主 API）。  
-不解析 GIA / Authoring JSON，不提供编辑器或 DSH UI。那些属于 `simulator/studio/` 与 `simulator/frontend/`。
+不解析 GIA / Authoring JSON，不提供编辑器或 DSH UI。那些属于 `simulator/studio/`、`simulator/editor-ui/` 与宿主适配层。
 
 ```js
 import { createRuntime } from 'qxqy-lua-runtime'

@@ -56,15 +56,9 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 根包的 `repository` 已指向 `1475505/miliastra-beyond-simulator`。采用 [GPL-3.0-only](LICENSE)，三个分发包均附带完整许可证，并已通过 `dudukl` 发布到 npm。自动发布使用 [GitHub Actions](.github/workflows/publish-npm.yml)，从 Git tag 构建并验收三个 tarball，再通过 npm Trusted Publishing 暂存版本有变化的包，等待维护者审核后上线；不创建专用产物分支。
 
-当前 npm `latest`：`dsh-plugin-beyond-simulator@1.0.9`、`beyond-simulator-web@0.1.3`、`beyond-simulator-mcp@0.1.3`。原 MCP 包名 `qxqy-simulator-mcp@0.1.3` 仍保留为历史名称；新项目使用 `beyond-simulator-mcp`。DSH 1.0.9 在旧版 DSH 缺少新版 Agent 预设模块时跳过注册项，保留目录复制入口；在 DSH 0.1.7-rc.1 中启用新版注册项。
+源码版本以各产品 `package.json` 为准，本轮本地安装包以 `release/manifest.json` 为准；npm 公开版本以 registry 为准，暂存工作流成功不表示已经公开上线。原 MCP 包名 `qxqy-simulator-mcp` 已由 `beyond-simulator-mcp` 替代。旧版 DSH 缺少新版 Agent 预设模块时跳过注册项，保留目录复制入口。
 
 ## 自动发布到 npm
-
-2026-09-26 Web/MCP 预览联动批次：DSH `2.0.3`、Web / MCP `0.3.0`。增加 MCP 显式预览查询/打开工具，修复空启动监听、默认保存路径及大存档发现；共享宿主变更会进入三个产品，故三个包均更新版本。计划 tag `npm-2026-09-26-1` 触发既有暂存工作流；工作流成功表示待维护者审核，不等于已经公开发布。
-
-2026-09-24 四平台布局发布批次：DSH `2.0.0`、Web / MCP `0.2.0`。在这些版本公开发布前补入旧存档自动迁移，沿用版本号，后续 tag 替换原 `npm-2026-09-24-4` 的暂存内容。读取支持 version 1–4，保存统一为 version 4、`layoutSchemaVersion: 2`；五种画布为四平台参数的派生预览。此处记录目标版本，不表示 npm 已公开上线；实际状态以 tag 工作流和 npm 暂存审核结果为准。
-
-后续图元修复批次：DSH `2.0.1`、Web / MCP `0.2.1`。`100002` 圆形及 `100006` 圆环在非正方形控件中统一按宽高各自拉伸，与编辑画布一致；修复分别覆盖试玩 Pixi、PNG 及三个分发包。tag `npm-2026-09-24-6` 触发暂存，公开可用时间以 npm 审核通过为准。
 
 工作流文件是 `.github/workflows/publish-npm.yml`，推送 `npm-*` Git tag 时触发。它在 GitHub 托管的 Ubuntu runner 上运行冻结锁文件安装、回归测试、Git 源码安装验收、三个包的构建和仓库外安装验收。`scripts/publish-npm.mjs` 在发布前校验 tarball 哈希；同版本同内容会跳过，同版本不同内容会失败并要求增加版本号。首次推送该工作流前，先把本地源码改动提交并推送到仓库；标记的提交必须包含这份工作流和要发布的版本。
 
@@ -72,38 +66,8 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 以后发布时，先为发生变更的包更新 `package.json` 版本并提交推送，再在该提交创建并推送一个新 tag，例如 `npm-2026-09-24-1`。只改代码而不增加对应包的版本号会触发“同版本不同内容”保护，不会覆盖 npm 上已发布的内容；未变化的包会跳过。工作流成功后，在 npmjs.com 的 **Staged Packages** 页面逐个检查并点击 **Approve**，通过 2FA 后版本才会公开；也可以使用 `npm stage list <包名>` 查找 stage ID，再运行 `npm stage approve <stage-id>`。审批后到 npm registry 可查询可能有几分钟延迟。
 
-## 最新验收：主分支源码安装
+## 验收入口与证据范围
 
-2026-09-23，DSH 更新为 `1.0.5`，Web / MCP 保持 `0.1.2`。验证环境为 Windows x64 / Node.js 22.23.2 / pnpm 10.15.0 / Harness CLI 0.1.0-rc.6。
+日常回归执行 `pnpm test`；分发改动另执行 `pnpm pack:release`、`pnpm test:packages`；Git 源码安装入口、根 `prepare` 或 DSH exports 改动另执行 `pnpm test:git-install`。测试使用仓库内合成数据，不依赖父级知识库或游戏工程。
 
-- 冻结锁文件安装通过，根 `prepare` 自动生成 DSH 插件。
-- 完整回归 181 项通过，0 失败、0 跳过。
-- 从不含构建产物的临时 Git 仓库通过 `#master` 安装成功；验证 bundle、Client、Skill、预设、Worker 和 PNG。
-- 在临时 `DSH_HOME` 中执行实际 `dsh plugin --profile web add` 成功，profile 自动登记插件，`--dump-config` 包含主插件、Skill 和预设三项配置。
-- 重建 `dsh-plugin-beyond-simulator-1.0.5.tgz`、`beyond-simulator-web-0.1.2.tgz`、`qxqy-simulator-mcp-0.1.2.tgz`；三个包均通过仓库外安装验收，校验值、README、Skill 与预设内容已核对。
-
-以上 Git 安装使用本地 Git 源，未验证公开 GitHub 地址；代码尚未推送，用户的 Harness profile 未改动。没有新增发布分支。本机没有 Docker，未实跑容器。
-
-## 先前本地构建
-
-2026-09-23，重新构建并验证以下安装包：
-
-| 产品 | 包名 | 版本 | 本地安装包 |
-|---|---|---|---|
-| Harness 插件 | `dsh-plugin-beyond-simulator` | `1.0.4` | `release/dsh-plugin-beyond-simulator-1.0.4.tgz` |
-| Web | `beyond-simulator-web` | `0.1.2` | `release/beyond-simulator-web-0.1.2.tgz` |
-| MCP | `qxqy-simulator-mcp` | `0.1.2` | `release/qxqy-simulator-mcp-0.1.2.tgz` |
-
-Web 启动命令同步改为 `beyond-simulator-web`；Docker 配置和安装验收使用同一包名。
-
-验证环境为 Windows x64 / Node.js 22.23.2 / pnpm 10.15.0：冻结锁文件安装成功；181 项回归通过，0 失败、0 跳过；三个安装包在源码仓库外安装并通过 DSH、Web 和 MCP 验收。另核对了包名、版本、SHA-256、包内 README、Skill 与 Agent 预设和源文件一致。未安装到用户的 Harness profile，未公开发布；本机没有 Docker，未实跑容器。
-
-## 先前验收记录
-
-2026-09-22，Windows x64 / Node.js 22.23.2 / pnpm 10.15.0：
-
-- 冻结锁文件安装成功；本机具备外部样本时，完整回归 181 项通过，0 失败、0 跳过。
-- 依赖父级知识库样本的 19 项用例已于 2026-09-24 移除，测试套件改为完全自包含：当前回归 162 项通过，0 失败、0 跳过。
-- 三个 tarball 在源码目录外、禁用安装生命周期脚本的临时 npm 工程中通过 Controller、Worker、GIA、PNG、Web 编辑保存、MCP stdio 验证。
-- 实际浏览器检查 Web 编辑界面、修改属性、保存落盘与独立试玩页渲染/暂停；Harness Client 通过编译及 ModuleLoader 导出契约检查，没有修改用户现有 Harness profile。
-- 本机没有 Docker，未实跑容器；尚未验证 Linux/macOS 或公开 npm/GitHub 安装渠道。以上都是模拟器与分发验证，不新增千星真机结论。
+2026-09-23 在 Windows x64 / Node.js 22.23.2 / pnpm 10.15.0 / Harness CLI 0.1.0-rc.6 验证过纯源码 Git 安装、临时 DSH profile 注册，以及三个 tarball 的仓库外安装。依据为 `scripts/smoke-git-install.mjs`、`scripts/smoke-installed.mjs` 等验收入口；`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。这份历史结论不替代当前版本的重新验收；该次未覆盖 Docker、Linux/macOS 和公开安装渠道。

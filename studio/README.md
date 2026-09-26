@@ -29,7 +29,7 @@ DSH 正式交付位于 `../dsh-plugin/`，编辑路径进程内，试玩使用�
 
 最初采用“缺失平台槽从标准画布补齐”的运行时局部修复；该方案已由四平台唯一来源及入口迁移替代（`superseded_by=四平台唯一来源及入口迁移`）。原始日记旧格式现在可以直接导入，STAGE 在迁移及 GIA 往返后均为 1280×720。同步关闭仅写当前平台；同步开启将修改投影到另外三个平台，使用各平台自身父矩形。切换宽高比不写入参数，同平台共享锚点布局。
 
-自动迁移回归：`test/platform-layout.test.mjs` 覆盖 version 1–3、旧单资产和包装项目输入、冲突及缺失提示、输入不变、再次读取幂等、GIA 尺寸保留、新版严格验证。Windows / Node 22.23.2 下聚焦测试 10/10、全仓测试通过；这属于模拟器观察，未增加真机证据。[研究稿](layout-authority-plan.md) 保留历史方案，当前策略以本节和源码为准。
+自动迁移回归：`test/platform-layout.test.mjs` 覆盖 version 1–3、旧单资产和包装项目输入、冲突及缺失提示、输入不变、再次读取幂等、GIA 尺寸保留、新版严格验证。Windows / Node 22.23.2 下聚焦测试 10/10、全仓测试通过；这属于模拟器观察，未增加真机证据。
 
 证据：2026-09-24，Windows / Node 22.23.2，`evidence_source=observed`，运行端 `simulator`，`device_status=pending`（新版 GIA 尚未真机导入）。自包含回归 `test/platform-layout.test.mjs` 覆盖四平台独立值、五视口 × 同步开关 × 独立/整合 GIA 往返、独立手柄父矩形、失败导入及编辑不部分提交、读取不改变数据和零分量保留；相关布局测试 52/52，`pnpm install --frozen-lockfile`、根 `pnpm test` 通过。位置/尺寸含固定几何断言；GIA 编解码往返只证明模拟器支持字段的一致性，不代表真机像素一致。
 

@@ -1,4 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { normalizeScriptSync } from './script-sync-config.js'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { applyPatch, createProject, snapshotProject } from './ui/project.js'
 import { assertSaveVersion } from './ui/migrate-layout.js'
@@ -75,6 +77,29 @@ const ASSET_LABELS = {
 
 function assetKey(assetType) {
   return assetType === CLIENT_ASSET ? 'client' : 'server'
+}
+
+function controlGuid(value) {
+  const numeric = typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value.trim()))
+  if (!numeric || !isValidGuid(value)) throw new Error('控件索引必须是 1–2147483647 范围内的整数')
+  return Number(value)
+}
+
+function readControlGuidChanges(raw = []) {
+  if (!Array.isArray(raw)) throw new Error('controlGuidChanges 必须是数组')
+  const ids = new Set()
+  return raw.map((entry) => {
+    if (!entry || typeof entry.id !== 'string' || !entry.id || ids.has(entry.id)
+      || ![SERVER_ASSET, CLIENT_ASSET].includes(entry.controlAsset)
+      || typeof entry.controlId !== 'string' || !entry.controlId || typeof entry.controlName !== 'string') {
+      throw new Error('controlGuidChanges 包含无效或重复的变更记录')
+    }
+    ids.add(entry.id)
+    return {
+      id: entry.id, controlAsset: entry.controlAsset, controlId: entry.controlId, controlName: entry.controlName,
+      oldGuid: controlGuid(entry.oldGuid), newGuid: controlGuid(entry.newGuid),
+    }
+  })
 }
 
 function normalizeScriptGuid(raw) {
@@ -172,6 +197,8 @@ export function createStudio(seed, options = {}) {
     ? options.workspacePath
     : ''
   const isSave = seed?.format === SAVE_FORMAT && seed.assets
+  let controlGuidChanges = readControlGuidChanges(seed?.controlGuidChanges)
+  let scriptSync = normalizeScriptSync(seed?.scriptSync)
   const seededProject = isSave ? null : createProject(seed, { warnings: migrationWarnings })
   const projects = {
     server: isSave && seed.assets.server ? createProject(seed.assets.server, { warnings: migrationWarnings }) : defaultProject(SERVER_ASSET),
@@ -210,7 +237,7 @@ export function createStudio(seed, options = {}) {
     const guid = allocateScriptGuid(entry.guid)
     return { ...entry, guid, id: String(guid) }
   }
-  for (const raw of seedScriptList(seed)) scripts.push(adoptScript(raw))
+  absorbScripts(seedScriptList(seed))
   let serverLogic = normalizeServerLogic(seed?.serverLogic)
   let play = null
   // 试玩侧设备画布：显式指定后粘性生效（隐式重启沿用），playStop 后回到跟随编辑器画布。
@@ -318,6 +345,7 @@ export function createStudio(seed, options = {}) {
       if (node.kind === 'server-container') return
       rows.push(JSON.stringify({
         kind: node.kind,
+        guid: node.guid,
         name: node.name,
         text: node.text ?? null,
         imageId: node.imageId ?? null,
@@ -390,6 +418,8 @@ export function createStudio(seed, options = {}) {
       meta: { name: currentSaveName() },
       activeAssetType,
       serverLogic,
+      controlGuidChanges,
+      scriptSync,
       assets: {
         server: projects.server,
         client: projects.client,
@@ -414,6 +444,8 @@ export function createStudio(seed, options = {}) {
     snap.mountTargets = mountTargetRows()
     snap.serverLogic = serverLogic
     snap.migrationWarnings = [...migrationWarnings]
+    snap.controlGuidChanges = toJson(controlGuidChanges)
+    snap.scriptSync = toJson(scriptSync)
     assertNoUndefined(snap)
     return snap
   }
@@ -460,8 +492,78 @@ export function createStudio(seed, options = {}) {
     return get()
   }
 
+  function setControlGuid(op) {
+    const project = checkRevision(op)
+    const node = findNode(project.root, op.id ?? project.selectedId)
+    if (!node || node.kind === 'server-container') throw new Error('仅客户端控件或客户端控件模板允许修改索引')
+    const guid = controlGuid(op.guid)
+    const oldGuid = controlGuid(node.guid)
+    if (guid === oldGuid) return get()
+    const nodes = []
+    for (const entry of Object.values(projects)) {
+      walk(entry.root, (candidate) => {
+        if (entry === projects.client && candidate.kind === 'server-container') return
+        nodes.push({ node: candidate, project: entry })
+      })
+    }
+    if (nodes.some((entry) => entry.node !== node && Number(entry.node.guid) === guid)
+      || scripts.some((script) => Number(script.guid) === guid)) {
+      throw new Error(`控件索引 ${guid} 已被其他控件或脚本占用`)
+    }
+    // These three fields are explicit GUID references. Internal ids, button
+    // state ids, image ids and Lua numbers must never be replaced by value.
+    const references = []
+    const collectReference = (owner, key, entry) => {
+      const value = owner?.[key]
+      if ((typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value.trim())))
+        && Number(value) === oldGuid) references.push({ owner, key, project: entry.project })
+    }
+    for (const entry of nodes) {
+      collectReference(entry.node, 'referencedPrefabId', entry)
+      collectReference(entry.node, 'itemPrefabId', entry)
+      collectReference(entry.node.giaRaw, 'templateRefSlot', entry)
+    }
+    if (references.length && nodes.filter((entry) => Number(entry.node.guid) === oldGuid).length !== 1) {
+      throw new Error(`旧索引 ${oldGuid} 在多棵资产树中重复，无法确定模板引用归属；请先消除歧义后修改`)
+    }
+    const change = {
+      id: randomUUID(), controlAsset: activeAssetType, controlId: node.id,
+      controlName: node.name, oldGuid, newGuid: guid,
+    }
+    // All validation is complete before changing either tree or the ledger.
+    node.guid = guid
+    const changedProjects = new Set([project])
+    for (const { owner, key, project: referencedProject } of references) {
+      owner[key] = typeof owner[key] === 'string' ? String(guid) : guid
+      changedProjects.add(referencedProject)
+    }
+    controlGuidChanges.push(change)
+    for (const changed of changedProjects) changed.version += 1
+    return get()
+  }
+
+  function acknowledgeControlGuidChanges(op) {
+    const project = checkRevision(op)
+    if (!Array.isArray(op.changeIds) || !op.changeIds.length
+      || op.changeIds.some((id) => typeof id !== 'string' || !controlGuidChanges.some((change) => change.id === id))) {
+      throw new Error('请明确指定已核对 Lua 引用的有效索引变更记录 changeIds')
+    }
+    const acknowledged = new Set(op.changeIds)
+    controlGuidChanges = controlGuidChanges.filter((change) => !acknowledged.has(change.id))
+    project.version += 1
+    return get()
+  }
+
   function patch(op) {
     if (!op || typeof op !== 'object') throw new Error('patch requires op')
+    if (op.op === 'setScriptSync') {
+      const project = checkRevision(op)
+      scriptSync = normalizeScriptSync(op.config)
+      project.version += 1
+      return get()
+    }
+    if (op.op === 'setControlGuid') return setControlGuid(op)
+    if (op.op === 'acknowledgeControlGuidChanges') return acknowledgeControlGuidChanges(op)
     if (op.op === 'setServerLogic') {
       const project = checkRevision(op)
       serverLogic = normalizeServerLogic(op.logic)
@@ -487,6 +589,7 @@ export function createStudio(seed, options = {}) {
       const next = defaultProject(activeAssetType)
       next.version = project.version + 1
       projects[assetKey(activeAssetType)] = next
+      controlGuidChanges = controlGuidChanges.filter((change) => change.controlAsset !== activeAssetType)
       reconcileScriptMounts()
       return get()
     }
@@ -503,6 +606,15 @@ export function createStudio(seed, options = {}) {
   }
 
   function exportData(format = 'json', requestedAssetType = '') {
+    const result = exportDataRaw(format, requestedAssetType)
+    if (controlGuidChanges.length && !['save', 'archive'].includes(String(format).toLowerCase())) {
+      const warnings = controlGuidChanges.map((change) => `控件索引待核对 Lua 引用：${ASSET_LABELS[change.controlAsset]} / ${change.controlName} (${change.controlId})：${change.oldGuid} → ${change.newGuid}。请按语义更新脚本中的控件索引引用，核对后确认变更记录 ${change.id}；不要全局替换同值数字。`)
+      result.warnings = [...new Set([...(result.warnings || []), ...warnings])]
+    }
+    return result
+  }
+
+  function exportDataRaw(format = 'json', requestedAssetType = '') {
     const normalized = String(format).toLowerCase()
     if (normalized === 'save' || normalized === 'archive') {
       const data = Buffer.from(JSON.stringify(archiveData(), null, 2), 'utf8')
@@ -614,7 +726,10 @@ export function createStudio(seed, options = {}) {
       : currentProject()
     const baseName = assetExportStem(project)
     if (normalized === 'json') {
-      const payload = toJson({ ...project, scripts: scriptsInProject(project.meta.assetType) })
+      const payload = toJson({
+        ...project, scripts: scriptsInProject(project.meta.assetType),
+        controlGuidChanges: controlGuidChanges.filter((change) => change.controlAsset === project.meta.assetType),
+      })
       const data = Buffer.from(JSON.stringify(payload, null, 2), 'utf8')
       return toJson({
         filename: `${baseName}.json`,
@@ -677,21 +792,21 @@ export function createStudio(seed, options = {}) {
       if (next?.project) next = next.project
       if (next?.format === SAVE_FORMAT && next?.assets) {
         assertSaveVersion(next.version)
-        // Validate both assets before committing either: unsupported layouts
-        // must not leave a half-imported archive in the active session.
-        const nextServer = createProject(next.assets.server || createDefaultProject(), { warnings })
-        const nextClient = createProject(next.assets.client || createDefaultClientTemplateProject(), { warnings })
-        const nextServerLogic = normalizeServerLogic(next.serverLogic)
-        projects.server = nextServer
-        projects.client = nextClient
+        // Prepare the complete archive (including scripts and the GUID-change
+        // ledger) before committing; no validation failure may partially import.
+        const preparedStudio = createStudio(next)
+        warnings.push(...preparedStudio.get().migrationWarnings)
+        const prepared = preparedStudio.archiveData()
+        projects.server = prepared.assets.server
+        projects.client = prepared.assets.client
         migrationWarnings = [...warnings]
         activeAssetType = next.activeAssetType === CLIENT_ASSET ? CLIENT_ASSET : SERVER_ASSET
         explicitSaveName = String(next.meta?.name || basename(filename).replace(/\.json$/i, '') || explicitSaveName)
-        serverLogic = nextServerLogic
-        scripts = []
+        serverLogic = prepared.serverLogic
+        scripts = prepared.assets.scripts
+        controlGuidChanges = prepared.controlGuidChanges
+        scriptSync = prepared.scriptSync
         usedScriptGuids.clear()
-        absorbScripts(seedScriptList(next))
-        reconcileScriptMounts()
         return toJson({ snapshot: get(), warnings, metadata: { format: SAVE_FORMAT } })
       }
     } else if (normalized === 'lua') {
@@ -713,6 +828,7 @@ export function createStudio(seed, options = {}) {
       metadata = imported.metadata
       if (imported.clientProject) {
         projects.client = createProject(imported.clientProject)
+        controlGuidChanges = controlGuidChanges.filter((change) => change.controlAsset !== CLIENT_ASSET)
         warnings.push('整合包已拆回「UI控件-服务端」与「UI控件-客户端」；客户端模板边界已保留。')
       }
       const mountByGuid = new Map()
@@ -740,9 +856,18 @@ export function createStudio(seed, options = {}) {
       throw new Error(`unsupported import format: ${format}`)
     }
     const importedProject = createProject(next, { warnings })
+    const importedChanges = readControlGuidChanges(next?.controlGuidChanges)
+    if (importedChanges.some((change) => change.controlAsset !== importedProject.meta.assetType)) {
+      throw new Error('单资产 JSON 的索引变更记录必须属于当前导入资产')
+    }
+    const nextChanges = readControlGuidChanges([
+      ...controlGuidChanges.filter((change) => change.controlAsset !== importedProject.meta.assetType),
+      ...importedChanges,
+    ])
     migrationWarnings = [...warnings]
     const key = assetKey(importedProject.meta.assetType)
     projects[key] = importedProject
+    controlGuidChanges = nextChanges
     activeAssetType = importedProject.meta.assetType
     const project = projects[key]
     if (filename) {
@@ -820,6 +945,7 @@ export function createStudio(seed, options = {}) {
       canvasId: playCanvasId,
       playerCount: playPlayerCount,
       viewPlayerIndex: playViewPlayerIndex,
+      language: options.language || '',
     })
     return playGet(options)
   }

@@ -1,10 +1,12 @@
 import { Worker } from 'node:worker_threads'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
 import { createStudio } from '../index.js'
 import { renderEditorPng, renderScenePng } from '../host-png.js'
 import { CANVAS_PRESETS } from '../constants.js'
 import { listWorkspaceArchives, resolveWorkspaceFile, resolveWorkspaceOutput, resolveWorkspaceRoot } from './workspace.js'
+import { readClientLanguageType } from './client-language.js'
+import { ScriptSync, contentHash, discoverScriptDirectories } from './script-sync.js'
 
 // Keep the interactive default short, but allow project replay runners to raise
 // it for control-heavy pixel-art scenes and long deterministic golden cases.
@@ -29,6 +31,9 @@ export class SimulatorController {
     this.sequence = 1
     this.lock = Promise.resolve()
     this.archivePath = ''
+    this.archiveStamp = ''
+    this.savedArchive = ''
+    this.scriptSync = new ScriptSync(this)
   }
 
   /** Serialize calls for one project handle, including worker operations. */
@@ -45,11 +50,38 @@ export class SimulatorController {
   }
 
   get() {
-    return this.studio.get()
+    return { ...this.studio.get(), storage: { path: this.archivePath } }
+  }
+
+  scriptSyncAction(action, args = {}) {
+    if (action === 'discover') return discoverScriptDirectories()
+    if (action === 'status') return { config: this.get().scriptSync, lastResult: this.scriptSync.lastResult }
+    if (action === 'configure') {
+      if (!Number.isInteger(args.expectedRevision)) throw new Error('expectedRevision is required')
+      return this.patch({ op: 'setScriptSync', config: args.config, expectedRevision: args.expectedRevision })
+    }
+    if (action === 'preview') return this.scriptSync.preview()
+    throw new Error('unknown script sync action (AI 可配置和预览；复制需在编辑器中确认)')
+  }
+
+  assertSavedArchive() {
+    if (!this.archivePath || this.savedArchive !== JSON.stringify(this.studio.archiveData())) throw new Error('请先保存当前完整存档，再确认复制')
+    const path = resolveWorkspaceFile(this.activeWorkspacePath(), this.archivePath)
+    if (contentHash(readFileSync(path)) !== this.archiveStamp) throw new Error('存档文件已变化，请重新加载并检查')
+  }
+
+  saveForScriptSync(path, expectedRevision) {
+    if (expectedRevision !== this.get().version) throw new Error('revision conflict: reload before saving')
+    const absolute = resolveWorkspaceOutput(this.activeWorkspacePath(), path)
+    if (existsSync(absolute)) {
+      const original = this.archivePath ? resolveWorkspaceOutput(this.activeWorkspacePath(), this.archivePath) : ''
+      if (absolute !== original || contentHash(readFileSync(absolute)) !== this.archiveStamp) throw new Error('File changed or already exists; load it again or save under a new path')
+    }
+    return this.saveArchive(path)
   }
 
   patch(op) {
-    return this.studio.patch(op)
+    return { ...this.studio.patch(op), storage: { path: this.archivePath } }
   }
 
   listArchives() {
@@ -63,6 +95,8 @@ export class SimulatorController {
     const bytes = readFileSync(absolute)
     const result = this.studio.importData('json', bytes.toString('base64'), basename(absolute))
     this.archivePath = String(path).trim().replaceAll('\\', '/')
+    this.archiveStamp = contentHash(bytes)
+    this.savedArchive = JSON.stringify(this.studio.archiveData())
     return result
   }
 
@@ -75,6 +109,8 @@ export class SimulatorController {
     const data = Buffer.from(JSON.stringify(this.studio.archiveData(), null, 2) + '\n', 'utf8')
     writeFileSync(absolute, data)
     this.archivePath = requestedPath.replaceAll('\\', '/')
+    this.archiveStamp = contentHash(data)
+    this.savedArchive = JSON.stringify(this.studio.archiveData())
     return {
       path: this.archivePath,
       bytes: data.length,
@@ -155,6 +191,10 @@ export class SimulatorController {
   }
 
   async play(action, args = {}, signal) {
+    if ((action === 'start' || action === 'device') && !args.language) {
+      const language = readClientLanguageType()
+      if (language) args = { ...args, language }
+    }
     if (action === 'start') {
       await this.terminateWorker()
       return this.request('start', {

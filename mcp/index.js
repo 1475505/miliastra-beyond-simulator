@@ -54,6 +54,11 @@ const handleProperty = {
 
 const tools = [
   {
+    name: 'qxqy_script_sync',
+    description: '配置实机 Lua 目录复制同步或检查差异。configure 的 args 包含 config(version:1, workspaceDir, clientImportRoot, clientSubdir) 和 expectedRevision；配置随存档保存。AI 不执行复制：保存存档后请用户在 Web 编辑器加载该存档，在 Lua 脚本页面检查并确认复制。',
+    inputSchema: objectSchema({ ...handleProperty, action: { type: 'string', enum: ['discover', 'status', 'configure', 'preview'] }, args: { type: 'object', additionalProperties: true } }, ['handle', 'action']),
+  },
+  {
     name: 'qxqy_project_open',
     description: '在本 MCP 进程打开工作区存档，或创建一个新的空工程。不会刷新 Web 预览；显示已有存档请调用 qxqy_preview_open。返回后续工具使用的工程句柄；path 必须是工作区内相对路径。',
     inputSchema: objectSchema({
@@ -70,12 +75,12 @@ const tools = [
   },
   {
     name: 'qxqy_studio_get',
-    description: '读取指定工程的无损 Authoring JSON 快照、当前 revision、脚本挂载、画布和服务端逻辑。写操作前应先调用它获取最新 revision。',
+    description: '读取指定工程的无损 Authoring JSON 快照、当前 revision、脚本挂载、画布、服务端逻辑与 controlGuidChanges。若有索引变更记录，必须按控件身份同步存档 Lua source 和相关源文件中的索引引用，核对后再确认清除。写操作前应先获取最新 revision。',
     inputSchema: objectSchema(handleProperty, ['handle']),
   },
   {
     name: 'qxqy_studio_patch',
-    description: '修改指定工程。op 对象必须包含 expectedRevision；发生 revision conflict 时先重新 get，再基于新快照重算 patch。',
+    description: '修改指定工程。op 必须包含 expectedRevision；冲突时先重新 get 再重算。客户端控件索引用 setControlGuid（id、guid），修改后必须语义核对并更新 Lua 引用；完成后用 acknowledgeControlGuidChanges（changeIds）确认记录，禁止只改索引或盲目替换全部同值数字。',
     inputSchema: objectSchema({
       ...handleProperty,
       op: { type: 'object', description: 'studio.patch 操作对象，例如 {"op":"set","id":"...","key":"text","value":"...","expectedRevision":1}。', additionalProperties: true },
@@ -182,6 +187,7 @@ async function callTool(name, args = {}, signal) {
       preview: { status: 'not-requested', message: 'Saved to disk. Call qxqy_preview_open with the returned path to switch or confirm the Web preview.' },
     }
     if (name === 'qxqy_studio_get') return controller.get()
+    if (name === 'qxqy_script_sync') return controller.scriptSyncAction(args.action, args.args || {})
     if (name === 'qxqy_studio_patch') return controller.patch(args.op)
     if (name === 'qxqy_studio_play') return controller.play(args.action, args.args || {}, signal)
     if (name === 'qxqy_studio_ui_screenshot') return controller.uiScreenshot()

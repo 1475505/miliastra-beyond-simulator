@@ -50,6 +50,7 @@ LuaRuntime          时钟、日志、模板、脚本映射、信号/变量
 - 按键跨控件派发：创作者预告后续版本同层级上层控件先接收事件。模拟器按当前 `children[]` 的前到后层序派发；同一根容器内回调返回 `true` 后停止后续派发。前半是待版更规则，后半是依据现有 API 文案的模拟器策略；新版真机尚未验证。父子层级和不同容器的官方顺序仍未确定。
 - 网格视窗方法：调用即抛错。
 - `GetText`：原样返回 id。
+- `GetLanguageType`：未传入时默认 `LanguageChs`。DSH / Web / MCP 试玩启动时读取本机「原神」`output_log.txt` 最近一次 `Request to set language`，映射到 `LanguageType` 的 Name；读不到或无法映射则仍用默认。这不是真机契约。
 - 整数宽度：Fengari 32-bit；现有 id 均在范围内。
 - Lua 表面只开放官方 API 文档列出的字段/方法。Authoring 内部字段（`enableFill`、按钮四态、网格 cellSize 等）不进 userdata。
 
@@ -76,8 +77,6 @@ LuaRuntime          时钟、日志、模板、脚本映射、信号/变量
 | `src/enums.js` | Enum 名表 |
 | `src/ease.js` | 缓动 |
 
-## 用仓库根 `lua/` 测试
+## 回归入口
 
-- `点击星星.lua`：预置树 + 点击 + Tick。
-- `2048_ui.lua`：`textBoxPrefabId` 模板 + 动态实例化。
-- `割绳子机制实现/*.lua`：`require("config")` 等按**文件名**注册（无目录前缀）。
+本包运行 `npm test`，执行 `test/runtime.test.mjs` 和 `test/require-native.test.mjs`。用例采用仓库内合成脚本与控件树，不依赖外部游戏工程。

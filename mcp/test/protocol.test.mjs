@@ -76,6 +76,7 @@ test('MCP handshake exposes simulator tools and supports an edit/save round trip
     const listed = await server.request('tools/list')
     const names = listed.result.tools.map((tool) => tool.name)
     assert.deepEqual(names, [
+      'qxqy_script_sync',
       'qxqy_project_open', 'qxqy_project_save', 'qxqy_studio_get', 'qxqy_studio_patch',
       'qxqy_studio_play', 'qxqy_studio_ui_screenshot', 'qxqy_studio_play_screenshot', 'qxqy_studio_load',
       'qxqy_preview_status', 'qxqy_preview_open',
@@ -99,6 +100,14 @@ test('MCP handshake exposes simulator tools and supports an edit/save round trip
     })
     assert.equal(patched.result.structuredContent.save.name, 'MCP test')
 
+    const syncConfig = { version: 1, workspaceDir: '', clientImportRoot: join(workspace, 'client'), clientSubdir: '' }
+    const configured = await server.request('tools/call', {
+      name: 'qxqy_script_sync', arguments: { handle, action: 'configure', args: { config: syncConfig, expectedRevision: patched.result.structuredContent.version } },
+    })
+    assert.deepEqual(configured.result.structuredContent.scriptSync, syncConfig)
+    const refused = await server.request('tools/call', { name: 'qxqy_script_sync', arguments: { handle, action: 'apply', args: { confirmed: true } } })
+    assert.equal(refused.result.isError, true)
+
     const saved = await server.request('tools/call', {
       name: 'qxqy_project_save',
       arguments: { handle, path: 'nested/test.save.json' },
@@ -109,6 +118,7 @@ test('MCP handshake exposes simulator tools and supports an edit/save round trip
     const savedJson = JSON.parse(readFileSync(join(workspace, 'nested', 'test.save.json'), 'utf8'))
     assert.equal(savedJson.format, 'qxqy-simulator-save')
     assert.equal(savedJson.meta.name, 'MCP test')
+    assert.deepEqual(savedJson.scriptSync, syncConfig)
 
     const screenshot = await server.request('tools/call', {
       name: 'qxqy_studio_ui_screenshot',

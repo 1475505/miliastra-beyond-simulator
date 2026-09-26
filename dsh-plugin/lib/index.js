@@ -47,7 +47,9 @@ export class SimulatorController extends SharedSimulatorController {
 
   importData(format, data, filename) {
     this.touch()
-    return this.studio.importData(format, data, filename)
+    const result = this.studio.importData(format, data, filename)
+    this.archivePath = ''; this.archiveStamp = ''; this.savedArchive = ''
+    return { ...result, snapshot: this.get() }
   }
 
   listArchives() {
@@ -59,10 +61,8 @@ export class SimulatorController extends SharedSimulatorController {
     this.touch()
     const workspace = this.studio.get().workspace?.path || ''
     const abs = resolveWorkspaceArchive(workspace, path)
-    const bytes = readFileSync(abs)
-    const result = this.studio.importData('json', bytes.toString('base64'), basename(abs))
-    this.archivePath = relative(realpathSync(workspace), abs).replaceAll('\\', '/')
-    return result
+    const result = super.loadArchive(relative(realpathSync(workspace), abs))
+    return { ...result, snapshot: this.get() }
   }
 
   async play(action, rawArgs = {}, signal) {
@@ -287,6 +287,15 @@ function readBody(request) {
 
 function registerTools(ctx, registry) {
   ctx.tools.register(defineTool({
+    name: 'qxqy_script_sync',
+    description: '实机 Lua 目录复制同步：discover/status/configure/preview。configure 的 args 包含 config(version:1, workspaceDir, clientImportRoot, clientSubdir) 和 expectedRevision；配置随完整存档保存。preview 只检查差异，复制必须由用户在 Lua 脚本页面检查并确认。',
+    parameters: { action: { type: 'string', enum: ['discover', 'status', 'configure', 'preview'], required: true }, args: { type: 'json' } },
+    output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }] },
+    timeoutMs: 10_000,
+    isConcurrencySafe: () => false,
+    async execute(args, exec) { return registry.get(toolSessionId(exec), sessionWorkspace(exec)).scriptSyncAction(args.action, jsonParam(args.args) || {}) },
+  }))
+  ctx.tools.register(defineTool({
     name: 'qxqy_studio_get',
     description: '读取当前 DeepSeek Harness 会话的千星 UI 编辑器无损 JSON 快照。',
     parameters: {},
@@ -384,7 +393,7 @@ function registerTools(ctx, registry) {
 
   ctx.tools.register(defineTool({
     name: 'qxqy_studio_patch',
-    description: '修改当前会话的千星 UI 工程。op 必须携带 expectedRevision 以防止陈旧写入。',
+    description: '修改当前会话的千星 UI 工程。op 必须携带 expectedRevision。客户端控件索引用 setControlGuid（id、guid）；必须根据快照 controlGuidChanges 更新存档 Lua source 和相关源文件的索引引用并核对，完成后用 acknowledgeControlGuidChanges（changeIds）确认，禁止盲目替换全部同值数字。',
     parameters: {
       op: { type: 'json', required: true, description: '编辑器 patch 对象。' },
     },
@@ -478,6 +487,9 @@ function registerApi(ctx, registry) {
         else if (action === 'import') value = controller.importData(body.format, body.data, body.filename)
         else if (action === 'archives') value = controller.listArchives()
         else if (action === 'load-archive') value = controller.loadArchive(body.path)
+        else if (action === 'save') value = controller.saveForScriptSync(body.path, body.expectedRevision)
+        else if (action === 'script-sync') value = controller.scriptSyncAction(body.action, body.args || {})
+        else if (action === 'script-sync-apply') value = controller.scriptSync.apply(body)
         else if (action === 'play') value = await controller.play(body.action, body.args || {}, abort.signal)
         else throw new Error('unknown API action')
         sendJson(response, 200, { ok: true, value, error: null })
