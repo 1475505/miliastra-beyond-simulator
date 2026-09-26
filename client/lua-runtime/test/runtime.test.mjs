@@ -120,15 +120,53 @@ end
   assert.match(t, /eq\ttrue\tfalse/)
 })
 
-test('script.path exposes the mounted script short name', () => {
+test('script.path preserves mapping directories, including the device import prefix', () => {
+  // The device report retains default_import_file/ in script.path. The other
+  // cases pin the pre-af397ac separator/extension normalization policy.
+  for (const [path, expectedPath] of [
+    ['levelScript.lua', 'levelScript'],
+    ['default_import_file/levelScript', 'default_import_file/levelScript'],
+    ['default_import_file/levelScript.lua', 'default_import_file/levelScript'],
+    ['workspace\\path\\Example.lua', 'workspace/path/Example'],
+  ]) {
+    const rt = createRuntime()
+    try {
+      const root = rt.addRoot({ active: true, name: 'R', kind: 'container' })
+      rt.mountScript({
+        path,
+        control: root,
+        params: { expectedPath },
+        source: `function OnStart()
+          assert(script.path == script:GetParam('expectedPath'), 'unexpected script path: ' .. script.path)
+          assert(script.object:GetScriptByPath(script.path) == script)
+        end`,
+      })
+      assert.deepEqual(rt.mountErrors, [], path)
+    } finally {
+      rt.destroy()
+    }
+  }
+})
+
+test('GetScriptByPath distinguishes mounted scripts with the same basename', () => {
   const rt = createRuntime()
-  const root = rt.addRoot({ active: true, name: 'R', kind: 'container' })
-  rt.mountScript({
-    path: 'workspace/path/Example.lua',
-    control: root,
-    source: 'function OnStart() if script.path ~= "Example" then error("unexpected script path") end end',
-  })
-  assert.equal(rt.mountErrors.length, 0)
+  try {
+    const root = rt.addRoot({ active: true, name: 'R', kind: 'container' })
+    for (const directory of ['one', 'two']) {
+      rt.mountScript({
+        path: `${directory}/Example.lua`,
+        control: root,
+        source: `function OnStart()
+          assert(script.object:GetScriptByPath('${directory}/Example') == script)
+          assert(script.object:GetScriptByPath('Example') == nil)
+        end`,
+      })
+    }
+    assert.deepEqual(rt.mountErrors, [])
+    assert.notEqual(root.GetScriptByPath('one/Example'), root.GetScriptByPath('two/Example'))
+  } finally {
+    rt.destroy()
+  }
 })
 
 test('Instantiate nil in OnInit, object in OnStart; FindChild path', () => {

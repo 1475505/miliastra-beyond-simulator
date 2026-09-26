@@ -48,11 +48,6 @@ function enumName(v) {
   return v.Name || v.FullName || String(v)
 }
 
-function scriptDisplayPath(path) {
-  const normalized = String(path).replace(/\\/g, '/').replace(/\.lua$/i, '')
-  return normalized.split('/').pop() || normalized
-}
-
 export class LuaRuntime {
   constructor(options = {}) {
     this.canvasWidth = options.canvasWidth ?? 1600
@@ -944,6 +939,12 @@ export class LuaRuntime {
       (obj, key, val) => {
         const access = luaFieldAccess(obj, key)
         if (access === 'rw') {
+          // Both text control types declare these fields as integer. The device
+          // rejects fractional fontSize values (e.g. a scaled badge's 23.56).
+          if ((key === 'fontSize' || key === 'minimumFontSize') && !Number.isInteger(val)) {
+            const valueType = val === null ? 'nil' : typeof val
+            throw new Error(`bad argument #2 to '${key}' (integer expected, got ${valueType})`)
+          }
           const enumType = ENUM_FIELDS[key]
           obj[key] = enumType ? canonicalEnumItem(enumType, val) : val
           if (typeof obj.markPlayDirty === 'function') {
@@ -1187,11 +1188,7 @@ export class LuaRuntime {
       alive: true,
       scriptMappingId: this.resolveScriptMappingId(scriptMappingId),
       object: control,
-      // The editor mapping may use a workspace-relative path, but the client
-      // exposes the mounted script's short name through script.path. Keep the
-      // full mapping path for diagnostics and require registration while
-      // matching the value visible to gameplay Lua.
-      path: scriptDisplayPath(path),
+      path: this.normalizeRequirePath(path),
       enabled: true,
       updateEnabled: false,
       params,
