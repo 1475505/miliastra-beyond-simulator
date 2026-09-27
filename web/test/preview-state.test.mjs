@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SimulatorController } from 'qxqy-studio/host/controller'
@@ -88,6 +88,6 @@ test('the open API checks the expected workspace before changing preview state',
   })
   assert.equal(response.status, 400)
   assert.match((await response.json()).error, /workspace mismatch/)
-  assert.equal(app.session.workspace, workspace)
+  assert.equal(app.session.workspace, realpathSync(workspace))
   assert.equal(app.session.activePath, 'a.json')
 })

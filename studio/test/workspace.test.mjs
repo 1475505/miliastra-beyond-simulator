@@ -113,14 +113,18 @@ test('unreadable archives and directories produce one aggregated diagnostic', (t
   const readableFile = archiveAt(workspace, 'readable.save.json')
   const blockedDirectory = join(workspace, 'denied-directory')
   fs.mkdirSync(blockedDirectory)
+  // listWorkspaceArchives resolves the workspace root to its real path, so the fs
+  // calls receive realpath'd arguments. macOS tmpdir() lives behind the /var link.
+  const blockedFileReal = fs.realpathSync(blockedFile)
+  const blockedDirectoryReal = fs.realpathSync(blockedDirectory)
   const originalOpen = fs.openSync
   const originalOpenDir = fs.opendirSync
   mockBuiltin(t, 'openSync', (...args) => {
-    if (args[0] === blockedFile) throw Object.assign(new Error('access denied'), { code: 'EACCES' })
+    if (args[0] === blockedFileReal) throw Object.assign(new Error('access denied'), { code: 'EACCES' })
     return originalOpen(...args)
   })
   mockBuiltin(t, 'opendirSync', (...args) => {
-    if (args[0] === blockedDirectory) throw Object.assign(new Error('access denied'), { code: 'EACCES' })
+    if (args[0] === blockedDirectoryReal) throw Object.assign(new Error('access denied'), { code: 'EACCES' })
     return originalOpenDir(...args)
   })
   const { archives, discovery } = listWorkspaceArchives(workspace)

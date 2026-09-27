@@ -2,7 +2,7 @@
 
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { extname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash, timingSafeEqual } from 'node:crypto'
@@ -247,7 +247,19 @@ async function main() {
   process.once('SIGTERM', shutdown)
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// npm installs the bin as a symlink, so argv[1] keeps the link path while the ESM
+// loader resolves import.meta.url to the real path. Both sides must go through
+// realpath, otherwise the guard never holds and the process exits silently with 0.
+function isDirectRun() {
+  if (!process.argv[1]) return false
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+}
+
+if (isDirectRun()) {
   main().catch((error) => {
     process.stderr.write(`${error?.stack || error}\n`)
     process.exitCode = 1
