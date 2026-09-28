@@ -15,6 +15,7 @@
 - MCP 先用 `qxqy_project_open` 获取工程 `handle`，工程操作带该句柄；不要照搬 Harness 示例而遗漏参数。
 - 写操作使用最新 `expectedRevision`；修改后显式保存。内存修改和试玩不会自动写盘。
 - 三类资产为服务端 UI 容器、客户端 UI 模板、Lua 脚本。脚本仅挂客户端控件/模板；模板脚本随实例化运行。
+- 控件优先采用“少量基础模板 + Lua 实例化/修改属性”：用 `game.InstantiateClientUIControl` 等当前 API 创建，再由 Lua 设置布局、文本、图片与可见性。目前对 GIA 格式的认识不完整，在 UI 侧（存档/模板）直接定义复杂控件树或属性，导出或真机导入时可能不兼容；确需在 UI 侧定义的字段，记录为待真机核验项。
 - 保存为 `workspace/<slug>/<slug>.save.json`，文件头附近含 `"format": "qxqy-simulator-save"`；记录脚本挂载点。按需导出 GIA，GIA 不保存脚本挂载关系。
 - 如果 `scripts[].source` 非空，试玩优先使用内联源码；否则读 `path`。修改外部 Lua 时同步实际使用的源码，避免存档仍运行旧版本。
 
