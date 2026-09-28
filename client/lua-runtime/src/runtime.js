@@ -599,6 +599,10 @@ export class LuaRuntime {
       prefabIndex: Number(prefabIndex),
     })
     parent.addChild(control)
+    // Dynamic instances start above existing siblings. Keep editor/template
+    // child lists front-to-back; only raise this new root, before its scripts
+    // run so their explicit sibling changes remain authoritative.
+    control.SetAsLastSibling()
     walk(control, (child) => this.controlsById.set(child.Id, child))
     this.mountSpecScripts(spec, control)
     return control
