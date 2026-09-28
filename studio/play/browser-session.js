@@ -82,7 +82,20 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     }, delay)
   }
 
+  function clearMove() {
+    if (moveTimer) clearTimeout(moveTimer)
+    moveTimer = null
+  }
+
+  // Send a throttled move now so it cannot land after the down/up that follows it.
+  function flushMove() {
+    if (!moveTimer) return
+    clearMove()
+    void act('pointer', { type: 'move', ...lastMove })
+  }
+
   function reset() {
+    clearMove()
     running = false
     sceneRev = 0
     stopPolling()
@@ -153,10 +166,12 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     const onPointerDown = (event) => {
       if (!snapshot || !running || (isActive && !isActive())) return
       surface.setPointerCapture?.(event.pointerId)
+      flushMove()
       void act('pointer', { type: 'down', ...point(event, surface) })
     }
     const onPointerUp = (event) => {
       if (!snapshot || !running || (isActive && !isActive())) return
+      flushMove()
       void act('pointer', { type: 'up', ...point(event, surface) })
     }
     const onPointerMove = (event) => {
@@ -165,10 +180,11 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       if (moveTimer) return
       moveTimer = setTimeout(() => {
         moveTimer = null
-        if (lastMove) void act('pointer', { type: 'move', ...lastMove })
+        void act('pointer', { type: 'move', ...lastMove })
       }, PLAY_MOVE_THROTTLE_MS)
     }
     const onPointerLeave = () => {
+      clearMove()
       if (snapshot && running && (!isActive || isActive())) void act('pointer', { type: 'move', x: -1, y: -1 })
     }
     const onKeyDown = (event) => {
@@ -200,8 +216,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       surface.removeEventListener('pointerleave', onPointerLeave)
       keyTarget.removeEventListener('keydown', onKeyDown)
       keyTarget.removeEventListener('keyup', onKeyUp)
-      if (moveTimer) clearTimeout(moveTimer)
-      moveTimer = null
+      clearMove()
     }
     inputDisposers.push(dispose)
     return dispose

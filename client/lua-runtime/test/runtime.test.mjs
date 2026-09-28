@@ -1045,3 +1045,46 @@ end
   assert.match(logText(rt), /after\t120\t340/)
   rt.destroy()
 })
+
+test('removing one subscription keeps other listeners of the same Lua function alive', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'Root', kind: 'container', children: [
+    { active: true, name: 'A', kind: 'container' },
+    { active: true, name: 'B', kind: 'container' },
+    { active: true, name: 'C', kind: 'container' },
+  ] })
+  rt.mountScript({ path: 'shared-callback', control: root, source: `
+local K = Enum.KeyEventType
+local function F() print("F") end
+function OnStart()
+  local root = script.object
+  root:AddKeyEventListener(K.KeyboardCraftspersonKey1Down, F)
+  root:AddKeyEventListener(K.KeyboardCraftspersonKey2Down, F)
+  root:RemoveKeyEventListener(K.KeyboardCraftspersonKey1Down, F)
+  root:AddKeyEventListener(K.KeyboardCraftspersonKey3Down, function() print("G") end)
+  root:GetChild("A"):AddKeyEventListener(K.KeyboardCraftspersonKey4Down, F)
+  root:GetChild("B"):AddKeyEventListener(K.KeyboardCraftspersonKey4Down, F)
+  root:GetChild("C"):AddKeyEventListener(K.KeyboardCraftspersonKey5Down, function()
+    root:RemoveAllKeyEventListeners()
+    root:GetChild("B"):RemoveAllKeyEventListeners()
+  end)
+  root:GetChild("C"):AddKeyEventListener(K.KeyboardCraftspersonKey6Down, function()
+    root:AddKeyEventListener(K.KeyboardCraftspersonKey1Down, F)
+  end)
+end` })
+  const press = (n) => {
+    rt.logs.length = 0
+    rt.injectKey(`KeyboardCraftspersonKey${n}Down`)
+    return rt.logs.map(entry => entry.text)
+  }
+  assert.deepEqual(press(1), [])
+  assert.deepEqual(press(2), ['F'])
+  assert.deepEqual(press(3), ['G'])
+  rt.destroyControl(root.GetChild('A'))
+  assert.deepEqual(press(4), ['F'])
+  assert.deepEqual(press(5), [])
+  assert.equal(rt.luaFunctions.size, 2, 'only the two listeners on C stay referenced')
+  assert.deepEqual([2, 3, 4].flatMap(press), [])
+  assert.deepEqual(press(6), [])
+  assert.deepEqual(press(1), ['F'])
+})

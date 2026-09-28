@@ -359,13 +359,15 @@ export class Control {
     const list = store.get(typeName) || []
     list.push(fn)
     store.set(typeName, list)
+    this.runtime.retainLuaCallback?.(fn)
   }
 
   _removeListener(store, typeName, fn) {
     const list = store.get(typeName)
     if (!list) return
-    store.set(typeName, list.filter((x) => x !== fn))
-    this.runtime.unrefLuaCallback?.(fn)
+    const kept = list.filter((x) => x !== fn)
+    store.set(typeName, kept)
+    for (let i = kept.length; i < list.length; i++) this.runtime.unrefLuaCallback?.(fn)
   }
 
   _removeListeners(store, typeName) {

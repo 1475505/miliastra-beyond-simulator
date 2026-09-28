@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createPlaySession, keyEventName, PLAY_POLL_INTERVAL_MS } from '../play/browser-session.js'
+import { createPlaySession, keyEventName, PLAY_MOVE_THROTTLE_MS, PLAY_POLL_INTERVAL_MS } from '../play/browser-session.js'
+import { createStudio } from '../index.js'
 
 test('reloading a browser attaches to the existing paused game without a start or player change', async t => {
   const calls = [], rendered = []
@@ -86,4 +87,79 @@ test('shared play loop polls compact scene views and sends light input', async (
   assert.equal(PLAY_POLL_INTERVAL_MS, 33)
   assert.equal(keyEventName({ code: 'Digit1' }, 'Down'), 'KeyboardCraftspersonKey1Down')
   assert.equal(keyEventName({ code: 'KeyA' }, 'Down'), '')
+})
+
+const CURSOR_EVENTS = ['CursorDown', 'CursorUp', 'CursorClick', 'CursorBeginDrag', 'CursorDrag', 'CursorEndDrag']
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function bindStudioPlay(t) {
+  const studio = createStudio()
+  studio.patch({ op: 'addScript', controlId: 'n1', controlAsset: 'server-control-template', path: 'main', source: `
+function OnStart()
+  script.object.showCursor = true
+  local button = script.object:FindChild("预设按钮")
+  for _, name in ipairs({ ${CURSOR_EVENTS.map((name) => `"${name}"`).join(', ')} }) do
+    button:AddCursorEventListener(Enum.CursorEventType[name], function() print(name) end)
+  end
+end` })
+  const pointers = []
+  const play = createPlaySession({
+    renderer: { async applyScene() {}, async render() {} },
+    async api(action, args = {}) {
+      if (action === 'start') return studio.playStart(args)
+      if (action === 'get') return studio.playGet(args)
+      if (action === 'stop') return studio.playStop()
+      if (action === 'pointer') {
+        pointers.push(args)
+        return studio.playPointer(args.type, args.x, args.y, { observe: false })
+      }
+      return null
+    },
+  })
+  t.after(() => { play.destroy(); studio.playStop() })
+  await play.start()
+  const { canvasWidth: width, canvasHeight: height } = play.snapshot
+  const handlers = {}
+  play.bindInput({
+    addEventListener(type, fn) { handlers[type] = fn },
+    removeEventListener(type) { delete handlers[type] },
+    getBoundingClientRect: () => ({ left: 0, width, bottom: height, height }),
+  }, { keysOn: { addEventListener() {}, removeEventListener() {} } })
+  const fire = (type, x, y) => handlers[type]({ pointerId: 1, clientX: x, clientY: height - y })
+  const cursorLogs = () => studio.playGet().logs.map((row) => row.text).filter((text) => CURSOR_EVENTS.includes(text))
+  return { play, pointers, fire, cursorLogs }
+}
+
+test('a quick browser drag reaches Lua as down, move, up instead of a click', async t => {
+  const { pointers, fire, cursorLogs } = await bindStudioPlay(t)
+  fire('pointerdown', 790, 450)
+  fire('pointermove', 810, 450)
+  fire('pointerup', 810, 450)
+  await wait(PLAY_MOVE_THROTTLE_MS + 20)
+  assert.deepEqual(pointers.map(({ type, x }) => `${type}:${x}`), ['down:790', 'move:810', 'up:810'])
+  assert.deepEqual(cursorLogs(), ['CursorDown', 'CursorBeginDrag', 'CursorDrag', 'CursorUp', 'CursorEndDrag'])
+})
+
+test('browser clicks still click and throttled moves coalesce without stale replays', async t => {
+  const { pointers, fire, cursorLogs } = await bindStudioPlay(t)
+  fire('pointerdown', 800, 450)
+  fire('pointerup', 800, 450)
+  fire('pointermove', 801, 450)
+  fire('pointermove', 802, 450)
+  await wait(PLAY_MOVE_THROTTLE_MS + 20)
+  fire('pointermove', 803, 450)
+  fire('pointerdown', 803, 450)
+  fire('pointerup', 803, 450)
+  await wait(PLAY_MOVE_THROTTLE_MS + 20)
+  assert.deepEqual(pointers.map(({ type, x }) => `${type}:${x}`),
+    ['down:800', 'up:800', 'move:802', 'move:803', 'down:803', 'up:803'])
+  assert.deepEqual(cursorLogs(), ['CursorDown', 'CursorUp', 'CursorClick', 'CursorDown', 'CursorUp', 'CursorClick'])
+})
+
+test('pending browser moves are dropped when the play session resets', async t => {
+  const { play, pointers, fire } = await bindStudioPlay(t)
+  fire('pointermove', 810, 450)
+  play.reset()
+  await wait(PLAY_MOVE_THROTTLE_MS + 20)
+  assert.deepEqual(pointers, [])
 })

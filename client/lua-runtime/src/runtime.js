@@ -1,7 +1,7 @@
 import {
   lua, lauxlib, lualib, to_luastring, sl,
   LUA_OK, pushValue, toJs, attachHost, hostOf, hostFromLua,
-  installSandbox, luaString, SCRIPT_HOST_KEY, unrefLuaFunction, closeLuaState,
+  installSandbox, luaString, SCRIPT_HOST_KEY, retainLuaFunction, unrefLuaFunction, closeLuaState,
 } from './lua-bridge.js'
 import { Control, DEEP_DIRTY_FIELDS, luaFieldAccess, luaHasMethod, printTree, walk } from './scene.js'
 import { Tween, TweenSequence } from './tween.js'
@@ -116,6 +116,10 @@ export class LuaRuntime {
     // Fengari Lua integers are 32-bit; values above 0x7fffffff must go as numbers.
     if ((v | 0) === v) lua.lua_pushinteger(L, v)
     else lua.lua_pushnumber(L, v)
+  }
+
+  retainLuaCallback(fn) {
+    retainLuaFunction(fn)
   }
 
   unrefLuaCallback(fn) {
