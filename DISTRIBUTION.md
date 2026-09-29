@@ -19,6 +19,8 @@
 
 然后运行 `pnpm test:packages`。检查在仓库外完成，内部核心包不可解析；验证真实 Worker、PNG、GIA、Web 编辑保存及 MCP stdio，防止通过本地软链接意外掩盖漏包。
 
+DSH 分发同时执行 `pnpm test:harness`，在隔离 profile 中安装并启动真实 Harness 0.2。旧/新工具运行时矩阵、完整宿主和预设资源的验证范围见 [插件兼容说明](dsh-plugin/README.md#harness-02-兼容性)。构建与上述测试应顺序运行，`pnpm test` 和 `pack:release` 都会重建同一批资源，不能并行。
+
 `release/`、`dist/`、依赖与生成资源不提交。重复打包可能保留旧版本 tarball，以 `manifest.json` 为本轮产物清单。根包的 `prepare` 服务于源码安装；预构建交付使用根打包命令产生的清洁 tarball。DSH 安装包内保留 `dsh-plugin/` 路径，根 exports 和 bundle 声明定位到该目录的构建产物。
 
 ## Harness 安装入口

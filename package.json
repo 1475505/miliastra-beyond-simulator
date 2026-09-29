@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-beyond-simulator",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "千星奇域客户端 UI 编辑与试玩模拟器 for DeepSeek Harness",
   "private": true,
   "type": "module",
@@ -50,6 +50,7 @@
     "pack:release": "node scripts/pack.mjs",
     "test:packages": "node scripts/smoke-packages.mjs",
     "test:git-install": "node scripts/smoke-git-install.mjs",
+    "test:harness": "node scripts/smoke-harness.mjs",
     "dev:web": "node scripts/build.mjs web && node web/server.js",
     "start:web": "node web/dist/server.js"
   },
@@ -60,7 +61,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6"
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6 || ^0.2.0-rc.1"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-tools": "0.1.0-rc.6",

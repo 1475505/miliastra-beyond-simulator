@@ -98,7 +98,7 @@
             name: '@deepseek-ai/dsh-skill-filesystem'
             config:
               customSkillDirs:
-                - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+                - !!js "process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-plugin-beyond-simulator/package.json')), 'dsh-plugin/presets/wonderland-lua-builder/skills')"
 
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'

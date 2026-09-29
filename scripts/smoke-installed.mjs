@@ -8,6 +8,7 @@ import { createRequire } from 'node:module'
 import { createWebServer } from 'beyond-simulator-web'
 import { SimulatorController } from 'dsh-plugin-beyond-simulator'
 import { apply as registerSkill } from 'dsh-plugin-beyond-simulator/skill'
+import { smokeDshTools } from './smoke-dsh-tools.mjs'
 
 const require = createRequire(import.meta.url)
 let clientModule
@@ -51,6 +52,7 @@ try {
   assert.ok((await readdir(join(process.cwd(), 'node_modules/dsh-plugin-beyond-simulator/dsh-plugin/presets/wonderland-lua-builder'))).includes('preset.yml'))
 } finally { await controller.dispose() }
 console.log('PASS installed DSH: controller, Worker, PNG, GIA, Skill and preset assets')
+await smokeDshTools(workspace)
 
 const app = await createWebServer({ workspace, port: 0 })
 try {

@@ -87,13 +87,15 @@ MCP 可以独立使用。组合 Web 时，让两者的 `--workspace` 指向同�
 
 准备 Node.js 22+ 和 DeepSeek Harness，选择下面一种安装方式。GitHub 安装还需要 Git，会自动从源码构建；本地安装包路径以仓库根目录为基准，可按文末的[构建说明](#从源码构建)生成，文件名以 `release/manifest.json` 为准。
 
+插件 2.0.7 起将 Harness **0.2 系列（含 `0.2.0-rc.1` 起的候选版本）**纳入安装范围，保留 0.1 系列支持；已验收 `0.2.0-rc.2`。版本检查、预设资源路径及验证范围见 [Harness 0.2 兼容说明](dsh-plugin/README.md#harness-02-兼容性)。
+
 ```sh
 # 从 npm 安装
 dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-1.0.10.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.7.tgz
 
 dsh --profile web --dump-config
 dsh web

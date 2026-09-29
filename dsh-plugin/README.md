@@ -12,7 +12,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-1.0.10.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.7.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -32,6 +32,7 @@ pnpm test
 pnpm pack:release
 pnpm test:packages
 pnpm test:git-install
+pnpm test:harness
 ```
 
 Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxqy_studio_ui_screenshot`、`qxqy_studio_play_screenshot`、`qxqy_studio_load`。截图由 Host 在进程内根据 `boxes` / `paint` 渲染 PNG，不需要打开模拟器标签或试玩页。
@@ -43,3 +44,25 @@ Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxq
 插件随包附带 agent 预设 `wonderland-lua-builder`（千星 2D+Lua 游戏制作）：源目录 [`../agent/wonderland-lua-builder`](../agent/wonderland-lua-builder)。构建时把 `agent.cordis.yml` 嵌入 `dsh-plugin/cordis.patch.yml`。在提供 `@deepseek-ai/dsh-agent-preset` 的 DSH 0.1.7-rc.1 及更新版本中，新版注册项会启用；旧版 DSH 自动跳过它，避免缺失模块阻塞启动。旧版复制入口始终保留：启动时仅当 `$DSH_HOME/.agent-presets/wonderland-lua-builder` 不存在，才从包内 `dsh-plugin/presets/` 复制，已有用户预设不覆盖。支持预设选择的 DSH 中，可在「设置 → Agent 预设」选择；已有任务不会自动切换。
 
 编辑器自动跟随 Harness 亮/暗主题并占满宿主内容高度，分为“UI 编辑 / Lua 脚本 / 服务端逻辑”三个页面。顶栏显示存档名、会话工作区和当前资产。点击“试玩 ↗”会先保存脚本与服务端逻辑，再打开同源 `/qxqy-simulator/play#<sessionId>`；试玩画面由 PixiJS v8 WebGL 渲染，Runtime 仍在 Worker 内推进并独占 Lua、布局、锚点、命中和测试语义。`qxqy_studio_play_screenshot` 根据 Runtime `paint` 在 Host 出 PNG，`qxqy_studio_ui_screenshot` 根据编辑器 `boxes` 出舞台 PNG，都不依赖可见页签。完整使用与排障见 [`../../docs/simulator-usage.md`](../../docs/simulator-usage.md)。
+
+## Harness 0.2 兼容性
+
+2026-09-30 核对：npm 的 `latest` / `next` 均为 **0.2.0-rc.2**，0.2 仍为候选版本。主要发布变化：
+
+- [0.2.0-rc.1（9 月 28 日）](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1)：插件管理、安装引导与配置保存优化；DeepSeek 账号模型免额外 API Key 搜索；图片失效重传和工具调度失败恢复；Windows 沙箱权限诊断；自动化任务拆为可选插件。
+- [0.2.0-rc.2（9 月 29 日）](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.2)：macOS / Windows 桌面端可安装内置 `dsh` 命令管理插件；模型搜索、文件夹外部打开、插件升级提示优化；PowerShell 完成状态识别修复；图形启动环境修复；第三方模型目录更新与实验性异步问答。
+
+### 对模拟器的影响
+
+1. **安装准入需要扩展。** Harness 依据 `peerDependencies` 中 `@deepseek-ai/dsh-*` 的范围检查当前宿主版本，预发布版本参与匹配；安装与启动分别检查。旧声明 `^0.1.0-rc.6` 不包含 0.2。插件 **2.0.7** 改为 `^0.1.0-rc.6 || ^0.2.0-rc.1`；继续由宿主提供 `dsh-tools`，开发基线保留旧版。依据：[0.2 App boot](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/boot/app-boot/README.md#profiles)、[Plugin Manager](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/boot/plugin-manager/README.md#version-compatibility-and-exemptions)。这是 0.2 实际执行的准入规则，不表示该机制首次出现在 0.2。
+2. **修复声明式预设的 Skill 路径。** 完整宿主验收发现：预设虽在菜单可见，`qxqy-game-studio` 却无法发现。嵌入配置中的 `baseUrl` 来自合成 profile，并非预设目录；`new URL('skills/', baseUrl)` 指错位置。`scripts/build.mjs` 现在为嵌入版本通过包名解析安装目录，再定位随包 Skill；旧版复制预设仍使用相邻 `skills/`。回归入口 `test:harness` 必须读取到 Skill 正文和 `references/workflow.md`，只看到预设名称不算通过。
+3. **已使用的运行接口兼容。** 实测 `defineTool`、JSON 参数/输出、附件图片、会话 cwd、HTTP 路由、ModuleLoader 与 `conversation.view` 可继续使用。本次不需要修改 Lua VM、Studio 数据格式或试玩协议。
+
+### 验证与边界
+
+- `pnpm test:packages` 在仓库外分别安装 `dsh-tools 0.1.0-rc.6 / Cordis 4.0.1` 和 `dsh-tools 0.2.0-rc.2 / Cordis 4.0.4`，经真实 ToolRuntime 验证 7 个工具、会话隔离、对象/字符串 JSON 参数、revision 冲突、Worker 与 PNG 图片内容，并验证 Web / MCP 包。
+- `pnpm test:harness` 默认在临时目录安装 Harness `0.2.0-rc.2`，用独立 `DSH_HOME` 完成 tarball 安装、完整 Web 启动、宿主版本准入、Agent 预设与 Skill 发现、真实工具调用及附件服务、HTTP 页面检查；可传入已有 CLI 的 `lib/bin.js` 绝对路径复用安装。无需模型 API Key。该项已加入 npm 发布前验收。
+- `pnpm test:git-install <CLI 的 lib/bin.js>` 使用 0.2 CLI 验证纯源码安装与 profile 注册。
+- 本轮观察：Windows x64 / Node.js 22.23.2 / pnpm 10.15.0；浏览器实测模拟器标签、文本编辑、独立试玩启动与停止；0.2.0-rc.1 仅检查版本准入，完整执行验收针对 rc.2。桌面 Electron 宿主、Linux/macOS 和真实模型对话未在本机验收；桌面端文件协议与新窗口路径需单独验证，内置 `dsh` 命令可用不等于桌面嵌入 UI 已通过。
+
+官方行为标记：`evidence_source=documented`，运行端 `official_document`；本轮测试标记：`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。模拟器包版本以根 `package.json` 为准；本地构建完成不等于 npm 已发布。

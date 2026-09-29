@@ -38,5 +38,7 @@ jobs:
         run: pnpm pack:release
       - name: Verify release tarballs
         run: pnpm test:packages
+      - name: Verify Harness 0.2 host integration
+        run: pnpm test:harness
       - name: Stage changed versions
         run: node scripts/publish-npm.mjs

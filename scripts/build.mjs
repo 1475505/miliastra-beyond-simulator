@@ -24,6 +24,13 @@ export async function buildProduct(product) {
     const presetRoot = join(root, 'agent/wonderland-lua-builder')
     const presetMeta = await readFile(join(presetRoot, 'preset.yml'), 'utf8')
     const presetRows = await readFile(join(presetRoot, 'agent.cordis.yml'), 'utf8')
+    // Embedded rows inherit the composed profile's baseUrl, not the bundle's
+    // patch directory. Resolve the installed package instead. The legacy copy
+    // keeps its original sibling skills/ URL.
+    const presetSkillUrl = "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+    if (!presetRows.includes(presetSkillUrl)) throw new Error('Agent preset Skill URL changed; update the bundle resource rebasing')
+    const bundledSkillDir = "process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-plugin-beyond-simulator/package.json')), 'dsh-plugin/presets/wonderland-lua-builder/skills')"
+    const bundledPresetRows = presetRows.replaceAll(presetSkillUrl, bundledSkillDir)
     const display = key => {
       const value = presetMeta.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))?.[1]
       if (!value) throw new Error(`Agent preset is missing ${key}`)
@@ -48,7 +55,7 @@ export async function buildProduct(product) {
       `        name: ${display('name')}`,
       `        description: ${display('description')}`,
       '        plugins:',
-      ...presetRows.trimEnd().split(/\r?\n/).map(line => line ? `          ${line}` : ''),
+      ...bundledPresetRows.trimEnd().split(/\r?\n/).map(line => line ? `          ${line}` : ''),
       '',
     ].join('\n')
     await writeFile(join(root, 'dsh-plugin/cordis.patch.yml'), patch)
