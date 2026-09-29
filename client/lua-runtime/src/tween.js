@@ -4,7 +4,8 @@ import { DEEP_DIRTY_FIELDS } from './scene.js'
 
 const COLOR_FIELDS = new Set(['fontColor', 'bgColor', 'outlineColor', 'imageColor'])
 // Device TWSEM v1: a fontSize tween writes truncated integers (20.99 -> 20).
-const TRUNCATED_FIELDS = new Set(['fontSize'])
+// minimumFontSize is also a documented integer Tweenable field (inferred).
+const TRUNCATED_FIELDS = new Set(['fontSize', 'minimumFontSize'])
 const TIME_EPSILON = 1e-9
 
 // Tweens start from the value Lua would read (rotation getters normalise to
@@ -13,6 +14,10 @@ function readField(object, key) {
   return typeof object?.luaFieldValue === 'function' ? object.luaFieldValue(key) : object[key]
 }
 
+// Lifecycle rules observed on device (TWALL v1 S2-S6): Play() on a playing
+// tween does nothing; Play() after Kill(false) does nothing; Complete() on a
+// finished tween fires nothing; a zero-length tween completes on the next
+// update. `dead` marks a user Kill; `completed` a finished run.
 export class Tween {
   constructor(runtime, object, data, duration) {
     this.runtime = runtime
@@ -33,6 +38,8 @@ export class Tween {
     this.onComplete = null
     this.onStepComplete = null
     this.killed = false
+    this.dead = false
+    this.completed = false
   }
 
   capture() {
@@ -61,6 +68,12 @@ export class Tween {
   }
 
   Play() {
+    if (this.dead) return this
+    if (this.playing) {
+      // Resuming a paused tween through Play() is simulator policy.
+      this.paused = false
+      return this
+    }
     return this._start(false)
   }
 
@@ -71,6 +84,7 @@ export class Tween {
     this.elapsed = 0
     this.loopIndex = 0
     this.killed = false
+    this.completed = false
     if (restart && this.initialFrom) this.restoreInitial()
     else {
       this.capture()
@@ -83,8 +97,11 @@ export class Tween {
     this._begin(restart)
     this.runtime.tweens.add(this)
     this.runtime.animations.add(this)
-    if (this.duration === 0) this.Complete()
     return this
+  }
+
+  get loopCount() {
+    return this.loops > 0 ? this.loops : 1
   }
 
   Pause() {
@@ -96,10 +113,13 @@ export class Tween {
   }
 
   Restart() {
+    if (this.dead) return this
     return this._start(true)
   }
 
   Complete() {
+    if (this.dead || this.completed) return
+    if (!this.initialFrom) this._begin(false)
     this.apply(1)
     this.finish(true)
   }
@@ -107,6 +127,7 @@ export class Tween {
   Kill(complete) {
     if (complete) this.Complete()
     else this.finish(false)
+    this.dead = true
   }
 
   SetOnComplete(fn) {
@@ -146,28 +167,34 @@ export class Tween {
     if (changed && typeof this.object?.markPlayDirty === 'function') this.object.markPlayDirty(deep)
   }
 
-  step(dt) {
-    if (!this.playing || this.paused || this.killed) return
+  // Advance by dt. At the end of a loop the frame shows the end value and fires
+  // step; the next loop starts on the following frame from its first capture,
+  // dropping the overflow (device TWSEM v1 L1, TWALL v1 S1: relative loops do
+  // not accumulate). Returns true when the final loop has been reached.
+  _advance(dt, loops) {
     this.elapsed += dt
     const u = this.duration <= 0 ? 1 : Math.min(1, this.elapsed / this.duration)
     this.apply(u)
-    if (u < 1) return
+    if (u < 1) return false
+    if (loops >= 0 && this.loopIndex + 1 >= loops) return true
     if (this.onStepComplete) this.runtime.safeCall(this.onStepComplete)
     this.loopIndex++
-    if (this.loops < 0 || this.loopIndex < this.loops) {
-      // Device (TWSEM v1 L1): the frame reaching the end shows the end value;
-      // the next loop starts on the following frame and drops the overflow.
-      this.elapsed = 0
-      if (this.relative) this.capture()
-      else this.restoreInitial()
-    } else {
-      this.finish(true)
-    }
+    this.elapsed = 0
+    this.restoreInitial()
+    return false
+  }
+
+  step(dt) {
+    if (!this.playing || this.paused || this.killed) return
+    if (!this._advance(dt, this.loops < 0 ? -1 : this.loopCount)) return
+    if (this.onStepComplete) this.runtime.safeCall(this.onStepComplete)
+    this.finish(true)
   }
 
   finish(fireComplete) {
     this.playing = false
     this.killed = true
+    if (fireComplete) this.completed = true
     this.runtime.tweens.delete(this)
     this.runtime.animations.delete(this)
     if (fireComplete && this.onComplete) this.runtime.safeCall(this.onComplete)
@@ -175,14 +202,17 @@ export class Tween {
 }
 
 // The sequence drives its child tweens on its own timeline; children are not
-// registered as standalone tweens. Device rules (TWINV v1, TWSEM v1):
+// registered as standalone tweens. Device rules (TWINV v1, TWSEM v1, TWALL v1):
 // - Play() only schedules; entries due at 0 run on the next update.
 // - Per update, due events run in time order: a child's end, then callbacks,
 //   then child starts at equal times. A callback therefore sees a child ending
 //   at its time at the end value (E1) but a mid-flight child at the previous
 //   frame's value (K1); a starting child captures after same-time callbacks
-//   (O1/O2). Running children are interpolated last, credited with the time
-//   since their slot.
+//   (O1/O2) and is credited with the time since its slot. Running children
+//   then advance on their own clock.
+// - A child's slot lasts duration * its own SetLoops count; inside the slot it
+//   loops like a standalone tween and is forced to its end when the slot ends
+//   (TWALL Q2).
 // - Each loop replays from the start. A child restarts from its first capture
 //   only when its slot comes round again and keeps its end value until then.
 export class TweenSequence {
@@ -192,6 +222,8 @@ export class TweenSequence {
     this.playing = false
     this.paused = false
     this.killed = false
+    this.dead = false
+    this.completed = false
     this.elapsed = 0
     this.loops = 1
     this.loopIndex = 0
@@ -230,10 +262,21 @@ export class TweenSequence {
     return this
   }
 
+  // Play() on a playing sequence is a no-op, like a Tween (inferred).
   Play() {
+    if (this.dead) return this
+    if (this.playing) {
+      this.paused = false
+      return this
+    }
+    return this._play()
+  }
+
+  _play() {
     this.playing = true
     this.paused = false
     this.killed = false
+    this.completed = false
     this.elapsed = 0
     this.loopIndex = 0
     this._schedule()
@@ -250,16 +293,17 @@ export class TweenSequence {
     let lastAppendStart = 0
     let hasAppend = false
     const entries = []
+    const span = (tween) => tween.duration * tween.loopCount
     for (const s of this.steps) {
       if (s.kind === 'tween' && s.parallel) {
         const at = hasAppend ? lastAppendStart : t
         entries.push({ at, tween: s.tween })
-        t = Math.max(t, at + s.tween.duration)
+        t = Math.max(t, at + span(s.tween))
       } else if (s.kind === 'tween') {
         entries.push({ at: t, tween: s.tween })
         lastAppendStart = t
         hasAppend = true
-        t += s.tween.duration
+        t += span(s.tween)
       } else if (s.kind === 'interval') {
         lastAppendStart = t
         hasAppend = true
@@ -268,13 +312,13 @@ export class TweenSequence {
         entries.push({ at: t, fn: s.fn })
       } else if (s.kind === 'insert') {
         entries.push({ at: s.time, tween: s.tween })
-        t = Math.max(t, s.time + s.tween.duration)
+        t = Math.max(t, s.time + span(s.tween))
       } else if (s.kind === 'insertCb') {
         entries.push({ at: s.time, fn: s.fn })
         t = Math.max(t, s.time)
       }
     }
-    this._entries = entries.map((entry, index) => ({ ...entry, index }))
+    this._entries = entries.map((entry, index) => ({ ...entry, index, end: entry.tween ? entry.at + span(entry.tween) : entry.at }))
     this._end = t
     this._resetEntries()
   }
@@ -299,33 +343,34 @@ export class TweenSequence {
   }
 
   // Run every child end, callback and child start due by `time` in time order,
-  // then move still-running children to the current position. Returns false
-  // when a callback restarted, completed or killed the sequence.
-  _advanceTo(time) {
+  // then advance still-running children by dt. Returns false when a callback
+  // restarted, completed or killed the sequence.
+  _advanceTo(time, dt) {
     const entries = this._entries
     const due = []
     for (const entry of entries) {
       if (!entry.started && entry.at <= time + TIME_EPSILON) due.push({ at: entry.at, rank: entry.fn ? 1 : 2, entry })
-      if (entry.tween && !entry.done && entry.at + entry.tween.duration <= time + TIME_EPSILON) {
-        due.push({ at: entry.at + entry.tween.duration, rank: 0, entry })
-      }
+      if (entry.tween && !entry.done && entry.end <= time + TIME_EPSILON) due.push({ at: entry.end, rank: 0, entry })
     }
     due.sort((a, b) => a.at - b.at || a.rank - b.rank || a.entry.index - b.entry.index)
+    const startedNow = new Set()
     for (const { rank, entry } of due) {
       if (rank === 1) {
         entry.started = true
         this.runtime.safeCall(entry.fn)
         if (!this.playing || this.killed || this._entries !== entries) return false
       } else {
-        if (!entry.started) this._startChild(entry)
+        if (!entry.started) {
+          this._startChild(entry)
+          startedNow.add(entry)
+        }
         if (rank === 0 && !entry.done) this._finishChild(entry)
       }
     }
     for (const entry of entries) {
       if (!entry.tween || !entry.started || entry.done) continue
-      const tween = entry.tween
-      tween.elapsed = this.elapsed - entry.at
-      tween.apply(tween.duration <= 0 ? 1 : Math.min(1, tween.elapsed / tween.duration))
+      if (startedNow.has(entry)) entry.tween._advance(time - entry.at, entry.tween.loopCount)
+      else entry.tween._advance(dt, entry.tween.loopCount)
     }
     return true
   }
@@ -333,7 +378,7 @@ export class TweenSequence {
   step(dt) {
     if (!this.playing || this.paused || this.killed) return
     this.elapsed += dt
-    if (!this._advanceTo(this.elapsed)) return
+    if (!this._advanceTo(this.elapsed, dt)) return
     if (this.elapsed + TIME_EPSILON < this._end) return
     if (this.onStepComplete) this.runtime.safeCall(this.onStepComplete)
     this.loopIndex++
@@ -355,17 +400,20 @@ export class TweenSequence {
   }
 
   Restart() {
-    this.Play()
+    if (this.dead) return
+    this._play()
   }
 
   // Device (TWSEM v1 K1-K3): the rest of the timeline runs at once in time
   // order (a callback at 0.8 still sees a tween ending at 1.0 mid-way), then
-  // the step and complete callbacks. A sequence that never played completes too.
+  // the step and complete callbacks. A sequence that never played completes
+  // too; a finished one fires nothing again (TWALL S4).
   Complete() {
+    if (this.dead || this.completed) return
     if (!this._entries) this._schedule()
     this.playing = true
     this.killed = false
-    if (!this._advanceTo(Infinity)) return
+    if (!this._advanceTo(Infinity, 0)) return
     if (this.onStepComplete) this.runtime.safeCall(this.onStepComplete)
     this.finish(true)
   }
@@ -373,6 +421,7 @@ export class TweenSequence {
   Kill(complete) {
     if (complete) this.Complete()
     else this.finish(false)
+    this.dead = true
   }
 
   SetOnComplete(fn) {
@@ -393,6 +442,7 @@ export class TweenSequence {
   finish(fire) {
     this.playing = false
     this.killed = true
+    if (fire) this.completed = true
     this.runtime.sequences.delete(this)
     this.runtime.animations.delete(this)
     if (fire && this.onComplete) this.runtime.safeCall(this.onComplete)

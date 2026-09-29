@@ -1306,3 +1306,78 @@ function Order() return table.concat(order, ",") end
   rt.step(0.1)
   assert.equal(rt.mountedScripts[0].invoke('Order', []), 'seq,tween')
 })
+
+// Device evidence: probes/tween-coverage-20260929 (TWALL v1, PC, 2026-09-29).
+test('tween lifecycle: relative loops, zero duration, Play while playing, Play after Kill, Complete twice', () => {
+  const rt = createRuntime()
+  const ids = ['S1', 'S2', 'S3', 'S4', 'S6']
+  const c = Object.fromEntries(ids.map(n => [n, rt.addRoot({ active: true, name: n, kind: 'image', anchoredPositionX: 0 })]))
+  const host = rt.addRoot({ active: true, name: 'Host', kind: 'container' })
+  rt.mountScript({ path: 'lifecycle', control: host, source: `
+n = {}
+local function C(id) return game.FindClientUIRoot(id) end
+local function X(id, v, d) return game.Tween(C(id), { anchoredPositionX = v }, d):SetEase(Enum.EaseType.Linear) end
+local function count(tag) return function() n[tag] = (n[tag] or 0) + 1 end end
+function OnStart()
+  X("S1", 100, 0.5):SetRelative(true):SetLoops(2):Play()
+  X("S2", 100, 0):SetOnComplete(count("S2")):Play()
+  S2AFTER = C("S2").anchoredPositionX
+  S3 = X("S3", 100, 1):Play()
+  S4 = X("S4", 100, 0.2):SetOnComplete(count("S4")):Play()
+  S4Q = game.TweenSequence():InsertCallback(0.1, count("S4q cb")):SetOnComplete(count("S4q")):Play()
+  S6 = X("S6", 100, 1):Play()
+end
+function KillS6() S6:Kill(false) end
+function Later() S3:Play(); S6:Play(); S4:Complete(); S4:Complete(); S4Q:Complete(); S4Q:Complete() end
+function Report() return S2AFTER .. " " .. (n.S2 or 0) .. " " .. (n.S4 or 0) .. " " .. (n.S4q or 0) .. " " .. (n["S4q cb"] or 0) end
+` })
+  const script = rt.mountedScripts[0]
+  rt.step(0.3)
+  script.invoke('KillS6', [])
+  rt.step(0.2)
+  assert.equal(c.S1.anchoredPositionX, 100)
+  script.invoke('Later', [])
+  rt.step(0.1)
+  // Relative loops restart from the first capture: 0 -> 100 again, not 100 -> 200.
+  assert.ok(Math.abs(c.S1.anchoredPositionX - 20) < 1e-6, String(c.S1.anchoredPositionX))
+  // Play() while playing keeps the original timeline (0.6 s in).
+  assert.ok(Math.abs(c.S3.anchoredPositionX - 60) < 1e-6, String(c.S3.anchoredPositionX))
+  // Play() after Kill(false) does nothing.
+  assert.ok(Math.abs(c.S6.anchoredPositionX - 30) < 1e-6, String(c.S6.anchoredPositionX))
+  // Zero duration: nothing on Play, end value and one completion next update;
+  // Complete() on finished tweens/sequences fires nothing again.
+  assert.equal(script.invoke('Report', []), '0.0 1 1 1 1')
+})
+
+test('sequence child with SetLoops occupies duration * loops and loops on its own clock', () => {
+  const rt = createRuntime()
+  const a = rt.addRoot({ active: true, name: 'A', kind: 'image', anchoredPositionX: 0 })
+  const b = rt.addRoot({ active: true, name: 'B', kind: 'image', anchoredPositionX: 0 })
+  rt.mountScript({ path: 'child-loops', control: a, source: `
+function OnStart()
+  local function X(id, v, d) return game.Tween(game.FindClientUIRoot(id), { anchoredPositionX = v }, d):SetEase(Enum.EaseType.Linear) end
+  game.TweenSequence():Append(X("A", 100, 0.3):SetLoops(2)):Append(X("B", 100, 0.3)):Play()
+end
+` })
+  const xs = []
+  for (let i = 0; i < 9; i++) { rt.step(0.1); xs.push([Math.round(a.anchoredPositionX), Math.round(b.anchoredPositionX)]) }
+  // Loop boundary frame holds 100, the next loop restarts from 0; B waits for 0.6 s.
+  assert.deepEqual(xs.map(p => p.join('/')), ['33/0', '67/0', '100/0', '33/0', '67/0', '100/0', '100/33', '100/67', '100/100'])
+})
+
+test('number fields read back as floats; destroyed controls only expose alive', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'R', kind: 'textbox', sizeDeltaX: 137, fontSize: 20,
+    children: [{ active: true, name: 'Doomed', kind: 'image' }] })
+  rt.mountScript({ path: 'types', control: root, source: `
+function OnStart()
+  local o = script.object
+  print("types", math.type(o.sizeDeltaX), math.type(o.localScaleX), math.type(o.fontSize), math.type(o.Id))
+  local d = o:GetChild("Doomed")
+  game.DestroyClientUIControl(d)
+  print("destroyed", d.alive, (pcall(function() return d.anchoredPositionX end)))
+end
+` })
+  assert.match(logText(rt), /types\tfloat\tfloat\tinteger\tinteger/)
+  assert.match(logText(rt), /destroyed\tfalse\tfalse/)
+})

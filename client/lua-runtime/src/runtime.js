@@ -8,6 +8,10 @@ import { Tween, TweenSequence } from './tween.js'
 import { packRgba, unpackRgba } from './color.js'
 import { buildEnumTree, makeEnumItem, canonicalEnumItem } from './enums.js'
 
+// Control fields the API documents as `integer`; other numeric fields are floats.
+const INTEGER_FIELDS = new Set(['Id', 'prefabIndex', 'imageId', 'fontSize', 'minimumFontSize', 'clickAudioId',
+  'itemCount', 'itemPrefabIndex', 'animationId', 'referencedPrefabIndex'])
+const COLOR_FIELDS = new Set(['imageColor', 'fontColor', 'bgColor', 'outlineColor'])
 const ENUM_FIELDS = {
   horizontalAlignment: 'TextHorizontalAlignment',
   verticalAlignment: 'TextVerticalAlignment',
@@ -760,7 +764,12 @@ export class LuaRuntime {
         lua.lua_pushcfunction(LL, methods[key])
         return 1
       }
-      const v = getField(obj, key)
+      let v
+      try {
+        v = getField(obj, key)
+      } catch (err) {
+        return lauxlib.luaL_error(LL, sl(String(err.message || err)))
+      }
       if (v === undefined) {
         lua.lua_pushnil(LL)
         return 1
@@ -945,10 +954,15 @@ export class LuaRuntime {
       'Control',
       (obj, key) => {
         if (!luaFieldAccess(obj, key)) return undefined
-        if (key.startsWith('localRotation')) return new LuaFloat(obj.luaFieldValue(key))
-        const value = obj[key]
+        // Device (TWALL v1 D1): after destruction only `alive` stays readable.
+        if (!obj.alive && key !== 'alive') throw new Error(`attempt to read '${key}' of a destroyed control`)
+        const value = obj.luaFieldValue(key)
         const enumType = ENUM_FIELDS[key]
-        return enumType ? canonicalEnumItem(enumType, value) : value
+        if (enumType) return canonicalEnumItem(enumType, value)
+        // Device (TWSEM/TWALL): number-typed fields read back as floats (137.0),
+        // integer-typed fields as integers; packed colors keep their encoding.
+        if (typeof value === 'number' && !INTEGER_FIELDS.has(key) && !COLOR_FIELDS.has(key)) return new LuaFloat(value)
+        return value
       },
       (obj, key, val) => {
         const access = luaFieldAccess(obj, key)

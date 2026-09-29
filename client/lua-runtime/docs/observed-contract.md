@@ -28,6 +28,17 @@
 
 后续版本的同级控件按键派发顺序另见[架构中的模拟器策略](architecture.md#模拟器策略非官方证明)。创作者预告上层控件优先接收；这不是上述真机探针已观察到的顺序结论。
 
+## Tween 缓动、生命周期边界与字段读回（2026-09-29，TWALL v1）
+
+- 来源：TWALL v1 真机探针，PC，2026-09-29 聊天粘贴日志（完整 294 帧已存档，原始文件待补），见 `probes/tween-coverage-20260929/` 与根 `knowledge/fact.md` 同名条目。`evidence_source=observed`，运行端 `device`。
+- 已一致（无需改动）：31 种 `EaseType` 与 `src/ease.js`（easings.net 公式）逐帧一致；Pause/Resume（含序列回调与循环边界）冻结时间；两个 Tween 写同一字段按 Play 顺序后者覆盖、先完成者停止写入；`SetVisible(false)`/`SetActive(false)` 不停补间；关卡时停不影响 Tween/序列，OnLevelUpdate 暂停；锚点/轴心/缩放/尺寸/羽化/`fillAmount`/文本三色的补间与颜色截断。
+- 修复（`src/tween.js`）：相对 Tween 自身循环每轮回到首次捕获，不累加；时长 0 的 Tween 在 Play 时不写值，下一次更新到终值并完成；播放中再 `Play()` 无效果；`Kill(false)` 后 `Play()` 无效果；已完成的 Tween/序列再 `Complete()` 不再触发回调。序列子 Tween 的槽位为 时长×自身 `SetLoops` 次数，槽内按自己的时钟循环（边界帧保持终值、丢弃溢出），槽结束时强制到终值。
+- 修复（`src/runtime.js`）：`number` 类型字段读回为浮点（`137.0`），API 标为 `integer` 的字段（`fontSize`、`Id`、`imageId` 等）为整数，颜色保持原编码；控件销毁后除 `alive` 外读字段报错；取字段的异常转为 Lua 错误。
+- 策略（未验证）：暂停中 `Play()` 视为继续；`Kill(false)` 后 `Restart()`/`Complete()` 同样无效；序列在播放中 `Play()` 无效果；`minimumFontSize` 补间同 `fontSize` 截断；序列内子 Tween 设无限循环时按 1 次处理。
+- 回放核对：用真机逐帧 dt 重放同一 GIA，548 行帧数据（294 帧）全部字段一致，事件顺序一致；TWSEM 两次、TWINV 重放不回退。
+- 未对齐：跨脚本 `Invoke` 的身份（真机各脚本共享同一 Lua state，控件/Tween/table 往返 `rawequal=true`；模拟器每脚本一个 Lua state，只能复制值，table 也会被复制）。需把运行时改为单 VM + 每脚本 `_ENV`，另行处理。
+- 自包含回归：`test/runtime.test.mjs` 末三项，修复前均失败。
+
 ## Tween 帧级语义与旋转读回（2026-09-29，TWSEM v1）
 
 - 来源：TWSEM v1 真机探针，PC，2026-09-29 聊天粘贴日志（完整 133 帧已存档，原始文件待补），完整工作区见 `probes/tween-semantics-20260929/` 与根 `knowledge/fact.md` 同名条目。`evidence_source=observed`，运行端 `device`。
