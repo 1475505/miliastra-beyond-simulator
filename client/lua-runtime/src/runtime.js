@@ -1,6 +1,6 @@
 import {
   lua, lauxlib, lualib, to_luastring, sl,
-  LUA_OK, pushValue, toJs, attachHost, hostOf, hostFromLua,
+  LUA_OK, LuaFloat, pushValue, toJs, attachHost, hostOf, hostFromLua,
   installSandbox, luaString, SCRIPT_HOST_KEY, retainLuaFunction, unrefLuaFunction, closeLuaState,
 } from './lua-bridge.js'
 import { Control, DEEP_DIRTY_FIELDS, luaFieldAccess, luaHasMethod, printTree, walk } from './scene.js'
@@ -61,6 +61,8 @@ export class LuaRuntime {
     this.mountErrors = []
     this.tweens = new Set()
     this.sequences = new Set()
+    // Tweens and sequences update together in Play order (device TWSEM v1).
+    this.animations = new Set()
     this.audios = new Map()
     this.nextAudioId = 1
     this._nextControlId = 1
@@ -324,11 +326,8 @@ export class LuaRuntime {
     lua.lua_setfield(L, -2, sl('FromRGBA'))
     lua.lua_pushcfunction(L, (LL) => {
       const packed = lua.lua_tonumber(LL, 1) >>> 0
-      const [r, g, b, a] = unpackRgba(packed)
-      lua.lua_pushnumber(LL, r)
-      lua.lua_pushnumber(LL, g)
-      lua.lua_pushnumber(LL, b)
-      lua.lua_pushnumber(LL, a)
+      // Device (TWSEM v1): channels come back as integers.
+      for (const channel of unpackRgba(packed)) lua.lua_pushinteger(LL, channel)
       return 4
     })
     lua.lua_setfield(L, -2, sl('ToRGBA'))
@@ -946,6 +945,7 @@ export class LuaRuntime {
       'Control',
       (obj, key) => {
         if (!luaFieldAccess(obj, key)) return undefined
+        if (key.startsWith('localRotation')) return new LuaFloat(obj.luaFieldValue(key))
         const value = obj[key]
         const enumType = ENUM_FIELDS[key]
         return enumType ? canonicalEnumItem(enumType, value) : value
@@ -1379,8 +1379,7 @@ export class LuaRuntime {
     this.clock.frame++
     this.clock.time += dt
     const levelUpdateScheduled = !this.clock.paused
-    for (const tw of [...this.tweens]) tw.step(dt)
-    for (const seq of [...this.sequences]) seq.step(dt)
+    for (const animation of [...this.animations]) animation.step(dt)
     this.runScriptPhase('OnUpdate', dt)
     if (levelUpdateScheduled) {
       this.clock.levelTime += dt

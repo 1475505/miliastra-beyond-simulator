@@ -29,7 +29,19 @@ export function hostOf(ud) {
   return HOST.get(ud)
 }
 
+// Marks a number that Lua must receive as a float even when it is integral
+// (device rotation reads return 244.0, never the integer 244).
+export class LuaFloat {
+  constructor(value) {
+    this.value = value
+  }
+}
+
 export function pushValue(L, runtime, value) {
+  if (value instanceof LuaFloat) {
+    lua.lua_pushnumber(L, value.value)
+    return
+  }
   if (value === undefined || value === null) {
     lua.lua_pushnil(L)
     return

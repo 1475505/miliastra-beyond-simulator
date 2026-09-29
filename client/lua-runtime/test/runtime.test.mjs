@@ -367,8 +367,12 @@ function OnStart()
 end
 `,
   })
+  // Device TWSEM v1 L1: the frame reaching the end shows the end value; the
+  // next loop restarts on the following frame without the overflow.
   loopRt.step(0.6)
-  assert.ok(loopRoot.anchoredPositionX < 50, `second cycle should restart, got ${loopRoot.anchoredPositionX}`)
+  assert.equal(loopRoot.anchoredPositionX, 100)
+  loopRt.step(0.1)
+  assert.ok(Math.abs(loopRoot.anchoredPositionX - 20) < 1e-9, `second cycle should restart, got ${loopRoot.anchoredPositionX}`)
 
   const seqRt = createRuntime()
   const seqRoot = seqRt.addRoot({ active: true,  name: 'R', kind: 'textbox', anchoredPositionX: 0 })
@@ -1189,4 +1193,116 @@ end
   assert.match(t, /multi\t1\tx\ttable\t2/)
   assert.match(t, /missing\t0/)
   assert.match(t, /error\tfalse\tboom/)
+})
+
+// Device evidence: probes/tween-semantics-20260929 (TWSEM v1, PC, 2026-09-29).
+test('rotation reads back as normalised Euler floats and tweens start from the readback', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'R', kind: 'image' })
+  rt.mountScript({ path: 'rot', control: root, source: `
+local function read(field, v)
+  script.object[field] = v
+  local r = script.object[field]
+  script.object[field] = 0
+  return math.type(r) .. ":" .. string.format("%.3f", r)
+end
+function OnStart()
+  local out = {}
+  for _, v in ipairs({ -116, 370, -180, 90.5 }) do
+    out[#out + 1] = read("localRotationX", v) .. "/" .. read("localRotationZ", v)
+  end
+  print("rot", table.concat(out, " "))
+  script.object.localRotationZ = -116
+  game.Tween(script.object, { localRotationZ = -136 }, 1):SetEase(Enum.EaseType.Linear):Play()
+end
+` })
+  assert.match(logText(rt), /rot\tfloat:296\.000\/float:244\.000 float:10\.000\/float:10\.000 float:0\.000\/float:180\.000 float:89\.500\/float:90\.500/)
+  rt.step(0.5)
+  // 244 -> -136 over 1 s (device R1: the long 380-degree path).
+  assert.ok(Math.abs(root.luaFieldValue('localRotationZ') - 54) < 1e-6, String(root.luaFieldValue('localRotationZ')))
+})
+
+test('sequence events: capture timing, same-time order, end callbacks and Complete', () => {
+  const rt = createRuntime()
+  const names = ['C1', 'C2', 'O1', 'O2', 'E1', 'K1', 'K3']
+  const c = Object.fromEntries(names.map(n => [n, rt.addRoot({ active: true, name: n, kind: 'image', anchoredPositionX: 0 })]))
+  const host = rt.addRoot({ active: true, name: 'Host', kind: 'container' })
+  rt.mountScript({ path: 'seq-events', control: host, source: `
+log = {}
+local function C(n) return game.FindClientUIRoot(n) end
+local function X(n, v, d) return game.Tween(C(n), { anchoredPositionX = v }, d):SetEase(Enum.EaseType.Linear) end
+local function ev(tag, n) return function() log[#log + 1] = tag .. "=" .. string.format("%.1f", C(n).anchoredPositionX) end end
+function OnStart()
+  local c1 = X("C1", 100, 1); C("C1").anchoredPositionX = 50; c1:Play()
+  local c2 = X("C2", 100, 1); C("C2").anchoredPositionX = 20
+  game.TweenSequence():Insert(0.5, c2):Play()
+  C2SET = function() C("C2").anchoredPositionX = 50 end
+  game.TweenSequence():InsertCallback(0.5, function() C("O1").anchoredPositionX = 30 end):Insert(0.5, X("O1", 100, 1)):Play()
+  game.TweenSequence():Insert(0.5, X("O2", 100, 1)):InsertCallback(0.5, function() C("O2").anchoredPositionX = 30 end):Play()
+  local fired = false
+  game.TweenSequence():InsertCallback(0, function() fired = true end):Play()
+  log[#log + 1] = "O3=" .. tostring(fired)
+  game.TweenSequence():Insert(0, X("E1", 100, 0.5)):InsertCallback(0.5, ev("E1cb", "E1"))
+    :SetOnComplete(ev("E1done", "E1")):Play()
+  K1 = game.TweenSequence():Insert(0, X("K1", 100, 1)):InsertCallback(0.2, ev("K1cb2", "K1"))
+    :InsertCallback(0.8, ev("K1cb8", "K1")):SetOnStepComplete(ev("K1step", "K1")):SetOnComplete(ev("K1done", "K1")):Play()
+  game.TweenSequence():Insert(0, X("K3", 100, 1)):InsertCallback(0.3, ev("K3cb", "K3")):SetOnComplete(ev("K3done", "K3")):Complete()
+end
+function CompleteK1() K1:Complete() end
+function Log() return table.concat(log, " ") end
+` })
+  const script = rt.mountedScripts[0]
+  for (let i = 0; i < 3; i++) rt.step(0.1)
+  script.invoke('C2SET', [])
+  rt.step(0.1)
+  script.invoke('CompleteK1', [])
+  for (let i = 0; i < 2; i++) rt.step(0.1)
+  const near = (value, expected) => assert.ok(Math.abs(value - expected) < 1e-6, `${value} != ${expected}`)
+  near(c.C1.anchoredPositionX, 80) // captured 50 at Play, 0.6 s in
+  near(c.C2.anchoredPositionX, 55) // captured 50 when its 0.5 s slot started
+  near(c.O1.anchoredPositionX, 37) // both orders: same-time callback runs first
+  near(c.O2.anchoredPositionX, 37)
+  assert.equal(script.invoke('Log', []), [
+    // K1cb2 fires on the update reaching 0.2 and sees the previous frame's value.
+    'O3=false', 'K3cb=0.0', 'K3done=100.0', 'K1cb2=10.0',
+    'K1cb8=40.0', 'K1step=100.0', 'K1done=100.0', 'E1cb=100.0', 'E1done=100.0',
+  ].join(' '))
+})
+
+test('fontSize tweens truncate, color channels truncate and ToRGBA returns integers', () => {
+  const rt = createRuntime()
+  const text = rt.addRoot({ active: true, name: 'T', kind: 'textbox', fontSize: 20 })
+  const image = rt.addRoot({ active: true, name: 'I', kind: 'image' })
+  rt.mountScript({ path: 'trunc', control: text, source: `
+function OnStart()
+  game.Tween(script.object, { fontSize = 30 }, 1):SetEase(Enum.EaseType.Linear):Play()
+  local img = game.FindClientUIRoot("I")
+  img.imageColor = Color.FromRGBA(0, 3, 0, 255)
+  game.Tween(img, { imageColor = Color.FromRGBA(3, 0, 3, 252) }, 1):SetEase(Enum.EaseType.Linear):Play()
+end
+function Read()
+  local r, g, b, a = Color.ToRGBA(game.FindClientUIRoot("I").imageColor)
+  return math.type(script.object.fontSize) .. ":" .. script.object.fontSize .. " "
+    .. table.concat({ math.type(r), r, g, b, a }, ",")
+end
+` })
+  rt.step(0.099)
+  assert.equal(rt.mountedScripts[0].invoke('Read', []), 'integer:20 integer,0,2,0,254')
+  rt.step(0.25)
+  assert.equal(rt.mountedScripts[0].invoke('Read', []), 'integer:23 integer,1,1,1,253')
+})
+
+test('tweens and sequences update together in Play order', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'R', kind: 'image' })
+  rt.mountScript({ path: 'order', control: root, source: `
+order = {}
+function OnStart()
+  game.TweenSequence():InsertCallback(0.05, function() order[#order + 1] = "seq" end):Play()
+  game.Tween(script.object, { anchoredPositionX = 1 }, 0.05):SetOnComplete(function() order[#order + 1] = "tween" end):Play()
+end
+function Order() return table.concat(order, ",") end
+` })
+  rt.step(0.1)
+  assert.equal(rt.mountedScripts[0].invoke('Order', []), 'seq,tween')
 })

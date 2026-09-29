@@ -28,11 +28,21 @@
 
 后续版本的同级控件按键派发顺序另见[架构中的模拟器策略](architecture.md#模拟器策略非官方证明)。创作者预告上层控件优先接收；这不是上述真机探针已观察到的顺序结论。
 
+## Tween 帧级语义与旋转读回（2026-09-29，TWSEM v1）
+
+- 来源：TWSEM v1 真机探针，PC，2026-09-29 聊天粘贴日志（完整 133 帧已存档，原始文件待补），完整工作区见 `probes/tween-semantics-20260929/` 与根 `knowledge/fact.md` 同名条目。`evidence_source=observed`，运行端 `device`。
+- 旋转读回（`src/scene.js` `readbackEuler`/`luaFieldValue`）：Lua 读 `localRotationX/Y/Z` 与 `GetLocalRotation` 返回按 Z-X-Y 四元数往返后的欧拉角，落在 [0,360)、恒为浮点；写入值原样保存供渲染。X=-116 读回 296、90.5 读回 89.5 由此得出。补间起点取读回值，因此绝对 -116→-136 实际走 244→-136。
+- 捕获与顺序（`src/tween.js`）：Tween 在 Play/子项开始时捕获。序列不再把子 Tween 注册为独立补间，而在自身时间线上按时间顺序处理：同刻“子项结束 → 回调 → 子项开始”，最后插值运行中的子项；`Play()` 不同步触发 0 秒条目；`Complete()`/`Kill(true)` 一次性按时间顺序跑完剩余时间线（未播放序列同样），再触发步骤完成与完成。Tween 与序列在同一集合中按 Play 顺序更新。
+- 循环边界：到达终点的帧显示终值并触发步骤完成，下一帧以该帧 dt 从头开始，丢弃溢出（单 Tween 与序列一致）。这也解释了 TWINV 每轮约一帧的相位差（真机 dt 不整除时的溢出被丢弃）。
+- 取整：`fontSize` 补间截断为整数；颜色通道截断（原实现即如此，已由真机确认）；`Color.ToRGBA` 返回整数。
+- 回放核对：用真机逐帧 dt 重放同一 GIA，133 帧全部字段在 0.02 内一致、整数/浮点类型一致，事件顺序一致；唯一差异是 fengari 的 `string.format`/`tostring` 不输出 `-0.0` 的负号（真机 X=0 读回显示 `-0.000`），属 Lua VM 格式化差异，未修。
+- 未覆盖：Pause/Resume 跨边界、单个相对 Tween 自身循环、Complete 重复调用、X/Y 旋转的渲染。自包含回归为 `test/runtime.test.mjs` 末四项及更新后的循环边界断言，修复前 5 项失败。
+
 ## TweenSequence 循环与 `script:Invoke` 传递（2026-09-29）
 
 - 来源：TWINV v1 真机探针，PC，2026-09-29 聊天粘贴日志（原始文件待补），完整工作区见 `probes/tween-invoke-20260928/` 与根 `knowledge/fact.md` 同名条目。`evidence_source=observed`，运行端 `device`。
-- 序列循环（`src/tween.js`）：每轮从头重播；进入新一轮与 `Play()`/`Restart()` 时先 `Kill(false)` 仍在播放的已触发子 Tween，子 Tween 只在自己的槽位到来时复位。已播放过的子 Tween 用 `Restart()`（初始快照）而非 `Play()`（当前值重新捕获），因此相对子项不跨轮累加。溢出时间计入下一轮并当帧触发到期条目。回调、步骤完成每轮一次，完成回调仅最后一次；Restart 播完后再次触发完成。
-- 残差：真机每跨一轮约晚一帧（L5 两轮后真机 16.6、模拟器 23.3，Kill 值 96.2 对 103.3）。0.1s 采样无法确定是否丢弃溢出或边界帧保持终值，暂不对齐，`unknown`。单个相对 Tween 自身循环是否累加未测，维持原实现。
+- 序列循环（`src/tween.js`）：每轮从头重播；进入新一轮与 `Play()`/`Restart()` 时先 `Kill(false)` 仍在播放的已触发子 Tween，子 Tween 只在自己的槽位到来时复位。已播放过的子 Tween 用 `Restart()`（初始快照）而非 `Play()`（当前值重新捕获），因此相对子项不跨轮累加。溢出时间计入下一轮并当帧触发到期条目（`superseded_by` TWSEM v1：改为丢弃溢出、下一帧开始，子项由序列直接驱动）。回调、步骤完成每轮一次，完成回调仅最后一次；Restart 播完后再次触发完成。
+- 残差：真机每跨一轮约晚一帧（L5 两轮后真机 16.6、模拟器 23.3，Kill 值 96.2 对 103.3）。已由 TWSEM v1 逐帧确认为“边界帧保持终值、丢弃溢出”并修复，见上节；固定 1/60 步长下模拟器基线不产生溢出，与变步长真机的采样值仍会有同量级差异。单个相对 Tween 自身循环是否累加未测，维持原实现。
 - Invoke（`src/runtime.js` `luaInvoke`）：同一 Lua state 内直接在栈上传参与返回值，保持 userdata/table 身份、多返回值与错误；调用其他脚本（另一 Lua state）仍经 JS 值转换，跨脚本身份未经真机验证。`typeof` 对 Tween/TweenSequence/ServerSignal 返回同名；桥接对序列与信号不再展开为普通表。
 - 自包含回归：`test/runtime.test.mjs` 末两项，修复前 2 项均失败，修复后全套 `pnpm test` 通过。探针重跑结果 `simulator-baseline.log` 与真机语义一致，修复前日志保留为 `simulator-baseline-before-fix.log`。
 

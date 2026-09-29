@@ -78,6 +78,51 @@ export function luaFieldAccess(control, key) {
   return null
 }
 
+const ROTATION_FIELDS = ['localRotationX', 'localRotationY', 'localRotationZ']
+const DEG = Math.PI / 180
+
+function multiplyQuaternion(a, b) {
+  return [
+    a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+  ]
+}
+
+function wrapDegrees(value) {
+  if (Object.is(value, -0)) return value // device X=0 reads back as -0
+  const wrapped = ((value % 360) + 360) % 360
+  const rounded = Math.round(wrapped * 1e6) / 1e6
+  return rounded >= 360 ? 0 : rounded
+}
+
+// Device (TWSEM v1): rotation getters return Euler angles re-derived from the
+// stored orientation, in [0, 360): Z/Y -116 -> 244, 370 -> 10; X -116 -> 296
+// and 90.5 -> 89.5 (X stays within +-90 and flips Y/Z by 180). This matches a
+// Z-X-Y (Unity-style) quaternion round trip. The stored value keeps what was
+// written; only reads are normalised.
+export function readbackEuler(x, y, z) {
+  const half = (deg) => [Math.sin(deg * DEG / 2), Math.cos(deg * DEG / 2)]
+  const [sx, cx] = half(x)
+  const [sy, cy] = half(y)
+  const [sz, cz] = half(z)
+  const [qx, qy, qz, qw] = multiplyQuaternion(multiplyQuaternion([0, sy, 0, cy], [sx, 0, 0, cx]), [0, 0, sz, cz])
+  const sinX = Math.max(-1, Math.min(1, -2 * (qy * qz - qw * qx)))
+  let ex, ey, ez
+  if (Math.abs(sinX) > 0.999999) {
+    // Gimbal lock: fold the whole yaw into Y and report Z as 0.
+    ex = Math.sign(sinX) * 90
+    ey = 2 * Math.atan2(qy, qw) / DEG
+    ez = 0
+  } else {
+    ex = Math.asin(sinX) / DEG
+    ey = Math.atan2(2 * (qw * qy + qx * qz), 1 - 2 * (qx * qx + qy * qy)) / DEG
+    ez = Math.atan2(2 * (qw * qz + qx * qy), 1 - 2 * (qx * qx + qz * qz)) / DEG
+  }
+  return [wrapDegrees(ex), wrapDegrees(ey), wrapDegrees(ez)]
+}
+
 export function luaHasMethod(control, key) {
   return BASE_METHODS.includes(key) || (KIND_METHODS[control.kind] || []).includes(key)
 }
@@ -333,7 +378,14 @@ export class Control {
   }
 
   GetLocalRotation() {
-    return [this.localRotationX, this.localRotationY, this.localRotationZ]
+    return readbackEuler(this.localRotationX, this.localRotationY, this.localRotationZ)
+  }
+
+  // The value a Lua read returns; rotation reads are normalised (see readbackEuler).
+  luaFieldValue(key) {
+    const index = ROTATION_FIELDS.indexOf(key)
+    if (index < 0) return this[key]
+    return readbackEuler(this.localRotationX, this.localRotationY, this.localRotationZ)[index]
   }
 
   SetLocalRotation(x, y, z) {
