@@ -28,6 +28,14 @@
 
 后续版本的同级控件按键派发顺序另见[架构中的模拟器策略](architecture.md#模拟器策略非官方证明)。创作者预告上层控件优先接收；这不是上述真机探针已观察到的顺序结论。
 
+## TweenSequence 循环与 `script:Invoke` 传递（2026-09-29）
+
+- 来源：TWINV v1 真机探针，PC，2026-09-29 聊天粘贴日志（原始文件待补），完整工作区见 `probes/tween-invoke-20260928/` 与根 `knowledge/fact.md` 同名条目。`evidence_source=observed`，运行端 `device`。
+- 序列循环（`src/tween.js`）：每轮从头重播；进入新一轮与 `Play()`/`Restart()` 时先 `Kill(false)` 仍在播放的已触发子 Tween，子 Tween 只在自己的槽位到来时复位。已播放过的子 Tween 用 `Restart()`（初始快照）而非 `Play()`（当前值重新捕获），因此相对子项不跨轮累加。溢出时间计入下一轮并当帧触发到期条目。回调、步骤完成每轮一次，完成回调仅最后一次；Restart 播完后再次触发完成。
+- 残差：真机每跨一轮约晚一帧（L5 两轮后真机 16.6、模拟器 23.3，Kill 值 96.2 对 103.3）。0.1s 采样无法确定是否丢弃溢出或边界帧保持终值，暂不对齐，`unknown`。单个相对 Tween 自身循环是否累加未测，维持原实现。
+- Invoke（`src/runtime.js` `luaInvoke`）：同一 Lua state 内直接在栈上传参与返回值，保持 userdata/table 身份、多返回值与错误；调用其他脚本（另一 Lua state）仍经 JS 值转换，跨脚本身份未经真机验证。`typeof` 对 Tween/TweenSequence/ServerSignal 返回同名；桥接对序列与信号不再展开为普通表。
+- 自包含回归：`test/runtime.test.mjs` 末两项，修复前 2 项均失败，修复后全套 `pnpm test` 通过。探针重跑结果 `simulator-baseline.log` 与真机语义一致，修复前日志保留为 `simulator-baseline-before-fix.log`。
+
 ## 默认动态实例层序（2026-09-28）
 
 - 采用规则：同一父控件下，后实例化的根默认在已有兄弟上方；显式 First/Last/Index 可随后覆盖默认顺序。用户要求将该规则写成测试并修复模拟器。原问题报告称真机默认后创建在上，属于 `provided_unverified / device`；本轮截图无法读取，聊天中的点击日志只证实 08/09 的 A/B 可收到事件，不足以单独证明重叠区颜色或命中优先级。先前“九格截图已通过”的判读已撤回，完整工作区证据记录见 `probes/sibling-order-20260928/device-20260928.md`。本次实现依据是用户采纳的兼容性规则，并非新增官方文档声明。

@@ -299,6 +299,9 @@ export class LuaRuntime {
     if (v.__kind === 'Script') return 'Script'
     if (v.__kind === 'EnumItem') return 'EnumItem'
     if (v.__kind === 'CursorEventData') return 'CursorEventData'
+    if (v.__kind === 'ServerSignal') return 'ServerSignal'
+    if (v instanceof TweenSequence) return 'TweenSequence'
+    if (v instanceof Tween) return 'Tween'
     if (v.typeofName) return v.typeofName
     if (typeof v === 'number') return 'number'
     if (typeof v === 'string') return 'string'
@@ -381,8 +384,14 @@ export class LuaRuntime {
   pushTween(L, tw) {
     const ud = lua.lua_newuserdata(L, 0)
     attachHost(ud, tw)
-    const mt = tw.Append ? 'TweenSequence' : 'Tween'
+    const mt = tw instanceof TweenSequence ? 'TweenSequence' : 'Tween'
     lauxlib.luaL_setmetatable(L, sl(mt))
+  }
+
+  pushSignal(L, sig) {
+    const ud = lua.lua_newuserdata(L, 0)
+    attachHost(ud, sig)
+    lauxlib.luaL_setmetatable(L, sl('ServerSignal'))
   }
 
   pushCursor(L, data) {
@@ -480,10 +489,7 @@ export class LuaRuntime {
       },
       ServerSignal: (LL) => {
         const name = luaString(LL, 1)
-        const sig = rt.makeServerSignal(name)
-        const ud = lua.lua_newuserdata(LL, 0)
-        attachHost(ud, sig)
-        lauxlib.luaL_setmetatable(LL, sl('ServerSignal'))
+        rt.pushSignal(LL, rt.makeServerSignal(name))
         return 1
       },
       GetGlobalCustomVariableValue: (LL) => {
@@ -983,7 +989,7 @@ export class LuaRuntime {
       },
       {
         GetParam: this.method((o, name) => (Object.prototype.hasOwnProperty.call(o.params, name) ? o.params[name] : null)),
-        Invoke: this.method((o, name, ...args) => o.invoke(name, args)),
+        Invoke: (LL) => rt.luaInvoke(LL),
         EnableUpdate: this.method((o, v) => { o.updateEnabled = !!v }),
         RegisterServerSignalHandler: this.method((o, name, fn) => {
           rt.signalHandlers.push({ script: o, name, fn })
@@ -1287,6 +1293,40 @@ export class LuaRuntime {
     } else {
       lua.lua_pop(L, 1)
     }
+  }
+
+  // script:Invoke(funcName, ...). Device (TWINV v1): within one script the
+  // arguments and results are the same Lua values (userdata/table identity is
+  // kept), so pass them on the Lua stack. Only a call into another script's
+  // Lua state has to go through JS values.
+  luaInvoke(LL) {
+    const target = hostFromLua(LL, 1)
+    if (!target || target.__kind !== 'Script') return lauxlib.luaL_error(LL, sl("bad self to 'Invoke' (Script expected)"))
+    const name = luaString(LL, 2)
+    const L = target.env
+    if (!L || L.l_G !== LL.l_G) {
+      const args = []
+      for (let i = 3; i <= lua.lua_gettop(LL); i++) args.push(toJs(LL, this, i))
+      let ret
+      try {
+        ret = target.invoke(name, args)
+      } catch (err) {
+        return lauxlib.luaL_error(LL, sl(String(err.message || err)))
+      }
+      if (ret === undefined) return 0
+      const results = Array.isArray(ret) && ret.__multi ? ret : [ret]
+      for (const x of results) pushValue(LL, this, x)
+      return results.length
+    }
+    const base = 2
+    lua.lua_getglobal(LL, sl(name))
+    if (!lua.lua_isfunction(LL, -1)) return 0
+    lua.lua_replace(LL, base) // function now sits right below the arguments
+    lua.lua_remove(LL, 1)
+    const nargs = lua.lua_gettop(LL) - 1
+    const st = lua.lua_pcall(LL, nargs, LUA_MULTRET, 0)
+    if (st !== LUA_OK) return lua.lua_error(LL)
+    return lua.lua_gettop(LL)
   }
 
   invokeOn(L, name, args) {

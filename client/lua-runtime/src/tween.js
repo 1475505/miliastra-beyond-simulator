@@ -209,6 +209,7 @@ export class TweenSequence {
   }
 
   Play() {
+    this._stopChildren()
     this.playing = true
     this.paused = false
     this.killed = false
@@ -277,7 +278,7 @@ export class TweenSequence {
   Complete() {
     for (const b of this._built) {
       if (b.tween) {
-        if (!this._fired.has(b)) b.tween.Play()
+        if (!this._fired.has(b)) this._startChild(b.tween)
         b.tween.Complete()
       }
       if (b.fn && !this._fired.has(b)) this.runtime.safeCall(b.fn)
@@ -311,11 +312,24 @@ export class TweenSequence {
     return this
   }
 
+  // A child that already played restarts from its first captured values
+  // (relative children do not accumulate across loops, device TWINV v1).
+  _startChild(tween) {
+    if (tween.initialFrom) tween.Restart()
+    else tween.Play()
+  }
+
+  _stopChildren() {
+    for (const b of this._built) {
+      if (b.tween && this._fired.has(b) && b.tween.playing) b.tween.Kill(false)
+    }
+  }
+
   _activateDueEntries() {
     for (const b of this._built) {
       if (this._fired.has(b) || this.elapsed + 1e-9 < b.at) continue
       this._fired.add(b)
-      if (b.tween) b.tween.Play()
+      if (b.tween) this._startChild(b.tween)
       if (b.fn) this.runtime.safeCall(b.fn)
     }
   }
@@ -328,8 +342,12 @@ export class TweenSequence {
       if (this.onStepComplete) this.runtime.safeCall(this.onStepComplete)
       this.loopIndex++
       if (this.loops < 0 || this.loopIndex < this.loops) {
-        this.elapsed = 0
+        // Device (TWINV v1): every loop replays from the start; a child is reset
+        // only when its own slot starts again and keeps its end value until then.
+        this.elapsed = Math.max(0, this.elapsed - this._end)
+        this._stopChildren()
         this._schedule()
+        this._activateDueEntries()
       } else {
         this.finish(true)
       }

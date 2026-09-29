@@ -1088,3 +1088,105 @@ end` })
   assert.deepEqual(press(6), [])
   assert.deepEqual(press(1), ['F'])
 })
+
+// Device evidence: probes/tween-invoke-20260928 (TWINV v1, PC, 2026-09-29).
+test('TweenSequence loops replay from the start, children reset at their own slot', () => {
+  const rt = createRuntime()
+  const lanes = {}
+  for (const id of ['L2', 'L3', 'L4', 'L5', 'L6']) {
+    lanes[id] = rt.addRoot({ active: true, name: id, kind: 'image', anchoredPositionX: 0, anchoredPositionY: 0 })
+  }
+  const host = rt.addRoot({ active: true, name: 'Host', kind: 'container' })
+  rt.mountScript({
+    path: 'seq-loops',
+    control: host,
+    source: `
+ev = {}
+local function on(tag) return function() ev[tag] = (ev[tag] or 0) + 1 end end
+local function x(c, v, d) return game.Tween(c, { anchoredPositionX = v }, d):SetEase(Enum.EaseType.Linear) end
+function OnStart()
+  local R = script.object
+  local function lane(n) return game.FindClientUIRoot(n) end
+  game.TweenSequence():Append(x(lane("L2"), 200, 1)):SetLoops(2):SetOnComplete(on("L2c")):Play()
+  game.TweenSequence():Append(x(lane("L3"), 200, 0.5))
+    :Append(game.Tween(lane("L3"), { anchoredPositionY = 30 }, 0.5):SetEase(Enum.EaseType.Linear))
+    :AppendCallback(on("L3cb")):SetLoops(3)
+    :SetOnStepComplete(on("L3s")):SetOnComplete(on("L3c")):Play()
+  L4 = game.TweenSequence():Append(x(lane("L4"), 200, 1)):SetOnComplete(on("L4c")):Play()
+  L5 = game.TweenSequence():Append(x(lane("L5"), 200, 1)):SetLoops(-1):SetOnComplete(on("L5c")):Play()
+  game.TweenSequence():Append(x(lane("L6"), 100, 1):SetRelative(true)):SetLoops(2):Play()
+end
+function Restart4() L4:Restart() end
+function Kill5() L5:Kill(false) end
+function Count(tag) return ev[tag] or 0 end
+`,
+  })
+  const script = rt.mountedScripts[0]
+  const call = (name, ...args) => script.invoke(name, args)
+  let t = 0
+  const until = (end) => { while (t < end - 1e-9) { rt.step(0.05); t += 0.05 } }
+  const near = (value, expected, label) => assert.ok(Math.abs(value - expected) < 1e-6, `${label}=${value}`)
+  until(1.3)
+  // Second loop moves again (device L2 t=1.309 -> 59.8).
+  assert.ok(lanes.L2.anchoredPositionX > 20 && lanes.L2.anchoredPositionX < 100, `L2 loop2 x=${lanes.L2.anchoredPositionX}`)
+  // X child replays while Y keeps its end value until its slot (device L3 t=1.209 -> 79.6/30).
+  assert.ok(lanes.L3.anchoredPositionX < 200, `L3 x=${lanes.L3.anchoredPositionX}`)
+  near(lanes.L3.anchoredPositionY, 30, 'L3 y')
+  // Relative child does not accumulate (device L6 t=1.309 -> 29.9).
+  assert.ok(lanes.L6.anchoredPositionX < 60, `L6 x=${lanes.L6.anchoredPositionX}`)
+  near(lanes.L4.anchoredPositionX, 200, 'L4 x')
+  call('Restart4')
+  until(1.7)
+  // Y slot started: reset to 0 then moving (device L3 t=1.606 -> 5.8).
+  assert.ok(lanes.L3.anchoredPositionY < 20, `L3 y=${lanes.L3.anchoredPositionY}`)
+  // Restart after completion replays from the start, 0.4 s in (device: 0.1 s after Restart -> 19.8).
+  assert.ok(lanes.L4.anchoredPositionX > 40 && lanes.L4.anchoredPositionX < 100, `L4 x=${lanes.L4.anchoredPositionX}`)
+  until(2.3)
+  assert.ok(lanes.L5.anchoredPositionX < 100, `L5 loop3 x=${lanes.L5.anchoredPositionX}`)
+  call('Kill5')
+  const killedAt = lanes.L5.anchoredPositionX
+  until(3.5)
+  assert.equal(lanes.L5.anchoredPositionX, killedAt)
+  near(lanes.L2.anchoredPositionX, 200, 'L2 x')
+  near(lanes.L6.anchoredPositionX, 100, 'L6 x')
+  near(lanes.L3.anchoredPositionX, 200, 'L3 x')
+  near(lanes.L3.anchoredPositionY, 30, 'L3 y')
+  assert.deepEqual(['L2c', 'L3cb', 'L3s', 'L3c', 'L4c', 'L5c'].map(tag => call('Count', tag)), [1, 3, 3, 1, 2, 0])
+})
+
+test('script:Invoke passes host objects and tables through unchanged', () => {
+  const rt = createRuntime()
+  const root = rt.addRoot({ active: true, name: 'R', kind: 'image' })
+  rt.mountScript({
+    path: 'invoke-identity',
+    control: root,
+    source: `
+function Echo(...) return ... end
+function OnStart()
+  local items = {
+    script.object,
+    game.Tween(script.object, { anchoredPositionX = 1 }, 1),
+    game.TweenSequence(),
+    game.ServerSignal("NEVER_SENT"),
+  }
+  for _, v in ipairs(items) do
+    local back = script:Invoke("Echo", v)
+    local t = { v }
+    local wrapped = script:Invoke("Echo", t)
+    print("id", typeof(v), rawequal(back, v), rawequal(wrapped, t), rawequal(wrapped[1], v))
+  end
+  local a, b, c = script:Invoke("Echo", 1, "x", { 2, 3 })
+  print("multi", a, b, type(c), #c)
+  print("missing", select("#", script:Invoke("NoSuchFunction")))
+  print("error", pcall(function() return script:Invoke("error", "boom") end))
+end
+`,
+  })
+  const t = logText(rt)
+  for (const kind of ['ClientUIImageControl', 'Tween', 'TweenSequence', 'ServerSignal']) {
+    assert.match(t, new RegExp(`id\t${kind}\ttrue\ttrue\ttrue`))
+  }
+  assert.match(t, /multi\t1\tx\ttable\t2/)
+  assert.match(t, /missing\t0/)
+  assert.match(t, /error\tfalse\tboom/)
+})

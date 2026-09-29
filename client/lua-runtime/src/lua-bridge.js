@@ -89,7 +89,11 @@ export function pushValue(L, runtime, value) {
     runtime.pushControl(L, value)
     return
   }
-  if (value && value.SetEase) {
+  if (value && value.__kind === 'ServerSignal') {
+    runtime.pushSignal(L, value)
+    return
+  }
+  if (value && (value.SetEase || value.Append)) {
     runtime.pushTween(L, value)
     return
   }
