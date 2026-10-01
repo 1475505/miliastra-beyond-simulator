@@ -67,3 +67,19 @@ test('client-template GIA no longer reports supported states as lost', () => {
   assert.ok(!warnings.some(w => w.includes('初始隐藏状态')))
   assert.ok(!warnings.some(w => w.includes('初始未激活状态')))
 })
+
+test('new scroll editor fields round-trip JSON and GIA reports unmapped settings', () => {
+  const studio = createStudio()
+  const set = (id, key, value) => studio.patch({ op: 'set', id, key, value })
+  set('n7', 'showScrollBar', false)
+  set('n5', 'itemPrefabId', 123)
+  set('n5', 'layoutConstraint', 'Fixed')
+  set('n5', 'layoutConstraintFixedCount', 3)
+  set('n5', 'scrollDirection', 'Horizontal')
+  const archive = studio.archiveData()
+  const restored = createStudio(archive).archiveData().assets.server.root.children[0].children
+  for (const id of ['n5', 'n7']) assert.deepEqual(restored.find(n => n.id === id), archive.assets.server.root.children[0].children.find(n => n.id === id))
+  const result = studio.exportData('gia')
+  assert.ok(result.warnings.some(w => /文本视窗交互\/滚动条开关/.test(w)))
+  assert.ok(result.warnings.some(w => /网格列表项模板/.test(w)))
+})

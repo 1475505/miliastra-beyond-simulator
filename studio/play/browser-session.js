@@ -28,6 +28,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   let sceneRev = 0
   let moveTimer = null
   let lastMove = null
+  let activePointer = null
   const inputDisposers = []
 
   function emitError(error) {
@@ -96,6 +97,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
 
   function reset() {
     clearMove()
+    activePointer = null
     running = false
     sceneRev = 0
     stopPolling()
@@ -165,17 +167,22 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     const keyTarget = keysOn || surface
     const onPointerDown = (event) => {
       if (!snapshot || !running || (isActive && !isActive())) return
+      if (activePointer !== null || (event.button != null && event.button !== 0)) return
+      activePointer = event.pointerId
       surface.setPointerCapture?.(event.pointerId)
       flushMove()
       void act('pointer', { type: 'down', ...point(event, surface) })
     }
     const onPointerUp = (event) => {
       if (!snapshot || !running || (isActive && !isActive())) return
+      if (activePointer !== event.pointerId) return
       flushMove()
       void act('pointer', { type: 'up', ...point(event, surface) })
+      activePointer = null
     }
     const onPointerMove = (event) => {
       if (!snapshot || !running || (isActive && !isActive())) return
+      if (activePointer !== null && activePointer !== event.pointerId) return
       lastMove = point(event, surface)
       if (moveTimer) return
       moveTimer = setTimeout(() => {
@@ -184,8 +191,27 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       }, PLAY_MOVE_THROTTLE_MS)
     }
     const onPointerLeave = () => {
+      if (activePointer !== null) return
       clearMove()
       if (snapshot && running && (!isActive || isActive())) void act('pointer', { type: 'move', x: -1, y: -1 })
+    }
+    const onPointerCancel = (event) => {
+      if (activePointer !== event.pointerId) return
+      clearMove()
+      activePointer = null
+      if (snapshot && running) void act('pointer', { type: 'cancel', ...point(event, surface) })
+    }
+    const onWheel = (event) => {
+      if (!snapshot || !running || (isActive && !isActive())) return
+      event.preventDefault()
+      const rect = surface.getBoundingClientRect()
+      // Browser line/page deltas have no pixel unit. Use 16 CSS px per line and
+      // one viewport per page, then convert to logical canvas units.
+      const unitX = event.deltaMode === 2 ? rect.width : event.deltaMode === 1 ? 16 : 1
+      const unitY = event.deltaMode === 2 ? rect.height : event.deltaMode === 1 ? 16 : 1
+      void act('pointer', { type: 'wheel', ...point(event, surface),
+        deltaX: event.deltaX * unitX * snapshot.canvasWidth / rect.width,
+        deltaY: event.deltaY * unitY * snapshot.canvasHeight / rect.height })
     }
     const onKeyDown = (event) => {
       if (!snapshot || !running || (isActive && !isActive())) return
@@ -207,6 +233,9 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     surface.addEventListener('pointerup', onPointerUp)
     surface.addEventListener('pointermove', onPointerMove)
     surface.addEventListener('pointerleave', onPointerLeave)
+    surface.addEventListener('pointercancel', onPointerCancel)
+    surface.addEventListener('lostpointercapture', onPointerCancel)
+    surface.addEventListener('wheel', onWheel, { passive: false })
     keyTarget.addEventListener('keydown', onKeyDown)
     keyTarget.addEventListener('keyup', onKeyUp)
     const dispose = () => {
@@ -214,6 +243,9 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       surface.removeEventListener('pointerup', onPointerUp)
       surface.removeEventListener('pointermove', onPointerMove)
       surface.removeEventListener('pointerleave', onPointerLeave)
+      surface.removeEventListener('pointercancel', onPointerCancel)
+      surface.removeEventListener('lostpointercapture', onPointerCancel)
+      surface.removeEventListener('wheel', onWheel)
       keyTarget.removeEventListener('keydown', onKeyDown)
       keyTarget.removeEventListener('keyup', onKeyUp)
       clearMove()

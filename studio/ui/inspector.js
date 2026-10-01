@@ -284,8 +284,19 @@ export function inspectorDto(node, canvasId, box, guidById) {
   if (node.kind === 'reference') {
     fields.push(field('referencedPrefabId', '引用控件模板索引', 'string', node.referencedPrefabId ?? ''))
   }
+  if (node.kind === 'textwindow' || node.kind === 'grid') {
+    fields.push(
+      field('interactable', '允许滚动交互', 'bool', node.interactable !== false),
+      field('showScrollBar', '显示滚动条', 'bool', node.showScrollBar !== false),
+    )
+  }
   if (node.kind === 'grid') {
     fields.push(
+      field('itemPrefabId', '列表项模板索引', 'number', node.itemPrefabId ?? 0),
+      field('raycastTarget', '可被光标射线检测', 'bool', node.raycastTarget !== false),
+      field('scrollDirection', '滚动方向', 'enum', node.scrollDirection, { options: [{ value: 'Vertical', label: '纵向' }, { value: 'Horizontal', label: '横向' }] }),
+      field('layoutConstraint', '排列限制', 'enum', node.layoutConstraint, { options: [{ value: 'AutoWrap', label: '自动换行' }, { value: 'Fixed', label: '固定行列数' }] }),
+      field('layoutConstraintFixedCount', '每行或每列数量', 'number', node.layoutConstraintFixedCount ?? 1),
       field('cellSizeX', '列表项大小 W', 'number', node.cellSizeX, { evidence: 'W' }),
       field('cellSizeY', '列表项大小 H', 'number', node.cellSizeY, { evidence: 'W' }),
       field('spacingX', '列表项间隔 X', 'number', node.spacingX, { evidence: 'W' }),
@@ -306,8 +317,10 @@ export function inspectorDto(node, canvasId, box, guidById) {
   if (node.kind === 'animation' || node.kind === 'fullscreen') {
     fields.push(field('animationId', node.kind === 'animation' ? '动效索引' : '全屏动效索引', 'string', node.animationId ?? ''))
   }
-  if (!CORE_KINDS.includes(node.kind)) {
-    fields.push(field('incomplete', '完整度', 'note', '本阶段仅公共变换，业务槽不完整'))
+  if (!CORE_KINDS.includes(node.kind) || node.kind === 'textwindow' || node.kind === 'grid') {
+    fields.push(field('incomplete', '完整度', 'note', node.kind === 'textwindow' || node.kind === 'grid'
+      ? '试玩支持基础滚动；滚动交互、滚动条及列表配置以 JSON/Lua 为准，相关 GIA 开关映射尚未核实。'
+      : '本阶段仅公共变换，业务槽不完整'))
   }
   return {
     id: node.id,

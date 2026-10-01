@@ -2,6 +2,8 @@
 
 服务端控件模板 / 客户端控件模板 Authoring JSON、双根结构 GIA、锚点布局、五预览/四平台同步、交互试玩编排，以及试玩时间线自动测。Lua VM 的实现仍只在 `client/lua-runtime`。服务端变量/信号在 `../server/`。
 
+11 类控件支持程度、2026-10-02 新增的文本/网格视窗基础滚动、模拟器策略与验证入口，统一见 [控件支持矩阵](docs/control-support.md)。
+
 `host-png.js` 是无 UI 宿主的编辑器/试玩 PNG 渲染器（截图与测试用）；`host/` 提供工作区边界、持久试玩 Worker 和通用 Controller，`play/pixi-renderer.js` 是 Web/DSH 共用的增量场景渲染器，`play/browser-session.js` 是两边共用的浏览器试玩循环。它们由 MCP、DSH 与本地 Web 适配层共同使用。
 
 层序回归见 `test/sibling-order.test.mjs`：编辑器静态列表第一项在上；Lua 动态实例根默认后建在上，显式 sibling 排序另行生效。2026-09-28 修复位于 Runtime 实例化边界；PNG/Pixi/命中继续消费同一棵树。来源与生命周期边界见 [默认动态实例层序](../client/lua-runtime/docs/observed-contract.md#默认动态实例层序2026-09-28)。

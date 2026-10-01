@@ -326,6 +326,7 @@ function typeData(node, guid, guidById, warnings) {
       verticalAlign: raw.textVerticalAlign ?? ({ Top: 0, Middle: 1, Bottom: 2 }[node.verticalAlignment] ?? 0),
     }
     if (node.kind === 'textwindow') {
+      if (node.interactable === false || node.showScrollBar === false) warnings.push(`${node.name}: 文本视窗交互/滚动条开关仅保存在 JSON，GIA 未映射这些改动。`)
       textConfig.field511 = raw.textField511 ?? 1
       textConfig.viewFlags = {
         field502: raw.textViewField502 ?? 1,
@@ -412,6 +413,9 @@ function typeData(node, guid, guidById, warnings) {
     return [generic, ref(66, 89, 'empty76', 'templateRefSlot', raw.templateRefSlot ?? ''), footer]
   }
   if (node.kind === 'grid') {
+    if (node.itemPrefabId || node.interactable === false || node.showScrollBar === false || node.raycastTarget === false || node.scrollDirection !== 'Vertical' || node.layoutConstraint !== 'AutoWrap') {
+      warnings.push(`${node.name}: 网格列表项模板、交互/滚动条开关、滚动方向及排列限制仅保存在 JSON，GIA 未映射这些改动。`)
+    }
     return [generic, ref(69, 92, 'empty79', 'gridView', {
       field501: raw.gridField501 ?? 1,
       cellSize: { field501: node.cellSizeX, field502: node.cellSizeY },

@@ -163,3 +163,38 @@ test('pending browser moves are dropped when the play session resets', async t =
   await wait(PLAY_MOVE_THROTTLE_MS + 20)
   assert.deepEqual(pointers, [])
 })
+
+test('wheel pixels/lines/pages scale into canvas units and cancellation ignores a second touch', async t => {
+  const calls = [], handlers = {}
+  const play = createPlaySession({
+    renderer: { async applyScene() {} },
+    async api(action, args) {
+      calls.push({ action, args })
+      return { running: true, canvasWidth: 1600, canvasHeight: 900 }
+    },
+  })
+  t.after(() => play.destroy())
+  await play.start()
+  play.stopPolling()
+  const surface = {
+    addEventListener(type, fn) { handlers[type] = fn }, removeEventListener(type) { delete handlers[type] },
+    getBoundingClientRect: () => ({ left: 10, bottom: 500, width: 800, height: 450 }),
+  }
+  const dispose = play.bindInput(surface)
+  let prevented = 0
+  for (const deltaMode of [0, 1, 2]) handlers.wheel({ clientX: 410, clientY: 275, deltaMode, deltaX: 1, deltaY: 2, preventDefault() { prevented++ } })
+  const wheels = calls.filter(c => c.args?.type === 'wheel').map(c => c.args)
+  assert.deepEqual(wheels.map(c => [c.x, c.y, c.deltaX, c.deltaY]), [[800, 450, 2, 4], [800, 450, 32, 64], [800, 450, 1600, 1800]])
+  assert.equal(prevented, 3)
+  const p = { pointerId: 1, clientX: 410, clientY: 275 }
+  handlers.pointerdown(p)
+  handlers.pointermove({ ...p, pointerId: 2, clientY: 240 })
+  handlers.pointerup({ ...p, pointerId: 2 })
+  handlers.pointermove({ ...p, clientY: 250 })
+  handlers.pointercancel(p)
+  handlers.pointerup(p)
+  await wait(PLAY_MOVE_THROTTLE_MS + 20)
+  assert.deepEqual(calls.filter(c => c.action === 'pointer' && c.args.type !== 'wheel').map(c => c.args.type), ['down', 'cancel'])
+  dispose()
+  assert.equal(Object.keys(handlers).length, 0)
+})

@@ -1020,7 +1020,7 @@ export function createStudio(seed, options = {}) {
 
   function playPointer(type, x, y, options = {}) {
     if (!play) throw new Error('play session has not started')
-    injectPlayPointer(play, type, x, y)
+    injectPlayPointer(play, type, x, y, options)
     return options.observe === false ? null : playGet(options)
   }
 

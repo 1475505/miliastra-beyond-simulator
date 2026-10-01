@@ -1,3 +1,5 @@
+import { clampProgress, gridMetrics, layoutGrid } from './grid.js'
+
 const TYPEOF = {
   container: 'ClientUIContainerControl',
   textbox: 'ClientUITextBoxControl',
@@ -180,10 +182,15 @@ export class Control {
     this._playDirty = true
     this._playDeepDirty = true
     this._playChildDirty = false
+    if (this.kind === 'grid' || this.kind === 'textwindow') {
+      this.runtime.scrollControls ||= new Set()
+      this.runtime.scrollControls.add(this)
+    }
     const extra = DEFAULTS[this.kind] || {}
     for (const [k, v] of Object.entries(extra)) {
       if (this[k] === undefined) this[k] = spec[k] !== undefined ? spec[k] : v
     }
+    if (this.kind === 'grid') this.scrollProgress = spec.scrollProgress ?? 0
     if (spec.children) {
       for (const child of spec.children) {
         const c = child instanceof Control ? child : new Control(runtime, child)
@@ -241,6 +248,14 @@ export class Control {
   get activeInHierarchy() {
     if (!this.active) return false
     return this._parent ? this._parent.activeInHierarchy : true
+  }
+
+  get scrollProgress() { return this._scrollProgress ?? 0 }
+
+  set scrollProgress(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('scrollProgress must be a finite number')
+    this._scrollProgress = clampProgress(value)
+    this.markPlayDirty()
   }
 
   addChild(child) {
@@ -576,32 +591,67 @@ export class Control {
     // 界面动效尚未实现：方法保留为 Lua API 占位，保证脚本可调用而不抛错。
   }
 
-  RefreshItems() {
-    throw new Error('ClientUIGridScrollerControl:RefreshItems not implemented')
+  RefreshItems(count, callback) {
+    if (!Number.isInteger(count) || count < 0 || count > 2000) throw new Error('RefreshItems: simulator supports 0..2000 items')
+    if (typeof callback !== 'function') throw new Error('RefreshItems: callback must be a function')
+    if (!this.alive || this._refreshingGrid) throw new Error('RefreshItems: destroyed control or recursive refresh')
+    if (count && !this.runtime.templates.has(Number(this.itemPrefabIndex))) throw new Error('RefreshItems: item template not found')
+    if (count && ['OnInit', 'OnDestroy'].includes(this.runtime.lifecyclePhase)) throw new Error('RefreshItems: items cannot be created during OnInit/OnDestroy')
+    this._refreshingGrid = true
+    try {
+      this._gridItems ||= []
+      const kept = []
+      for (const item of this._gridItems) {
+        if (item.alive && item.parent === this && item.prefabIndex === Number(this.itemPrefabIndex) && kept.length < count) kept.push(item)
+        else if (item.alive && item.parent === this) this.runtime.destroyControl(item)
+      }
+      this._gridItems = kept
+      while (kept.length < count) {
+        const item = this.runtime.instantiate(this.itemPrefabIndex, this, this.runtime.lifecyclePhase)
+        if (!item) throw new Error('RefreshItems: could not instantiate item')
+        kept.push(item)
+        item.SetActive(true)
+      }
+      this.itemCount = count
+      layoutGrid(this)
+      this.markPlayDirty(true)
+      for (let index = 0; index < kept.length && this.alive; index += 1) callback(kept[index], index)
+    } finally {
+      this._refreshingGrid = false
+    }
   }
 
-  GetItemIndex() {
-    throw new Error('ClientUIGridScrollerControl:GetItemIndex not implemented')
+  GetItemIndex(control) {
+    return control?.alive && control.parent === this ? (this._gridItems?.indexOf(control) ?? -1) : -1
   }
 
   GetItemSize() {
-    throw new Error('ClientUIGridScrollerControl:GetItemSize not implemented')
+    return [this.cellSizeX, this.cellSizeY]
   }
 
   GetItemSpacing() {
-    throw new Error('ClientUIGridScrollerControl:GetItemSpacing not implemented')
+    return [this.spacingX, this.spacingY]
   }
 
   GetPadding() {
-    throw new Error('ClientUIGridScrollerControl:GetPadding not implemented')
+    return [this.padding1Y, this.padding2Y, this.padding1X, this.padding2X]
   }
 
-  ScrollToItemAt() {
-    throw new Error('ClientUIGridScrollerControl:ScrollToItemAt not implemented')
+  ScrollToItemAt(index, align) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.itemCount) throw new Error('ScrollToItemAt: item index out of range')
+    const m = gridMetrics(this)
+    const size = m.horizontal ? m.cellW : m.cellH, gap = m.horizontal ? m.gapX : m.gapY
+    const start = (m.horizontal ? m.left : m.top) + Math.floor(index / m.lanes) * (size + gap)
+    const alignment = align?.Name || align
+    if (!['Top', 'Center', 'Bottom'].includes(alignment)) throw new Error('ScrollToItemAt: invalid alignment')
+    const offset = start - (alignment === 'Center' ? (m.viewport - size) / 2 : alignment === 'Bottom' ? m.viewport - size : 0)
+    this.scrollProgress = m.max ? clampProgress(offset / m.max) : 0
+    layoutGrid(this)
+    this.markPlayDirty(true)
   }
 
   GetContentLength() {
-    throw new Error('ClientUIGridScrollerControl:GetContentLength not implemented')
+    return gridMetrics(this).length
   }
 }
 

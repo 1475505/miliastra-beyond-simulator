@@ -1,5 +1,6 @@
 import { Application, CanvasSource, Container, DOMAdapter, Graphics, Matrix, Sprite, Text, TextStyle, Texture } from 'pixi.js'
 import { imageFillRect } from './image-fill.js'
+import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './scroll-geometry.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.
 import 'pixi.js/unsafe-eval'
@@ -11,7 +12,7 @@ import 'pixi.js/unsafe-eval'
 const TRI_POINTS = [0, -0.5, 0.5, 0.5, -0.5, 0.5]
 const STAR4_POINTS = [0, -0.5, 0.12, -0.12, 0.5, 0, 0.12, 0.12, 0, 0.5, -0.12, 0.12, -0.5, 0, -0.12, -0.12]
 const STAR5_POINTS = [0, -0.5, 0.11, -0.15, 0.48, -0.15, 0.18, 0.07, 0.29, 0.41, 0, 0.2, -0.29, 0.41, -0.18, 0.07, -0.48, -0.15, -0.11, -0.15]
-const PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button'])
+const PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button', 'grid'])
 
 function argb(value, fallback = 0xffffffff) {
   const raw = Number(value == null ? fallback : value) >>> 0
@@ -59,6 +60,7 @@ function visualKeyOf(item, width, height) {
     item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillAmount,
     item.text, item.fontSize, item.fontColor, item.bgColor, item.enableOutline,
     item.outlineColor, item.horizontalAlignment, item.verticalAlignment, item.pressed,
+    JSON.stringify(item.scroll),
   ].join('\t')
 }
 
@@ -170,6 +172,7 @@ export class PixiPlayRenderer {
     const visual = new Container()
     visual.eventMode = 'none'
     visual.label = `visual:${item.id}`
+    if (item.kind === 'grid') visual.zIndex = Number.MAX_SAFE_INTEGER
     if (item.kind === 'textbox' || item.kind === 'textwindow') {
       const background = new Graphics()
       const bg = argb(item.bgColor, 0x00ffffff)
@@ -177,14 +180,16 @@ export class PixiPlayRenderer {
       visual.addChild(background)
       const font = Math.max(8, finite(item.fontSize, 12))
       const anchor = textAnchor(item)
+      const scroll = item.kind === 'textwindow' ? item.scroll : null
+      const slice = scroll ? visibleTextLines(scroll, height) : null
       const text = new Text({
-        text: String(item.text || ''),
+        text: slice ? slice.text : String(item.text || ''),
         style: new TextStyle({
           fontFamily: 'Inter, "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
           fontSize: font,
           fill: argb(item.fontColor, 0xffffffff),
           stroke: item.enableOutline ? { color: argb(item.outlineColor, 0xff000000).color, width: Math.max(2, font * 0.12), join: 'round' } : undefined,
-          wordWrap: true,
+          wordWrap: !scroll,
           wordWrapWidth: Math.max(4, width - 4),
           breakWords: true,
           align: anchor.x === 1 ? 'right' : anchor.x === 0.5 ? 'center' : 'left',
@@ -194,6 +199,11 @@ export class PixiPlayRenderer {
       text.anchor.set(anchor.x, anchor.y)
       text.x = anchor.x === 0 ? -width / 2 + 2 : anchor.x === 1 ? width / 2 - 2 : 0
       text.y = anchor.y === 0 ? -height / 2 : anchor.y === 1 ? height / 2 : 0
+      if (scroll) {
+        text.anchor.set(anchor.x, 0)
+        text.x = -width / 2 + 2 + anchor.x * scroll.textWidth
+        text.y = -height / 2 - scroll.offset + slice.y + (scroll.max > 0 ? 0 : anchor.y * (height - scroll.contentLength))
+      }
       const clip = new Graphics().rect(-width / 2, -height / 2, width, height).fill({ color: 0xffffff, alpha: 1 })
       text.mask = clip
       visual.addChild(clip, text)
@@ -207,7 +217,7 @@ export class PixiPlayRenderer {
       const circle = new Sprite({ texture: this.circleTexture(Math.max(width, height)), anchor: 0.5 })
       visual.__circle = circle
       visual.addChild(circle)
-    } else {
+    } else if (item.kind !== 'grid') {
       const graphic = new Graphics()
       const color = argb(item.imageColor, 0xffffffff)
       if (item.primitive === 'missing') {
@@ -233,6 +243,13 @@ export class PixiPlayRenderer {
           visual.addChild(clip)
         }
       }
+      visual.addChild(graphic)
+    }
+    const bar = scrollBarGeometry(item.scroll, width, height)
+    if (bar) {
+      const graphic = new Graphics()
+      graphic.label = 'scrollbar'
+      for (const [rect, color] of [[bar.track, 0x263447], [bar.thumb, 0x90aecb]]) graphic.rect(rect.x, rect.y, rect.width, rect.height).fill({ color, alpha: 1 })
       visual.addChild(graphic)
     }
     visual.scale.set(item.pressed ? 0.98 : 1)
@@ -307,6 +324,35 @@ export class PixiPlayRenderer {
     }
     this.updateNode(root, item, { nested: item.parent != null })
     this.attachNode(root, item)
+    root.__sceneItem = item
+    root.__flat = false
+  }
+
+  updateViewportClip(root) {
+    const item = root.__sceneItem
+    const parent = this.nodes.get(item?.parent)?.__sceneItem
+    let polygons = item?.clipPolygons || []
+    if (!root.__flat && item?.clipToParent && parent) {
+      const w = parent.sourceWidth / 2, h = parent.sourceHeight / 2
+      polygons = [[[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => ({ x, y }))]
+    }
+    const key = JSON.stringify([polygons, item?.matrix])
+    if (root.__clipKey === key) return
+    root.__clipKey = key
+    root.mask = null
+    root.__viewportClip?.destroy({ context: true })
+    root.__viewportClip = null
+    root.visible = true
+    if (!polygons.length) return
+    const values = affine(item)
+    if (!values || Math.abs(values[0] * values[3] - values[1] * values[2]) < 1e-8) { root.visible = false; return }
+    const matrix = new Matrix(...values).invert()
+    const points = intersectClipPolygons(polygons).flatMap(point => { const p = matrix.apply(point); return [p.x, -p.y] })
+    if (points.length < 6 || !points.every(Number.isFinite)) { root.visible = false; return }
+    const clip = new Graphics().poly(points).fill({ color: 0xffffff, alpha: 1 })
+    root.addChild(clip)
+    root.mask = clip
+    root.__viewportClip = clip
   }
 
   removeNode(id) {
@@ -317,6 +363,8 @@ export class PixiPlayRenderer {
     }
     root.parent?.removeChild(root)
     this.clearVisual(root)
+    root.mask = null
+    root.__viewportClip?.destroy({ context: true })
     root.destroy({ children: false })
     this.nodes.delete(id)
   }
@@ -341,6 +389,7 @@ export class PixiPlayRenderer {
       if (!this.nodes.has(item.id)) this.createNode(item, { group: item.group === true })
     }
     for (let i = 0; i < (list || []).length; i += 1) this.upsertSceneNode(list[i])
+    for (const root of this.nodes.values()) if (root.__sceneItem?.clipToParent || root.__viewportClip) this.updateViewportClip(root)
     this.app.render()
   }
 
@@ -355,6 +404,9 @@ export class PixiPlayRenderer {
       visible.add(item.id)
       const root = this.nodes.get(item.id) || this.createNode(item)
       this.updateNode(root, item)
+      root.__sceneItem = item
+      root.__flat = true
+      this.updateViewportClip(root)
       root.zIndex = index
       if (root.parent !== this.app.stage) this.app.stage.addChild(root)
     }

@@ -48,7 +48,7 @@ LuaRuntime          时钟、日志、模板、脚本映射、信号/变量
 - `return false` 的按键穿透：当前仅 `true` 中断链。
 - `game` 全局函数的参数个数：Lua 桥接按当前 API 签名逐项核对，冒号调用产生的隐式 `game` 实参会报错。真机已确认 `GetClientUIRoots()` 的零参数约束；其他函数的统一检查是模拟器防错策略。
 - 按键跨控件派发：创作者预告后续版本同层级上层控件先接收事件。模拟器按当前 `children[]` 的前到后层序派发；同一根容器内回调返回 `true` 后停止后续派发。前半是待版更规则，后半是依据现有 API 文案的模拟器策略；新版真机尚未验证。父子层级和不同容器的官方顺序仍未确定。
-- 网格视窗方法：调用即抛错。
+- 网格视窗方法：基础模板项刷新/复用、排列、进度、定位和查询已实现；采用 0 起始索引、最多 2000 个完整实例等明确策略，见 [控件支持与滚动](../../../studio/docs/control-support.md)。
 - `GetText`：原样返回 id。
 - `GetLanguageType`：未传入时默认 `LanguageChs`。DSH / Web / MCP 试玩启动时读取本机「原神」`output_log.txt` 最近一次 `Request to set language`，映射到 `LanguageType` 的 Name；读不到或无法映射则仍用默认。这不是真机契约。
 - 整数宽度：Fengari 32-bit；现有 id 均在范围内。

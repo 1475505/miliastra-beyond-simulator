@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import { imageFillRect } from './play/image-fill.js'
+import { scrollBarGeometry } from './play/scroll-geometry.js'
 
 const require = createRequire(import.meta.url)
 
@@ -7,7 +8,7 @@ const TRI_POINTS = [0, -0.5, 0.5, 0.5, -0.5, 0.5]
 const STAR4_POINTS = [0, -0.5, 0.12, -0.12, 0.5, 0, 0.12, 0.12, 0, 0.5, -0.12, 0.12, -0.5, 0, -0.12, -0.12]
 const STAR5_POINTS = [0, -0.5, 0.11, -0.15, 0.48, -0.15, 0.18, 0.07, 0.29, 0.41, 0, 0.2, -0.29, 0.41, -0.18, 0.07, -0.48, -0.15, -0.11, -0.15]
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-const SCENE_PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button'])
+const SCENE_PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button', 'grid'])
 const KIND_LABEL = {
   cursor: '光标检测区域',
   reference: '模板引用控件',
@@ -137,24 +138,36 @@ function drawTextItem(ctx, item, width, height) {
   ctx.font = `${font}px "Microsoft YaHei UI","Microsoft YaHei",sans-serif`
   ctx.fillStyle = cssColor(color)
   ctx.textAlign = horizontal === 1 ? 'right' : horizontal === 0.5 ? 'center' : 'left'
-  ctx.textBaseline = vertical === 1 ? 'bottom' : vertical === 0.5 ? 'middle' : 'top'
+  const scroll = item.kind === 'textwindow' ? item.scroll : null
+  ctx.textBaseline = scroll ? 'top' : vertical === 1 ? 'bottom' : vertical === 0.5 ? 'middle' : 'top'
   if (item.enableOutline) {
     const outline = argb(item.outlineColor, 0xff000000)
     ctx.strokeStyle = cssColor(outline)
     ctx.lineWidth = Math.max(2, font * 0.12)
     ctx.lineJoin = 'round'
   }
-  const x = horizontal === 0 ? -width / 2 + 2 : horizontal === 1 ? width / 2 - 2 : 0
+  const x = scroll ? -width / 2 + 2 + horizontal * scroll.textWidth : horizontal === 0 ? -width / 2 + 2 : horizontal === 1 ? width / 2 - 2 : 0
   const y = vertical === 0 ? -height / 2 : vertical === 1 ? height / 2 : 0
-  const lines = String(item.text || '').split('\n')
-  const lineHeight = font * 1.2
-  const startY = vertical === 0.5 ? y - (lines.length - 1) * lineHeight / 2 : vertical === 1 ? y - (lines.length - 1) * lineHeight : y
+  const lines = scroll?.lines || String(item.text || '').split('\n')
+  const lineHeight = scroll?.lineHeight || font * 1.2
+  const startY = scroll ? -height / 2 - scroll.offset + (scroll.max > 0 ? 0 : vertical * (height - scroll.contentLength))
+    : vertical === 0.5 ? y - (lines.length - 1) * lineHeight / 2 : vertical === 1 ? y - (lines.length - 1) * lineHeight : y
   for (let i = 0; i < lines.length; i += 1) {
     const lineY = startY + i * lineHeight
+    if (scroll && (lineY + lineHeight < -height / 2 || lineY > height / 2)) continue
     if (item.enableOutline) ctx.strokeText(lines[i], x, lineY)
     ctx.fillText(lines[i], x, lineY)
   }
   ctx.restore()
+}
+
+function drawScrollBar(ctx, item, width, height) {
+  const bar = scrollBarGeometry(item.scroll, width, height)
+  if (!bar) return
+  for (const [rect, color] of [[bar.track, '#263447'], [bar.thumb, '#90aecb']]) {
+    ctx.fillStyle = color
+    ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+  }
 }
 
 function drawButtonItem(ctx, item, width, height) {
@@ -208,10 +221,16 @@ function drawPaintItem(ctx, item, canvasHeight) {
   const width = Math.max(0, finite(item.sourceWidth, finite(item.width)))
   const height = Math.max(0, finite(item.sourceHeight, finite(item.height)))
   ctx.save()
+  for (const polygon of item.clipPolygons || []) {
+    ctx.beginPath()
+    polygon.forEach((point, index) => index ? ctx.lineTo(point.x, canvasHeight - point.y) : ctx.moveTo(point.x, canvasHeight - point.y))
+    ctx.closePath()
+    ctx.clip()
+  }
   applyItemTransform(ctx, item, canvasHeight)
   if (item.kind === 'textbox' || item.kind === 'textwindow') drawTextItem(ctx, item, width, height)
   else if (item.kind === 'button') drawButtonItem(ctx, item, width, height)
-  else {
+  else if (item.kind !== 'grid') {
     const clip = imageFillRect(item, width, height)
     if (clip) {
       ctx.beginPath()
@@ -220,6 +239,7 @@ function drawPaintItem(ctx, item, canvasHeight) {
     }
     drawPrimitive(ctx, item, width, height)
   }
+  drawScrollBar(ctx, item, width, height)
   ctx.restore()
 }
 
@@ -293,7 +313,7 @@ export function flattenScenePaint(scene) {
     list.sort((a, b) => finite(a.z) - finite(b.z))
   }
   const out = []
-  function emit(node, world) {
+  function emit(node, world, clips) {
     if (!SCENE_PAINT_KINDS.has(node.kind)) return
     const width = Math.abs(finite(node.sourceWidth) * Math.hypot(world.a, world.b))
     const height = Math.abs(finite(node.sourceHeight) * Math.hypot(world.c, world.d))
@@ -305,17 +325,27 @@ export function flattenScenePaint(scene) {
       height,
       rotationZ: Math.atan2(world.b, world.a) * 180 / Math.PI,
       matrix: { a: world.a, b: world.b, c: world.c, d: world.d, tx: world.tx, ty: world.ty },
+      ...(clips.length ? { clipPolygons: clips } : {}),
     })
   }
-  function visit(parentKey, parentWorld) {
+  function visit(parentKey, parentWorld, parentNode = null, clips = []) {
     const list = children.get(parentKey) || []
     for (let i = list.length - 1; i >= 0; i -= 1) {
       const node = list[i]
       const world = parentWorld
         ? multiplyAffine(parentWorld, sceneLocalMatrix(node))
         : sceneLocalMatrix(node)
-      emit(node, world)
-      visit(String(node.id), world)
+      let itemClips = clips
+      if (node.clipToParent && parentWorld && parentNode) {
+        const w = parentNode.sourceWidth / 2, h = parentNode.sourceHeight / 2
+        itemClips = [...clips, [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => ({
+          x: parentWorld.a * x + parentWorld.c * y + parentWorld.tx,
+          y: parentWorld.b * x + parentWorld.d * y + parentWorld.ty,
+        }))]
+      }
+      if (node.kind !== 'grid') emit(node, world, itemClips)
+      visit(String(node.id), world, node, itemClips)
+      if (node.kind === 'grid') emit(node, world, itemClips)
     }
   }
   visit('', null)

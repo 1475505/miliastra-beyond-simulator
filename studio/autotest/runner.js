@@ -9,7 +9,7 @@ function nextTick(time, dt) {
 
 function applyEvent(play, event) {
   const payload = event.payload || {}
-  if (event.kind === 'pointer') play.pointer(payload.type, payload.x, payload.y)
+  if (event.kind === 'pointer') play.pointer(payload.type, payload.x, payload.y, payload)
   else if (event.kind === 'key') play.key(payload.typeName)
   else if (event.kind === 'click') play.click(payload.name)
   else if (event.kind === 'pause') play.pause()

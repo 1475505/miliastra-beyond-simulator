@@ -201,6 +201,7 @@ const DIRECT_FIELDS = new Set([
   'padding1X', 'padding1Y', 'padding2X', 'padding2Y', 'previewCount',
   'scrollDirection', 'layoutConstraint', 'referencedPrefabId', 'animationId',
   'keyboardKeyCode', 'controllerKeyCode',
+  'itemPrefabId', 'layoutConstraintFixedCount',
 ])
 
 const COMPUTED = new Set(['posX', 'posY', 'width', 'height'])
@@ -238,6 +239,7 @@ const NUMBER_FIELDS = new Set([
   'softEdgeWidthY', 'horizontalSoftRange', 'verticalSoftRange', 'fillAmount',
   'cellSizeX', 'cellSizeY', 'spacingX', 'spacingY', 'padding1X', 'padding1Y',
   'padding2X', 'padding2Y', 'previewCount', 'keyboardKeyCode', 'controllerKeyCode',
+  'itemPrefabId', 'layoutConstraintFixedCount',
 ])
 const BOOLEAN_FIELDS = new Set([
   'active', 'visible', 'canControllerFocus', 'isolateNavigation',
@@ -254,6 +256,8 @@ const STATE_NODE_FIELDS = new Set([
   'unavailableChildId', 'hoverChildId', 'pressedChildId', 'selectedChildId',
 ])
 const ENUM_VALUES = {
+  scrollDirection: ['Horizontal', 'Vertical'],
+  layoutConstraint: ['AutoWrap', 'Fixed'],
   softEdgeMode: ['Percentage', 'Pixel'],
   fillType: ['Horizontal', 'Vertical', 'Radial90', 'Radial180', 'Radial360'],
   fillHorizontalType: ['Left', 'Right'],

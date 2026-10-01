@@ -635,6 +635,7 @@ export class LuaRuntime {
     for (const script of control.scripts.slice()) this.unmountScript(script)
     for (const child of control.children.slice()) this._destroyControlTree(child)
     control.alive = false
+    this.scrollControls?.delete(control)
     this._playRemoved.push(control.Id)
     if (control.parent) {
       const parent = control.parent
@@ -941,12 +942,15 @@ export class LuaRuntime {
       SetFillRadial360: this.method((o, t, a) => o.SetFillRadial360(t, a)),
       PlayAnimation: this.method((o) => o.PlayAnimation()),
       StopAnimation: this.method((o) => o.StopAnimation()),
-      RefreshItems: this.method((o) => o.RefreshItems()),
-      GetItemIndex: this.method((o) => o.GetItemIndex()),
+      RefreshItems: this.method((o, count, callback) => {
+        this.retainLuaCallback(callback)
+        try { o.RefreshItems(count, callback) } finally { this.unrefLuaCallback(callback) }
+      }),
+      GetItemIndex: this.method((o, control) => o.GetItemIndex(control)),
       GetItemSize: this.method((o) => o.GetItemSize()),
       GetItemSpacing: this.method((o) => o.GetItemSpacing()),
       GetPadding: this.method((o) => o.GetPadding()),
-      ScrollToItemAt: this.method((o) => o.ScrollToItemAt()),
+      ScrollToItemAt: this.method((o, index, align) => o.ScrollToItemAt(index, align)),
       GetContentLength: this.method((o) => o.GetContentLength()),
     }
     this.mtIndexNewindex(

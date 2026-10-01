@@ -1,4 +1,4 @@
-import { createRuntime, walkControls as walk } from 'qxqy-lua-runtime'
+import { createRuntime, walkControls as walk, layoutGrid, controlSize } from 'qxqy-lua-runtime'
 import { createServer, normalizePlayerCount, normalizePlayerIndex } from 'qxqy-server'
 import { compileProject } from './compile.js'
 import { assertLosslessJson } from '../json.js'
@@ -13,6 +13,38 @@ import {
   localRectMatrix,
 } from '../ui/layout.js'
 import { recordEvent } from '../autotest/format.js'
+import { textWindowMetrics, clamp } from './scroll.js'
+import { scrollBarGeometry } from './scroll-geometry.js'
+
+function prepareScroll(session) {
+  for (const control of session.runtime.scrollControls || []) {
+    const [width, height] = controlSize(control)
+    const metrics = control.kind === 'grid' ? layoutGrid(control) : textWindowMetrics(control, width, height)
+    const scroll = { offset: metrics.offset, max: metrics.max, horizontal: metrics.horizontal,
+      showBar: control.showScrollBar !== false, textWidth: metrics.textWidth ?? 0,
+      lines: metrics.lines || [], lineHeight: metrics.lineHeight || 0, contentLength: metrics.length }
+    const key = JSON.stringify(scroll)
+    if (control._scrollKey !== key) {
+      control._scrollKey = key
+      control._scroll = scroll
+      control.markPlayDirty()
+    }
+  }
+}
+
+function scrollFields(control) {
+  return {
+    ...(control._scroll ? { scroll: control._scroll } : {}),
+    ...(control.parent?._gridItems?.includes(control) ? { clipToParent: true } : {}),
+  }
+}
+
+function setScrollOffset(control, offset) {
+  const max = control._scroll?.max || 0
+  if (control.kind === 'grid') control.scrollProgress = max ? clamp(offset, max) / max : 0
+  else control._scrollOffset = clamp(offset, max)
+  control.markPlayDirty()
+}
 
 const CANVAS_PRESET_LIST = Object.freeze(
   Object.values(CANVAS_PRESETS).map((preset) => Object.freeze({
@@ -25,6 +57,7 @@ const CANVAS_PRESET_LIST = Object.freeze(
 )
 
 export function runtimeLayout(session) {
+  prepareScroll(session)
   const rootBox = canvasBox({ width: session.runtime.canvasWidth, height: session.runtime.canvasHeight })
   const boxes = new Map()
   function rec(control, parentBox, parentActive) {
@@ -72,6 +105,8 @@ export function controlSnapshot(control, boxes) {
     raycastTarget: control.raycastTarget !== false,
     interactable: control.interactable !== false,
     pressed: control.pressed === true,
+    ...(control._scroll ? { scrollOffset: control._scroll.offset, scrollMax: control._scroll.max } : {}),
+    ...(control.kind === 'grid' ? { itemCount: control.itemCount, scrollProgress: control.scrollProgress } : {}),
     anchoredPositionX: control.anchoredPositionX,
     anchoredPositionY: control.anchoredPositionY,
     sizeDeltaX: control.sizeDeltaX,
@@ -121,6 +156,7 @@ function emptyPlayerView() {
     pointerLastPosition: null,
     pointerDragging: false,
     pointerHoverControl: null,
+    pointerScroll: null,
     hoveredControl: null,
     selectedControl: null,
     stateRestores: new Map(),
@@ -150,7 +186,7 @@ function createPlayerRuntime(compiled, templateBundle, scripts, language) {
 
 const VIEW_FIELDS = [
   'pointerDownControl', 'pointerDownPosition', 'pointerLastPosition', 'pointerDragging',
-  'pointerHoverControl', 'hoveredControl', 'selectedControl', 'stateRestores', 'viewCache',
+  'pointerHoverControl', 'pointerScroll', 'hoveredControl', 'selectedControl', 'stateRestores', 'viewCache',
 ]
 
 function bindCurrentView(session) {
@@ -224,7 +260,7 @@ function historyRows(session) {
   return session?.history?.events || []
 }
 
-const PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button'])
+const PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button', 'grid'])
 
 // Pixi receives an affine matrix so nested non-uniform scale and rotation do
 // not lose information through a single angle/size decomposition.
@@ -279,6 +315,7 @@ function compactPaint(control, box, transform) {
     rotationZ: transform.rotationZ,
     matrix: transform.matrix,
     pressed: control.pressed === true,
+    ...scrollFields(control),
   }
   if (control.kind === 'image') {
     item.primitive = IMAGE_PRIMITIVES[control.imageId] || 'missing'
@@ -302,15 +339,22 @@ function compactPaint(control, box, transform) {
 export function paintList(session, boxes = runtimeLayout(session)) {
   const out = []
   const transforms = runtimeTransforms(session, boxes)
-  function rec(control) {
+  function rec(control, clips = []) {
     const box = boxes.get(control.Id)
     if (!box || control.visible === false || !box.activeInHierarchy) return
     const matrix = transforms.get(control.Id)
     if (!matrix) return
     const transform = paintTransform(box, matrix)
-    if (PAINT_KINDS.has(control.kind)) out.push(compactPaint(control, box, transform))
+    const paint = () => out.push({ ...compactPaint(control, box, transform), ...(clips.length ? { clipPolygons: clips } : {}) })
+    if (PAINT_KINDS.has(control.kind) && control.kind !== 'grid') paint()
     const children = control.children || []
-    for (let i = children.length - 1; i >= 0; i -= 1) rec(children[i])
+    for (let i = children.length - 1; i >= 0; i -= 1) {
+      const itemClips = control._gridItems?.includes(children[i])
+        ? [...clips, [[box.left, box.bottom], [box.right, box.bottom], [box.right, box.top], [box.left, box.top]].map(([x, y]) => applyMatrix(matrix, x, y))]
+        : clips
+      rec(children[i], itemClips)
+    }
+    if (control.kind === 'grid') paint()
   }
   for (const root of session.runtime.roots) rec(root)
   return out
@@ -323,6 +367,7 @@ function visualFields(control, box) {
     sourceWidth: box.width,
     sourceHeight: box.height,
     pressed: control.pressed === true,
+    ...scrollFields(control),
   }
   if (control.kind === 'image') {
     fields.primitive = IMAGE_PRIMITIVES[control.imageId] || 'missing'
@@ -366,6 +411,7 @@ function sceneFingerprint(node) {
     node.fillType, node.fillHorizontalType, node.fillVerticalType, node.fillAmount,
     node.text, node.fontSize, node.fontColor, node.bgColor,
     node.enableOutline, node.outlineColor, node.horizontalAlignment, node.verticalAlignment,
+    JSON.stringify(node.scroll), node.clipToParent,
   ].join('\t')
 }
 
@@ -537,6 +583,7 @@ function sceneView(session, sceneRev) {
 }
 
 export function playSnapshot(session, { inspect = false, view = false, paint = false, sceneRev, compact = false } = {}) {
+  prepareScroll(session)
   const rt = session.runtime
   const compiled = session.compiled
   const [w, h] = [rt.canvasWidth, rt.canvasHeight]
@@ -718,6 +765,7 @@ function subtreeCanHit(control, memo) {
 }
 
 export function hitPlayControl(session, x, y) {
+  prepareScroll(session)
   const rootBox = canvasBox({ width: session.runtime.canvasWidth, height: session.runtime.canvasHeight })
   const memo = new Map()
   function rec(control, parentBox, parentMatrix, parentActive) {
@@ -729,6 +777,11 @@ export function hitPlayControl(session, x, y) {
     if (!inverse) return null
     const local = applyMatrix(inverse, x, y)
     if (local.x < box.left || local.x > box.right || local.y < box.bottom || local.y > box.top) return null
+    if (scrollUsable(control)) {
+      const bar = scrollBarGeometry(control._scroll, box.width, box.height)?.track
+      const bx = local.x - box.centerX, by = box.centerY - local.y
+      if (bar && bx >= bar.x && bx <= bar.x + bar.width && by >= bar.y && by <= bar.y + bar.height) return control
+    }
     if (pointerRecursesInto(control)) {
       for (let i = 0; i < control.children.length; i += 1) {
         const child = rec(control.children[i], box, matrix, true)
@@ -761,9 +814,46 @@ function pointerData(session, x, y, { dragging = false, press = null, previous =
 }
 
 function setPressed(session, control, pressed) {
+  if (control.kind === 'grid' || control.kind === 'textwindow') return
   control.pressed = pressed
   if (typeof control.markPlayDirty === 'function') control.markPlayDirty()
   refreshButtonState(session, control)
+}
+
+function scrollUsable(control) {
+  if (!control?.alive || !control.activeInHierarchy || control.interactable === false || control.raycastTarget === false) return false
+  for (let node = control; node; node = node.parent) if (node.visible === false) return false
+  return control._scroll?.max > 0
+}
+
+function scrollTarget(hit) {
+  for (let node = hit; node; node = node.parent) if (scrollUsable(node)) return node
+  return null
+}
+
+function scrollPoint(session, control, x, y) {
+  const boxes = runtimeLayout(session)
+  const box = boxes.get(control.Id)
+  const matrix = runtimeTransforms(session, boxes).get(control.Id)
+  const inverse = matrix && invertMatrix(matrix)
+  if (!box || !inverse) return null
+  const point = applyMatrix(inverse, x, y)
+  return { x: point.x - box.centerX, y: box.centerY - point.y, width: box.width, height: box.height }
+}
+
+function cancelPointer(session, x, y) {
+  const down = session.pointerDownControl
+  if (down?.alive) {
+    const data = pointerData(session, x, y, { dragging: session.pointerDragging, press: session.pointerDownPosition, previous: session.pointerLastPosition })
+    session.runtime.injectCursor(down, 'CursorUp', data)
+    if (session.pointerDragging && !session.pointerScroll) session.runtime.injectCursor(down, 'CursorEndDrag', data)
+    setPressed(session, down, false)
+  }
+  session.pointerDownControl = null
+  session.pointerScroll = null
+  session.pointerDownPosition = null
+  session.pointerDragging = false
+  session.pointerLastPosition = { x, y }
 }
 
 export function injectPlayPointer(session, type, x, y, options = {}) {
@@ -772,7 +862,23 @@ export function injectPlayPointer(session, type, x, y, options = {}) {
   if (!Number.isFinite(px) || !Number.isFinite(py)) throw new Error('pointer coordinates must be finite')
   session.runtime.cursor.x = px
   session.runtime.cursor.y = py
-  if (!options.silent) remember(session, { kind: 'pointer', payload: { type, x: px, y: py } })
+  const deltaX = Number(options.deltaX ?? 0), deltaY = Number(options.deltaY ?? 0)
+  if (type === 'wheel' && (!Number.isFinite(deltaX) || !Number.isFinite(deltaY))) throw new Error('wheel deltas must be finite')
+  if (!options.silent) remember(session, { kind: 'pointer', payload: { type, x: px, y: py, ...(type === 'wheel' ? { deltaX, deltaY } : {}) } })
+  if (type === 'wheel') {
+    const hit = hitPlayControl(session, px, py)
+    const control = scrollTarget(hit)
+    if (control) {
+      const delta = control._scroll.horizontal ? (deltaX || deltaY) : deltaY
+      setScrollOffset(control, control._scroll.offset + delta)
+    }
+    return hit
+  }
+  if (type === 'cancel') {
+    cancelPointer(session, px, py)
+    return null
+  }
+  if ((type === 'move' || type === 'up') && session.pointerScroll && !scrollUsable(session.pointerScroll.control)) cancelPointer(session, px, py)
   if (type === 'move') {
     const previousPos = session.pointerLastPosition || { x: px, y: py }
     const previousHit = session.pointerHoverControl
@@ -786,18 +892,32 @@ export function injectPlayPointer(session, type, x, y, options = {}) {
     if (previousButton && previousButton !== session.hoveredControl) refreshButtonState(session, previousButton)
     if (session.hoveredControl) refreshButtonState(session, session.hoveredControl)
     const down = session.pointerDownControl
-    if (down) {
+    const scrolling = session.pointerScroll
+    if (scrolling) {
+      if (!scrollUsable(scrolling.control)) session.pointerScroll = null
+      else {
+        const point = scrollPoint(session, scrolling.control, px, py)
+        if (point) {
+          const current = scrolling.control._scroll
+          const distance = current.horizontal ? point.x - scrolling.start.x : point.y - scrolling.start.y
+          const travel = scrollBarGeometry(current, point.width, point.height)?.travel || 0
+          const amount = scrolling.bar ? (travel ? distance * current.max / travel : 0) : -distance
+          setScrollOffset(scrolling.control, scrolling.offset + amount)
+        }
+      }
+    }
+    if (down?.alive) {
       const press = session.pointerDownPosition || previousPos
       const moved = px !== previousPos.x || py !== previousPos.y
       if (!session.pointerDragging && moved) {
-        session.runtime.injectCursor(down, 'CursorBeginDrag', pointerData(session, px, py, {
+        if (!scrolling) session.runtime.injectCursor(down, 'CursorBeginDrag', pointerData(session, px, py, {
           press,
           previous: previousPos,
           dragging: false,
         }))
         session.pointerDragging = true
       }
-      if (session.pointerDragging) {
+      if (session.pointerDragging && !scrolling) {
         session.runtime.injectCursor(down, 'CursorDrag', pointerData(session, px, py, {
           press,
           previous: previousPos,
@@ -814,6 +934,20 @@ export function injectPlayPointer(session, type, x, y, options = {}) {
     session.pointerDownPosition = { x: px, y: py }
     session.pointerLastPosition = { x: px, y: py }
     session.pointerDragging = false
+    session.pointerScroll = null
+    const control = scrollTarget(hit)
+    if (control) {
+      const point = scrollPoint(session, control, px, py)
+      const geometry = point && scrollBarGeometry(control._scroll, point.width, point.height)
+      const contains = (r) => point.x >= r.x && point.x <= r.x + r.width && point.y >= r.y && point.y <= r.y + r.height
+      const bar = geometry && contains(geometry.track)
+      if (bar && !contains(geometry.thumb)) {
+        const position = control._scroll.horizontal ? point.x - geometry.track.x - geometry.thumb.width / 2 : point.y - geometry.track.y - geometry.thumb.height / 2
+        setScrollOffset(control, geometry.travel ? position / geometry.travel * control._scroll.max : 0)
+        prepareScroll(session)
+      }
+      if (point) session.pointerScroll = { control, start: point, offset: control._scroll.offset, bar: !!bar }
+    }
     if (hit) {
       setPressed(session, hit, true)
       session.runtime.injectCursor(hit, 'CursorDown', pointerData(session, px, py))
@@ -823,7 +957,7 @@ export function injectPlayPointer(session, type, x, y, options = {}) {
   if (type === 'up') {
     const down = session.pointerDownControl
     const hit = normalizeButtonHit(hitPlayControl(session, px, py))
-    if (down) {
+    if (down?.alive) {
       const data = pointerData(session, px, py, {
         press: session.pointerDownPosition,
         previous: session.pointerLastPosition,
@@ -831,8 +965,8 @@ export function injectPlayPointer(session, type, x, y, options = {}) {
       })
       session.runtime.injectCursor(down, 'CursorUp', data)
       if (session.pointerDragging) {
-        session.runtime.injectCursor(down, 'CursorEndDrag', data)
-      } else if (hit === down) {
+        if (!session.pointerScroll) session.runtime.injectCursor(down, 'CursorEndDrag', data)
+      } else if (hit === down && !session.pointerScroll?.bar) {
         session.runtime.injectCursor(down, 'CursorClick', data)
         const previous = session.selectedControl
         session.selectedControl = down.kind === 'button' ? down : null
@@ -844,6 +978,7 @@ export function injectPlayPointer(session, type, x, y, options = {}) {
     session.pointerDownPosition = null
     session.pointerLastPosition = { x: px, y: py }
     session.pointerDragging = false
+    session.pointerScroll = null
     return hit
   }
   if (type === 'click') {
@@ -875,7 +1010,7 @@ export function playAdapter(session) {
   return {
     snapshot: (options) => playSnapshot(session, options),
     step: (dt) => stepPlay(session, dt),
-    pointer: (type, x, y) => injectPlayPointer(session, type, x, y),
+    pointer: (type, x, y, options) => injectPlayPointer(session, type, x, y, options),
     key: (typeName) => injectPlayKey(session, typeName),
     click: (name) => injectPlayClick(session, name),
     view: (playerIndex) => setPlayView(session, playerIndex),

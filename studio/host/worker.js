@@ -82,7 +82,7 @@ function run(action, args = {}) {
     return args.light ? respond(args) : value
   }
   if (action === 'pointer') {
-    studio.playPointer(args.type, args.x, args.y, { observe: false })
+    studio.playPointer(args.type, args.x, args.y, { observe: false, deltaX: args.deltaX, deltaY: args.deltaY })
     return respond(args)
   }
   if (action === 'key') {

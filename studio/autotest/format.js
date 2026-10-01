@@ -27,6 +27,10 @@ function normalizeEvent(raw, index) {
     payload.x = finiteNumber(payload.x, 'pointer.x')
     payload.y = finiteNumber(payload.y, 'pointer.y')
     payload.type = String(payload.type || 'click')
+    if (payload.type === 'wheel') {
+      payload.deltaX = finiteNumber(payload.deltaX ?? raw.deltaX ?? 0, 'pointer.deltaX')
+      payload.deltaY = finiteNumber(payload.deltaY ?? raw.deltaY ?? 0, 'pointer.deltaY')
+    }
   } else if (kind === 'key') {
     payload.typeName = String(payload.typeName || payload.key || raw.typeName || raw.key || '')
     if (!payload.typeName) throw new Error('key event requires typeName')
