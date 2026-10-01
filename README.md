@@ -95,7 +95,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.7.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.8.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -152,7 +152,7 @@ GitHub 安装使用仓库默认分支，安装时由 `prepare` 自动构建。�
 1. 在“UI 编辑”页添加控件，调整属性，并切换 PC / 手机画布检查适配。
 2. 在“Lua 脚本”页创建或导入脚本，将入口脚本挂载到客户端控件或客户端模板；模板脚本在模板实例化时运行。
 3. 如果玩法需要服务端响应，在“服务端逻辑”页配置监听信号、设置变量和向玩家发送信号。
-4. 点击“试玩 ↗”，在独立窗口中操作游戏。遇到问题时暂停、单步推进，并查看“日志”页中的脚本输出与运行状态。
+4. 点击“试玩 ↗”，在独立窗口中操作游戏；Desktop 等宿主拒绝新窗口时自动进入应用内全屏试玩。遇到问题时暂停、单步推进，并查看“日志”页中的脚本输出与运行状态。内嵌时通过“返回编辑”“关闭试玩”或 Escape 停止并返回。
 5. 返回编辑器修改，再次试玩；需要检查多人交互时，调整试玩人数并切换玩家视角。
 
 ### 3. 让 AI 帮你测试

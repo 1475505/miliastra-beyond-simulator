@@ -44,6 +44,7 @@ test('editor isolates tabs, preserves sessions on reload, and protects disk save
   for (const route of ['/editor', '/editor.js', '/editor.css', '/editor/play', '/editor/play.js', '/editor/play.css', '/editor/play-renderer.js']) {
     const response = await fetch(app.url + route)
     assert.equal(response.status, 200, route)
+    assert.ok(response.headers.get('content-security-policy').includes(`frame-ancestors '${route === '/editor/play' ? 'self' : 'none'}'`), route)
     assert.ok((await response.text()).length > 50, route)
   }
 })

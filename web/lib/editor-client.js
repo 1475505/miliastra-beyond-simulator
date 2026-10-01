@@ -13,6 +13,7 @@ const editor = createEditor(React, {
     const response = await fetch(`/editor/api/${action}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ sessionId, ...body }),
+      ...(action === 'play' ? { signal: AbortSignal.timeout(15_000) } : {}),
     })
     const envelope = await response.json()
     if (!response.ok || !envelope.ok) throw new Error(envelope.error || '请求失败')

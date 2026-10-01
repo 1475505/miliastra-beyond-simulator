@@ -48,11 +48,11 @@ function parseArgs(argv = process.argv.slice(2)) {
   }
 }
 
-function headers(contentType) {
+function headers(contentType, frameAncestors = "'none'") {
   return {
     'cache-control': 'no-store',
     'content-type': contentType,
-    'content-security-policy': "default-src 'self'; img-src 'self' data:; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; frame-ancestors 'none'",
+    'content-security-policy': `default-src 'self'; img-src 'self' data:; connect-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; frame-ancestors ${frameAncestors}`,
     'x-content-type-options': 'nosniff',
   }
 }
@@ -145,7 +145,8 @@ export async function createWebServer(options = {}) {
       if (request.method === 'GET' && staticFiles.has(requestUrl.pathname)) {
         const filename = staticFiles.get(requestUrl.pathname)
         const data = readFileSync(resolve(publicDir, filename))
-        response.writeHead(200, headers(mimeTypes[extname(filename)] || 'application/octet-stream'))
+        // Only the play page can be embedded, and only by our same-origin editor.
+        response.writeHead(200, headers(mimeTypes[extname(filename)] || 'application/octet-stream', requestUrl.pathname === '/editor/play' ? "'self'" : "'none'"))
         response.end(data)
         return
       }

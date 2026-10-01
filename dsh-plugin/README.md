@@ -1,6 +1,6 @@
 # 千星沙箱 DSH 插件
 
-静态 Host + Client 插件。编辑状态按 DSH `sessionId` 隔离；每个会话以一个存档聚合服务端 UI、客户端模板和 Lua 脚本，支持完整存档包与单项 Authoring JSON/GIA/Lua 导入导出。Lua 试玩在独立浏览器标签页中展示，并运行于可终止的 Worker。
+静态 Host + Client 插件。编辑状态按 DSH `sessionId` 隔离；每个会话以一个存档聚合服务端 UI、客户端模板和 Lua 脚本，支持完整存档包与单项 Authoring JSON/GIA/Lua 导入导出。Lua 试玩优先在独立浏览器标签页中展示；宿主拒绝新窗口时改为应用内全屏试玩，仍运行于可终止的 Worker。
 
 ## 安装与更新
 
@@ -12,7 +12,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.7.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.8.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -44,6 +44,10 @@ Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxq
 插件随包附带 agent 预设 `wonderland-lua-builder`（千星 2D+Lua 游戏制作）：源目录 [`../agent/wonderland-lua-builder`](../agent/wonderland-lua-builder)。构建时把 `agent.cordis.yml` 嵌入 `dsh-plugin/cordis.patch.yml`。在提供 `@deepseek-ai/dsh-agent-preset` 的 DSH 0.1.7-rc.1 及更新版本中，新版注册项会启用；旧版 DSH 自动跳过它，避免缺失模块阻塞启动。旧版复制入口始终保留：启动时仅当 `$DSH_HOME/.agent-presets/wonderland-lua-builder` 不存在，才从包内 `dsh-plugin/presets/` 复制，已有用户预设不覆盖。支持预设选择的 DSH 中，可在「设置 → Agent 预设」选择；已有任务不会自动切换。
 
 编辑器自动跟随 Harness 亮/暗主题并占满宿主内容高度，分为“UI 编辑 / Lua 脚本 / 服务端逻辑”三个页面。顶栏显示存档名、会话工作区和当前资产。点击“试玩 ↗”会先保存脚本与服务端逻辑，再打开同源 `/qxqy-simulator/play#<sessionId>`；试玩画面由 PixiJS v8 WebGL 渲染，Runtime 仍在 Worker 内推进并独占 Lua、布局、锚点、命中和测试语义。`qxqy_studio_play_screenshot` 根据 Runtime `paint` 在 Host 出 PNG，`qxqy_studio_ui_screenshot` 根据编辑器 `boxes` 出舞台 PNG，都不依赖可见页签。完整使用与排障见 [`../../docs/simulator-usage.md`](../../docs/simulator-usage.md)。
+
+## Desktop 内嵌试玩（2.0.8）
+
+DSH Desktop 0.2 拒绝页面创建子窗口，旧版插件因此误报“浏览器阻止了试玩标签页”。2.0.8 在新窗口不可用时，保存成功后用全屏 iframe 加载同一试玩页，无需修改浏览器弹窗权限。点击“返回编辑”“关闭试玩”或按 Escape 会等待停止成功后关闭；停止失败时可重试。编辑器保持原页面、草稿、选择和滚动状态。技术说明与浏览器/Electron 验证边界见 [共用编辑器](../editor-ui/README.md#试玩窗口与内嵌兜底)。
 
 ## Harness 0.2 兼容性
 

@@ -42,6 +42,10 @@
       'use strict'
       const API = '/qxqy-simulator/api/play'
       const sessionId = decodeURIComponent(location.hash.slice(1))
+      const embedded = window.parent !== window && new URLSearchParams(location.search).get('embedded') === '1'
+      let closing = false
+      let stopped = false
+      let embeddedApi = null
       const $ = (id) => document.getElementById(id)
       const stage = $('stage')
       const cv = $('cv')
@@ -64,11 +68,16 @@
         if (!showLog) requestAnimationFrame(() => fitStage(true))
       }
 
-      async function api(action, args = {}) {
+      function api(action, args = {}) {
+        if (closing && action !== 'stop') return Promise.reject(new Error('试玩正在关闭'))
+        return embeddedApi ? embeddedApi(action, args) : request(action, args)
+      }
+      async function request(action, args) {
         const response = await fetch(API, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ sessionId, action, args }),
+          signal: AbortSignal.timeout(15_000),
         })
         const envelope = await response.json().catch(() => null)
         if (!response.ok || !envelope || envelope.ok !== true) throw new Error(envelope?.error || '试玩请求失败')
@@ -225,6 +234,7 @@
       }
 
       function showError(error) {
+        if (closing) return
         $('loading').classList.add('hidden')
         $('fatal').classList.remove('hidden')
         $('fatal').textContent = error?.message || String(error)
@@ -238,6 +248,7 @@
         onSnapshot: renderChrome,
         onStatus: applyStatus,
         onError: showError,
+        isActive: () => !closing,
       })
       play.bindInput(stage, { keysOn: window })
 
@@ -300,7 +311,40 @@
           revealStage()
         } catch (error) { showError(error) }
       })
-      $('close').addEventListener('click', async () => { if (play.running) await play.stop().catch(() => {}); window.close() })
+      function quiesce() {
+        closing = true
+        document.querySelector('.app').inert = true
+        play.reset()
+      }
+      function focusStage() {
+        stage.tabIndex = -1
+        stage.focus({ preventScroll: true })
+      }
+      stage.addEventListener('pointerdown', focusStage)
+      function requestEmbeddedClose() {
+        // Custom desktop schemes can serialize their origin as "null".
+        // The parent checks the exact iframe WindowProxy and session id.
+        parent.postMessage({ type: 'qxqy-play-close', sessionId }, location.origin === 'null' ? '*' : location.origin)
+      }
+      addEventListener('keydown', event => {
+        if (embedded && event.key === 'Escape') { event.preventDefault(); requestEmbeddedClose() }
+      })
+      $('close').addEventListener('click', async () => {
+        if (embedded) {
+          requestEmbeddedClose()
+          return
+        }
+        try {
+          quiesce()
+          await api('stop')
+          stopped = true
+          window.close()
+        } catch (error) {
+          closing = false
+          document.querySelector('.app').inert = false
+          showError(error)
+        }
+      })
       $('theme').addEventListener('click', () => { theme = theme === 'dark' ? 'light' : 'dark'; applyTheme() })
       let lastCase = null
       function parseAsserts() {
@@ -327,12 +371,37 @@
       for (const button of document.querySelectorAll('[data-view]')) button.addEventListener('click', () => setView(button.dataset.view))
       addEventListener('resize', () => fitStage(true))
       addEventListener('pagehide', () => {
+        closing = true
         play.destroy()
-        fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, action: 'stop', args: {} }), keepalive: true }).catch(() => {})
+        // Embedded close/unmount is owned by the parent. A late keepalive stop
+        // from the old frame must never terminate the next play session.
+        if (!embedded && !stopped) fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, action: 'stop', args: {} }), keepalive: true }).catch(() => {})
       })
+      if (embedded) {
+        // Closing the whole application document has no awaitable teardown.
+        // This fallback is separate from normal modal close, which awaits stop.
+        const parentPagehide = () => {
+          quiesce()
+          fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, action: 'stop', args: {} }), keepalive: true }).catch(() => {})
+        }
+        parent.addEventListener('pagehide', parentPagehide)
+        addEventListener('pagehide', () => parent.removeEventListener('pagehide', parentPagehide))
+      }
 
       if (!sessionId) showError(new Error('缺少会话 ID'))
-      else play.start().then(() => setTimeout(revealStage, 0)).catch(showError)
+      else if (embedded) {
+        // Wait for the parent's load handler: closing a still-loading iframe
+        // must not race an automatic start from this document.
+        window.qxqyEmbeddedPlay = {
+          start: request => {
+            if (closing) return Promise.resolve()
+            embeddedApi = request
+            return play.start().then(() => { if (closing) play.reset(); else { revealStage(); focusStage() } })
+          },
+          quiesce,
+          focus: focusStage,
+        }
+      } else play.start().then(() => setTimeout(revealStage, 0)).catch(showError)
     })()
   </script>
 </body>

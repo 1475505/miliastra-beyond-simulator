@@ -1,12 +1,15 @@
 import { createScriptSyncPanel } from './script-sync.js'
+import { createPlayLauncher } from './play-launcher.js'
 
 export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
     const e = React.createElement
     const ScriptSyncPanel = createScriptSyncPanel(React)
+    const usePlayLauncher = createPlayLauncher(React)
 
     const STYLE_ID = 'qxqy-simulator-style'
     const CSS = `
 .qxsim-save-overlay{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:#0006}.qxsim-save-dialog{width:min(440px,90%);padding:24px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 12px 48px #0005}.qxsim-save-dialog h2{margin:0 0 16px;font-size:17px}.qxsim-save-dialog input{width:100%;margin:8px 0 16px;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--input)}.qxsim-save-dialog footer{display:flex;justify-content:flex-end;gap:8px}.qxsim-save-dialog [role=alert]{color:var(--danger);margin-bottom:12px;overflow-wrap:anywhere}
+.qxsim-play-overlay{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;padding:0;border:0;background:var(--bg);color:var(--text)}.qxsim-play-overlay[open]{display:flex;flex-direction:column}.qxsim-play-overlay::backdrop{background:#0008}.qxsim-play-header{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:12px;padding:4px 12px;border-bottom:1px solid var(--line);background:var(--panel)}.qxsim-play-overlay iframe{display:block;flex:1;width:100%;min-height:0;border:0;background:var(--bg)}.qxsim-play-error{padding:8px 12px;color:var(--danger);overflow-wrap:anywhere}html[data-windows-titlebar] .qxsim-play-overlay{top:40px;height:calc(100% - 40px)}
 .qxsim{--blue:#477cf0;--danger:#e75a6a;position:relative;display:flex;flex:1 1 0;align-self:stretch;flex-direction:column;width:100%;height:100%;min-width:0;min-height:0;max-height:none;container-type:inline-size;color:var(--text);background:var(--bg);font:13px/1.4 Inter,"Microsoft YaHei UI","Microsoft YaHei",sans-serif;overflow:hidden;color-scheme:inherit}
 .qxsim[data-theme=dark]{--bg:#20242e;--panel:#181d27;--panel2:#202632;--input:#151b25;--line:#363e4d;--lineSoft:#2b3240;--text:#edf1f7;--muted:#929baa;--hover:#252c37;--workspace:#383d47;--toolbarA:#242a35;--toolbarB:#1e232d;--status:#242a33;--button:#1d2430;--shadow:#0004}
 .qxsim[data-theme=light]{--bg:#f5f6f8;--panel:#fff;--panel2:#f4f6f8;--input:#fff;--line:#d6dbe3;--lineSoft:#e7e9ed;--text:#20242a;--muted:#69717d;--hover:#eef1f5;--workspace:#d9dde3;--toolbarA:#fff;--toolbarB:#f3f5f8;--status:#f7f8fa;--button:#f7f8fa;--shadow:#18203318}
@@ -497,6 +500,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       const theme = useHostTheme()
       const [snap, setSnap] = React.useState(null); const snapRef = React.useRef(null); const queueRef = React.useRef(Promise.resolve())
       const [error, setError] = React.useState('')
+      const playLauncher = usePlayLauncher({ sessionId, api: callApi, playUrl, onError: setError })
       const [savePath, setSavePath] = React.useState(null)
       const [saving, setSaving] = React.useState(false)
       const [notice, setNotice] = React.useState(''); const fileInputRef = React.useRef(null)
@@ -694,18 +698,14 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
         } catch (reason) { setError(reason?.message || String(reason)) }
         finally { if (fileInputRef.current) fileInputRef.current.value = '' }
       }
-      async function startPlay() {
-        const playTab = window.open('about:blank', '_blank')
-        if (!playTab) { setError('浏览器阻止了试玩标签页，请允许此站点打开新标签页后重试。'); return }
-        playTab.document.write('<!doctype html><meta charset="utf-8"><title>正在准备试玩…</title><style>html{color-scheme:light dark;font:14px system-ui}body{min-height:100vh;margin:0;display:grid;place-items:center;background:Canvas;color:CanvasText}</style><p>正在保存项目并准备试玩…</p>')
-        try {
+      function startPlay() {
+        void playLauncher.open(async () => {
+          await queueRef.current.catch(() => {})
           await saveScriptDraft()
           await saveLogicDraft()
-          playTab.location.replace(playUrl(sessionId))
-        } catch (reason) {
-          playTab.close()
-          setError(reason?.message || String(reason))
-        }
+          await queueRef.current
+          setError('')
+        })
       }
       async function saveWorkspace() {
         if (saving || !savePath?.trim()) return
@@ -767,6 +767,8 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
         : []
       const selectedParentId = selectedRow?.parentId || snap.root.id
       return e('div', { className: 'qxsim', 'data-theme': theme, 'data-qxsim-session-id': sessionId },
+        playLauncher.overlay,
+        page === 'script' && error ? e('div', { className: 'qxsim-status error', role: 'alert' }, error) : null,
         savePath !== null ? e('div', { className: 'qxsim-save-overlay' },
           e('form', { className: 'qxsim-save-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': '保存到工作区', onSubmit: event => { event.preventDefault(); void saveWorkspace() } },
             e('h2', null, '保存到工作区'),
@@ -788,7 +790,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
               e('select', { className: 'qxsim-control zoom', 'aria-label': '从工作区拉取存档', defaultValue: '', onFocus: () => void refreshArchives(), onChange: (event) => { const path = event.target.value; event.target.value = ''; if (path) void loadWorkspaceArchive(path) } }, e('option', { value: '', disabled: true }, snap.workspace?.bound ? '⤓ 工作区存档' : '工作区未绑定'), ...(archives.length ? archives.map((row) => e('option', { key: row.path, value: row.path }, `${row.name} · ${row.path}`)) : [e('option', { value: '', disabled: true }, snap.workspace?.bound ? '未发现 qxqy-simulator-save' : '先绑定会话工作区')])),
               e('button', { className: 'qxsim-action', title: '导入存档、单项 UI 资产或 Lua', onClick: () => fileInputRef.current?.click() }, '⇧ 导入'),
               e('select', { className: 'qxsim-control zoom', 'aria-label': '导出格式', defaultValue: '', onChange: (event) => { const [format, arg = ''] = event.target.value.split('|'); event.target.value = ''; if (format) void exportFile(format, arg) } }, e('option', { value: '', disabled: true }, '⇩ 导出'), e('option', { value: 'save' }, '资产包 JSON（三类合一）'), e('option', { value: 'save-gia' }, '资产包 GIA（已改动项）'), e('option', { value: 'gia-combined' }, '资产包 GIA 整合包（控件+脚本）'), e('optgroup', { label: '当前界面（左栏正在看的那棵树）' }, e('option', { value: 'json' }, '当前界面 Authoring JSON'), e('option', { value: 'gia' }, '当前界面 GIA')), e('optgroup', { label: '服务器控件模板' }, e('option', { value: 'json|server-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|server-control-template' }, 'GIA')), e('optgroup', { label: '客户端控件模板（仅当左栏切到「UI控件-客户端」时才是页面内容）' }, e('option', { value: 'json|client-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|client-control-template' }, 'GIA')), e('optgroup', { label: 'Lua 脚本' }, e('option', { value: 'scripts' }, '脚本包 JSON（全部脚本）'), e('option', { value: 'scripts-gia' }, '脚本包 GIA（全部脚本）')))),
-            e('button', { className: 'qxsim-action primary', title: '在独立标签页中试玩', onClick: startPlay }, '▷ 试玩 ↗'),
+            e('button', { className: 'qxsim-action primary', title: '打开试玩；新窗口不可用时在应用内试玩', disabled: playLauncher.opening, onClick: startPlay }, playLauncher.opening ? '正在准备…' : '▷ 试玩 ↗'),
             e('button', { className: 'qxsim-iconbtn', title: '重新载入', onClick: reload }, '↻'))),
         e('nav', { className: 'qxsim-editor-nav', 'aria-label': '编辑页面' }, e('button', { className: page === 'ui' ? 'active' : '', onClick: () => leavePage('ui') }, 'UI 编辑'), e('button', { className: page === 'script' ? 'active' : '', onClick: () => leavePage('script') }, 'Lua 脚本'), e('button', { className: page === 'logic' ? 'active' : '', onClick: () => leavePage('logic') }, '服务端逻辑'), e('span', { className: 'save-summary' }, '一个存档 · 服务器控件模板 + 客户端控件模板 + Lua 脚本 + 服务端逻辑')),
         page === 'script' ? e(ScriptSyncPanel, { snap, patch, request: (action, body) => callApi(sessionId, action, body), refresh: async () => accept(await callApi(sessionId, 'get')), prepare: async () => { await queueRef.current; await saveScriptDraft(); await saveLogicDraft(); return snapRef.current } }) : null,

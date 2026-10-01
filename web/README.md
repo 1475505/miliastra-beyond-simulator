@@ -34,6 +34,8 @@ beyond-simulator-web --workspace /absolute/path/to/workspace --open
 
 ## 编辑与保存
 
+Web 0.3.5 起，浏览器拒绝试玩新标签页时自动回退到全屏内嵌试玩。正常新标签页行为保持不变；仅 `/editor/play` 允许同源嵌入，其他页面仍禁止被 frame 嵌入。关闭与焦点处理见 [共用编辑器](../editor-ui/README.md#试玩窗口与内嵌兜底)。
+
 `/editor` 与 Harness 共用编辑界面，包括控件树、属性、五档设备画布、Lua 脚本、服务端变量/信号、导入导出和试玩。点击“保存存档”，输入工作区内相对路径，将三类资产写为完整存档 JSON。试玩或普通编辑不会自动写盘。
 
 会话 ID 保存在浏览器标签页的 `sessionStorage`；刷新会保留进程内编辑与 Worker 状态。不同 ID 的会话相互独立；浏览器“复制标签页”可能复制 sessionStorage，从而共享会话。默认最多 8 个会话，不自动淘汰未保存内容。关闭标签页不会立即回收会话；达到上限时先保存，再重启服务。

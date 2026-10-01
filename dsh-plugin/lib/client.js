@@ -7,7 +7,7 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const editor = createEditor(React, {
       async api(sessionId, action, body) {
-        const response = await fetch('/qxqy-simulator/api/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, ...(body || {}) }) })
+        const response = await fetch('/qxqy-simulator/api/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, ...(body || {}) }), ...(action === 'play' ? { signal: AbortSignal.timeout(15_000) } : {}) })
         const envelope = await response.json()
         if (!response.ok || !envelope.ok) throw new Error(envelope.error || 'Request failed')
         return envelope.value
