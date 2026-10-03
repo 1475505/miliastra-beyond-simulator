@@ -939,7 +939,11 @@ export function injectPlayPointer(session, type, x, y, options = {}) {
     }
     if (down?.alive) {
       const press = session.pointerDownPosition || previousPos
-      const moved = px !== previousPos.x || py !== previousPos.y
+      // Drag slop (canvas px, measured from the press point): movement below it
+      // keeps a down→(micro-move)→up sequence a click instead of a drag, matching
+      // real-device EventSystem dragThreshold. Real mouse presses always drift a
+      // few px between down and up, so a zero-tolerance check eats every human click.
+      const moved = Math.hypot(px - press.x, py - press.y) > 5
       if (!session.pointerDragging && moved) {
         if (!scrolling) session.runtime.injectCursor(down, 'CursorBeginDrag', pointerData(session, px, py, {
           press,
