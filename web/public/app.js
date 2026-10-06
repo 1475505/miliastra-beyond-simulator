@@ -16,6 +16,7 @@ const elements = {
   device: byId('device-select'),
   playControls: byId('play-controls'),
   playStart: byId('play-start'),
+  playAudio: byId('play-audio'),
   playPause: byId('play-pause'),
   playResume: byId('play-resume'),
   playStep: byId('play-step'),
@@ -384,9 +385,14 @@ const play = createPlaySession({
   onSnapshot: onPlaySnapshot,
   onStatus: (next) => { applyPlayStatus(next); updatePlayChrome() },
   onError: (error) => notify(error.message, true),
+  onAudioStatus: status => {
+    elements.playAudio.textContent = !status.unlocked ? '开启声音' : status.muted ? '声音已关闭' : '声音已开启'
+    elements.playAudio.title = status.error || (!status.unlocked ? '点击或在画布内操作以解锁音效' : '切换静音')
+  },
   isActive: () => mode === 'play',
 })
 play.bindInput(elements.stageCanvas, { keysOn: elements.stageShell })
+elements.playAudio.addEventListener('click', () => play.audio?.toggle())
 
 elements.archive.addEventListener('change', () => run(async () => {
   if (play.running) await play.stop().catch(() => {})

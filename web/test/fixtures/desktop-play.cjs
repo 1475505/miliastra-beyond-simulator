@@ -36,7 +36,7 @@ async function main() {
   await js(`(() => { const b = [...document.querySelectorAll('button')].find(b => b.textContent === '▷ 试玩 ↗'); b.focus(); b.click() })()`)
   const frame = `document.querySelector('.qxsim-play-overlay iframe')`
   await wait(`${frame}?.contentDocument.querySelector('#state')?.textContent.includes('试玩运行中')`)
-  assert.equal(denied, 1)
+  assert.equal(denied, 0, 'Desktop must launch inline without asking for a forbidden window')
   assert.match(await js(`${frame}.src`), /^dsh-app:\/\/app\/qxqy-simulator\/play\?embedded=1#desktop-play$/)
   assert.equal(await js(`document.activeElement === ${frame}`), true)
   // Native input through Chromium, not a synthetic key event in the frame.
@@ -48,6 +48,6 @@ async function main() {
   await wait(`!document.querySelector('.qxsim-play-overlay')`)
   assert.equal(await js(`document.activeElement.textContent`), '▷ 试玩 ↗')
   assert.equal(await js(`fetch('/qxqy-simulator/api/play', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({sessionId:'desktop-play', action:'get'}) }).then(r=>r.json()).then(r=>r.ok)`), false)
-  console.log('PASS Electron Desktop policy: native popup denied, dsh-app iframe, authenticated Host API, keyboard input and stopped Worker')
+  console.log('PASS Electron Desktop policy: no popup requested, dsh-app iframe, authenticated Host API, keyboard input and stopped Worker')
 }
 main().then(() => { window?.destroy(); app.exit(0) }, error => { console.error(error.stack); window?.destroy(); app.exit(1) })

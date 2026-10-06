@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import { imageFillRect } from './play/image-fill.js'
+import { tintedImage } from './assets/raster.js'
 import { scrollBarGeometry } from './play/scroll-geometry.js'
 
 const require = createRequire(import.meta.url)
@@ -184,9 +185,21 @@ function drawButtonItem(ctx, item, width, height) {
   }
 }
 
-function drawPrimitive(ctx, item, width, height) {
+function drawPrimitive(ctx, item, width, height, assets) {
   const color = argb(item.imageColor, 0xffffffff)
-  if (item.primitive === 'missing') {
+  const image = assets?.images?.get(item.imageId)
+  if (item.primitive === 'sprite' && image) {
+    const key = `${item.imageId}:${Number(item.imageColor ?? 0xffffffff) & 0xffffff}`
+    let tinted = assets.tints.get(key)
+    if (!tinted) {
+      tinted = tintedImage(image, item.imageColor, loadCanvas().createCanvas)
+      assets.tints.set(key, tinted)
+    }
+    ctx.globalAlpha *= color.a
+    ctx.drawImage(tinted, -width / 2, -height / 2, width, height)
+    return
+  }
+  if (item.primitive === 'missing' || item.primitive === 'sprite') {
     ctx.fillStyle = 'rgba(72,34,40,0.36)'
     ctx.fillRect(-width / 2, -height / 2, width, height)
     ctx.strokeStyle = '#ff7481'
@@ -217,7 +230,7 @@ function drawPrimitive(ctx, item, width, height) {
   ctx.fillRect(-width / 2, -height / 2, width, height)
 }
 
-function drawPaintItem(ctx, item, canvasHeight) {
+function drawPaintItem(ctx, item, canvasHeight, assets) {
   const width = Math.max(0, finite(item.sourceWidth, finite(item.width)))
   const height = Math.max(0, finite(item.sourceHeight, finite(item.height)))
   ctx.save()
@@ -237,7 +250,7 @@ function drawPaintItem(ctx, item, canvasHeight) {
       ctx.rect(clip.x, clip.y, clip.width, clip.height)
       ctx.clip()
     }
-    drawPrimitive(ctx, item, width, height)
+    drawPrimitive(ctx, item, width, height, assets)
   }
   drawScrollBar(ctx, item, width, height)
   ctx.restore()
@@ -364,9 +377,10 @@ export function renderPaintPng(paint, canvasWidth, canvasHeight, options = {}) {
   ctx.scale(size.pixelRatio, size.pixelRatio)
   drawStageBackground(ctx, size.width, size.height)
   const items = Array.isArray(paint) ? paint : []
+  const assets = { images: options.images, tints: new Map() }
   for (const item of items) {
     if (!item || item.id === undefined || item.id === null) continue
-    drawPaintItem(ctx, item, size.height)
+    drawPaintItem(ctx, item, size.height, assets)
   }
   return {
     data: toPng(canvas),
@@ -403,7 +417,7 @@ function drawEditorLabel(ctx, text, width) {
   ctx.fillText(label, 0, 0)
 }
 
-function drawEditorItem(ctx, item, canvasHeight, selectedId) {
+function drawEditorItem(ctx, item, canvasHeight, selectedId, assets) {
   const box = editorBoxStyle(item)
   if (box.width <= 0 || box.height <= 0) return
   ctx.save()
@@ -412,7 +426,11 @@ function drawEditorItem(ctx, item, canvasHeight, selectedId) {
   const x = -box.width / 2
   const y = -box.height / 2
   if (item.kind === 'image') {
-    drawPrimitive(ctx, item, box.width, box.height)
+    ctx.save()
+    const fill = item.enableFill ? imageFillRect(item, box.width, box.height) : null
+    if (fill) { ctx.beginPath(); ctx.rect(fill.x, fill.y, fill.width, fill.height); ctx.clip() }
+    drawPrimitive(ctx, item, box.width, box.height, assets)
+    ctx.restore()
   } else if (item.kind === 'textbox' || item.kind === 'textwindow') {
     drawTextItem(ctx, item, box.width, box.height)
   } else if (item.kind === 'button') {
@@ -467,9 +485,10 @@ export function renderEditorPng(snapshot, options = {}) {
   drawStageBackground(ctx, size.width, size.height, { checker: true })
   const boxes = Array.isArray(snapshot?.boxes) ? snapshot.boxes : []
   const selectedId = snapshot?.selectedId
+  const assets = { images: options.images, tints: new Map() }
   for (const item of boxes) {
     if (!item || item.kind === 'server-container' || item.visible === false) continue
-    drawEditorItem(ctx, item, size.height, selectedId)
+    drawEditorItem(ctx, item, size.height, selectedId, assets)
   }
   return {
     data: toPng(canvas),

@@ -3,6 +3,8 @@ import { basename, relative } from 'node:path'
 import { SimulatorController as SharedSimulatorController } from 'qxqy-studio/host/controller'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { listWorkspaceArchives, resolveWorkspaceArchive } from './workspace-archives.js'
+import { serveImageAsset } from 'qxqy-studio/host/image-assets'
+import { serveAudioAsset } from 'qxqy-studio/host/audio-assets'
 
 export const name = 'qxqy-simulator'
 export const inject = ['tools', 'webServer']
@@ -14,7 +16,7 @@ const PLAY_RENDERER_PATH = '/qxqy-simulator/play-renderer.js'
 // Keep the local import endpoint comfortably above the current paper-theater bundle.
 const MAX_BODY_BYTES = 8 * 1024 * 1024
 const MAX_SESSIONS = 32
-const SCREENSHOT_TIMEOUT_MS = 8_000
+const SCREENSHOT_TIMEOUT_MS = 60_000
 
 // DSH only adapts session-specific concerns (touch bookkeeping, JSON-string
 // tool arguments and its localized workspace errors).  The Studio controller
@@ -78,9 +80,9 @@ export class SimulatorController extends SharedSimulatorController {
     }
   }
 
-  requestUiScreenshot() {
+  async requestUiScreenshot(signal) {
     this.touch()
-    const image = super.uiScreenshot()
+    const image = await super.uiScreenshot(signal)
     return {
       ...image,
       capturedAt: new Date().toISOString(),
@@ -318,6 +320,7 @@ function registerTools(ctx, registry) {
       schema: { type: 'json' },
       render: (_args, value) => {
         const text = `试玩截图：${value.canvasId || 'unknown'}，Frame ${value.frame ?? 0}，${value.width || 0}×${value.height || 0}`
+          + (value.assetWarnings?.length ? `\n素材加载失败（画面中为占位框）：${JSON.stringify(value.assetWarnings)}` : '')
         const content = [{ type: 'text', text }]
         if (value.image) content.push({ type: 'image', attachment: value.image })
         return content
@@ -359,6 +362,7 @@ function registerTools(ctx, registry) {
       render: (_args, value) => {
         const page = value.page || '模拟器'
         const text = `编辑器截图：${page}，${value.width || 0}×${value.height || 0}`
+          + (value.assetWarnings?.length ? `\n素材加载失败（画面中为占位框）：${JSON.stringify(value.assetWarnings)}` : '')
         const content = [{ type: 'text', text }]
         if (value.image) content.push({ type: 'image', attachment: value.image })
         return content
@@ -368,7 +372,7 @@ function registerTools(ctx, registry) {
     isConcurrencySafe: () => false,
     async execute(_args, exec) {
       const controller = registry.get(toolSessionId(exec), sessionWorkspace(exec))
-      const captured = controller.requestUiScreenshot()
+      const captured = await controller.requestUiScreenshot(exec.signal)
       const attachments = ctx.get?.('attachments')
       if (!attachments?.saveImage) throw new Error('Harness attachment service is unavailable; cannot return screenshot to AI')
       const ref = await attachments.saveImage({
@@ -490,6 +494,7 @@ function registerApi(ctx, registry) {
         else if (action === 'save') value = controller.saveForScriptSync(body.path, body.expectedRevision)
         else if (action === 'script-sync') value = controller.scriptSyncAction(body.action, body.args || {})
         else if (action === 'script-sync-apply') value = controller.scriptSync.apply(body)
+        else if (action === 'image-refresh') { await controller.imageAssets.refresh(body.imageId); value = { imageId: body.imageId, refreshed: true } }
         else if (action === 'play') value = await controller.play(body.action, body.args || {}, abort.signal)
         else throw new Error('unknown API action')
         sendJson(response, 200, { ok: true, value, error: null })
@@ -506,6 +511,8 @@ export function apply(ctx) {
   registerApi(ctx, registry)
   registerPlayPage(ctx)
   registerPlayRenderer(ctx)
+  ctx.webServer.register({ kind: 'prefix', path: '/qxqy-assets', handler: (request, response) => serveImageAsset(request, response) })
+  ctx.webServer.register({ kind: 'prefix', path: '/qxqy-audio', handler: (request, response) => serveAudioAsset(request, response) })
   ctx.effect(() => () => {
     void registry.dispose()
   }, 'qxqy-simulator: dispose sessions')

@@ -12,6 +12,8 @@
     "./host/controller": "./host/controller.js",
     "./host/workspace": "./host/workspace.js",
     "./host/worker": "./host/worker.js",
+    "./host/image-assets": "./host/image-assets.js",
+    "./host/audio-assets": "./host/audio-assets.js",
     "./play/renderer": "./play/pixi-renderer.js"
   },
   "files": [
@@ -19,6 +21,7 @@
     "constants.js",
     "host-png.js",
     "host",
+    "assets",
     "json.js",
     "ui",
     "play",

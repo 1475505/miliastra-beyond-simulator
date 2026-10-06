@@ -2,7 +2,7 @@ import { createRuntime, walkControls as walk, layoutGrid, controlSize } from 'qx
 import { createServer, normalizePlayerCount, normalizePlayerIndex } from 'qxqy-server'
 import { compileProject } from './compile.js'
 import { assertLosslessJson } from '../json.js'
-import { CANVAS_PRESETS, IMAGE_PRIMITIVES } from '../constants.js'
+import { CANVAS_PRESETS, imagePrimitive } from '../constants.js'
 import {
   applyMatrix,
   canvasBox,
@@ -15,6 +15,8 @@ import {
 import { recordEvent } from '../autotest/format.js'
 import { textWindowMetrics, clamp } from './scroll.js'
 import { scrollBarGeometry } from './scroll-geometry.js'
+import { audioDuration } from '../assets/audio-catalog.js'
+import { randomUUID } from 'node:crypto'
 
 function prepareScroll(session) {
   for (const control of session.runtime.scrollControls || []) {
@@ -122,7 +124,7 @@ export function controlSnapshot(control, boxes) {
     enableOutline: control.kind === 'textbox' || control.kind === 'textwindow' ? control.enableOutline === true : null,
     outlineColor: control.kind === 'textbox' || control.kind === 'textwindow' ? control.outlineColor : null,
     imageId: control.kind === 'image' ? (control.imageId ?? 0) : null,
-    primitive: control.kind === 'image' ? (IMAGE_PRIMITIVES[control.imageId] || 'missing') : null,
+    primitive: control.kind === 'image' ? imagePrimitive(control.imageId) : null,
     imageColor: control.kind === 'image' ? control.imageColor : null,
     enableMask: control.kind === 'image' ? control.enableMask === true : null,
     enableSoftEdge: control.kind === 'image' ? control.enableSoftEdge === true : null,
@@ -169,6 +171,7 @@ function createPlayerRuntime(compiled, templateBundle, scripts, language) {
     canvasWidth: compiled.canvasWidth,
     canvasHeight: compiled.canvasHeight,
     device: compiled.device,
+    audioDuration,
     ...(language ? { language } : {}),
   })
   for (const template of [...(compiled.templates || []), ...(templateBundle?.templates || [])]) {
@@ -219,6 +222,7 @@ export function startPlay(project, { templatesProject = null, scripts = [], scen
   server.attachRuntimes(runtimes)
   for (const rt of runtimes) rt.addRoot(compiled.root)
   const session = {
+    audioSessionId: randomUUID(),
     runtimes,
     views: runtimes.map(() => emptyPlayerView()),
     playerCount: count,
@@ -318,7 +322,7 @@ function compactPaint(control, box, transform) {
     ...scrollFields(control),
   }
   if (control.kind === 'image') {
-    item.primitive = IMAGE_PRIMITIVES[control.imageId] || 'missing'
+    item.primitive = imagePrimitive(control.imageId)
     item.imageColor = control.imageColor
     item.imageId = control.imageId
     Object.assign(item, imageFillFields(control))
@@ -370,7 +374,7 @@ function visualFields(control, box) {
     ...scrollFields(control),
   }
   if (control.kind === 'image') {
-    fields.primitive = IMAGE_PRIMITIVES[control.imageId] || 'missing'
+    fields.primitive = imagePrimitive(control.imageId)
     fields.imageColor = control.imageColor
     fields.imageId = control.imageId
     Object.assign(fields, imageFillFields(control))
@@ -584,6 +588,9 @@ function sceneView(session, sceneRev) {
 
 export function playSnapshot(session, { inspect = false, view = false, paint = false, sceneRev, compact = false } = {}) {
   prepareScroll(session)
+  // Direct Runtime consumers/tests may compose a session without startPlay.
+  // Give those sessions a stable output identity too, never undefined in JSON.
+  session.audioSessionId ||= randomUUID()
   const rt = session.runtime
   const compiled = session.compiled
   const [w, h] = [rt.canvasWidth, rt.canvasHeight]
@@ -614,6 +621,7 @@ export function playSnapshot(session, { inspect = false, view = false, paint = f
     frame: rt.clock.frame,
     paused: !!session.debugPaused,
     levelTimePaused: !!rt.clock.paused,
+    audio: { sessionId: session.audioSessionId, playerIndex: session.viewPlayerIndex || 1, ...rt.audioSnapshot() },
     mountError: session.mountError || rt.mountErrors[0] || null,
     logs: clientLogs.map((l) => ({ source: 'client', level: l.level, text: l.text, time: l.time })),
     tree: [],

@@ -51,9 +51,9 @@ function playSummary(previous, value, action) {
 }
 
 export class WebSession {
-  constructor({ workspace, initialPath = '', watchIntervalMs = 700, discoveryIntervalMs = 5000 } = {}) {
+  constructor({ workspace, initialPath = '', watchIntervalMs = 700, discoveryIntervalMs = 5000, imageAssets } = {}) {
     this.workspace = resolveWorkspaceRoot(workspace)
-    this.controller = new SimulatorController(this.workspace)
+    this.controller = new SimulatorController(this.workspace, { imageAssets })
     this.initialPath = normalizePath(initialPath)
     this.watchIntervalMs = Math.max(100, Number(watchIntervalMs) || 700)
     this.activePath = ''
@@ -211,8 +211,8 @@ export class WebSession {
     return this.state()
   }
 
-  editorScreenshot() {
-    return this.controller.uiScreenshot()
+  editorScreenshot(signal) {
+    return this.controller.uiScreenshot(signal)
   }
 
   playScreenshot(signal) {

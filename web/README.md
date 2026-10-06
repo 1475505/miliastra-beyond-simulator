@@ -62,6 +62,10 @@ Web/MCP 0.3.0、共享宿主所在 DSH 2.0.3：修复空工作区启动后跳过
 
 试玩使用固定 30 FPS Worker、增量场景和 Pixi/WebGL；刷新试玩页会接回已有 Worker，保留暂停和当前玩家。截图仍由 Host 根据统一场景输出 PNG。
 
+白名单静态图片按需从素材源加载，通过同源 `/qxqy-assets/` 路由显示，浏览器复用 HTTP 缓存，Host 与 MCP 共用磁盘缓存。可用 `QXQY_IMAGE_CACHE_DIR` 指定目录；图片属性面板提供「重新下载此素材」。详见 [素材缓存与预览边界](../studio/docs/image-assets.md)。
+
+Lua `game.PlayAudio2D(id)` 触发白名单 MP3 按需缓存与播放，同源路由为 `/qxqy-audio/`，缓存目录可用 `QXQY_AUDIO_CACHE_DIR` 指定。首次自动播放被浏览器阻止时点击「开启声音」；支持停止、试玩暂停/继续和静音。参见 [音频说明](../studio/docs/audio-assets.md)。
+
 ## 部署与访问控制
 
 绑定非回环地址前，设置 `QXQY_WEB_PASSWORD`，登录用户名固定为 `simulator`。设置口令后，即使回环访问也要求认证。业务静态文件、API、SSE 与截图均受保护；写请求只接受 JSON 并校验浏览器 Origin。路径只能落在配置工作区内。

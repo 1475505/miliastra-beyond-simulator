@@ -3,24 +3,25 @@ import { createHash } from 'node:crypto'
 import { SimulatorController } from 'qxqy-studio/host/controller'
 import { resolveWorkspaceFile, resolveWorkspaceOutput } from 'qxqy-studio/host/workspace'
 
-const ACTIONS = new Set(['get', 'patch', 'import', 'export', 'archives', 'load-archive', 'save', 'play', 'script-sync', 'script-sync-apply'])
+const ACTIONS = new Set(['get', 'patch', 'import', 'export', 'archives', 'load-archive', 'save', 'play', 'script-sync', 'script-sync-apply', 'image-refresh'])
 const stamp = path => createHash('sha256').update(readFileSync(path)).digest('hex')
 
 // One trusted operator, with independent editor tabs and their play windows.
 // These identifiers are not tenant authorization; network access is authenticated.
 export class EditorSessions {
-  constructor(workspace, { initialPath = '', maxSessions = 8 } = {}) {
+  constructor(workspace, { initialPath = '', maxSessions = 8, imageAssets } = {}) {
     this.workspace = workspace
     this.initialPath = initialPath
     this.maxSessions = maxSessions
     this.sessions = new Map()
+    this.imageAssets = imageAssets
   }
 
   getSession(id) {
     if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id)) throw new Error('Invalid editor sessionId')
     if (!this.sessions.has(id)) {
       if (this.sessions.size >= this.maxSessions) throw new Error('Editor session limit reached; save your work and restart the server')
-      const controller = new SimulatorController(this.workspace)
+      const controller = new SimulatorController(this.workspace, { imageAssets: this.imageAssets })
       const row = { controller, path: '', fileStamp: '' }
       if (this.initialPath) this.load(row, this.initialPath)
       this.sessions.set(id, row)
@@ -46,6 +47,10 @@ export class EditorSessions {
     const controller = row.controller
     return controller.exclusive(async () => {
       if (action === 'get') return this.snapshot(row)
+      if (action === 'image-refresh') {
+        await controller.imageAssets.refresh(body.imageId)
+        return { imageId: body.imageId, refreshed: true }
+      }
       if (action === 'script-sync') return controller.scriptSyncAction(body.action, body.args || {})
       if (action === 'script-sync-apply') return controller.scriptSync.apply(body)
       if (action === 'archives') return controller.listArchives()

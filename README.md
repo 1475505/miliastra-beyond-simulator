@@ -97,7 +97,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.8.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.10.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -194,7 +194,8 @@ AI 可以直接获取工程状态、发送输入、读取日志和截图，无�
 
 - **模拟器通过不等于真机通过。** 它用于提前发现脚本、布局和交互问题，最终仍需在千星奇域中验证。
 - **服务端模拟覆盖变量与信号。** 1–8 人试玩是本地多客户端模拟，不包含完整官方服务端节点图或真实网络联机。
-- **图片预览以基础图元为主。** 当前用代理图形显示图片 ID `100001–100006`，其他素材显示缺失提示；安装包不包含完整官方图片和动效资源。
+- **图片预览支持基础图元与白名单静态素材。** `100001–100006` 使用代理图形，另有 1,516 个白名单 ID 可从指定素材源按需下载；编辑器、试玩及 AI 截图共用本地缓存，浏览器复用 HTTP 缓存。选择图片后可在属性面板「重新下载此素材」。未列入或加载失败显示缺失提示；九宫格和动效不在本轮范围。详见 [素材缓存与预览](studio/docs/image-assets.md)。
+- **Lua 2D 音效可在试玩页播放。** 支持 `game.PlayAudio2D`、`game.StopAudio`、`game.IsAudioAlive`，固定 1,997 个音频 ID，按需下载 MP3 并复用磁盘/浏览器缓存。首次可点击「开启声音」解锁；时长及暂停采用明确的模拟器策略。详见 [音频缓存与接口](studio/docs/audio-assets.md)。
 - **GIA 支持已验证的内容子集。** 部分控件属性与脚本挂载关系无法完整交换，导出时请关注提示，并保留原始文件及完整 JSON 存档。
 
 ## 从源码构建

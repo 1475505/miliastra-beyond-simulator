@@ -38,7 +38,7 @@ try {
   controller.patch({ op: 'renameSave', name: 'Installed package' })
   const save = controller.saveArchive('demo.save.json')
   assert.ok(save.bytes > 0)
-  const image = controller.requestUiScreenshot()
+  const image = await controller.requestUiScreenshot()
   assert.equal(image.data.subarray(1, 4).toString(), 'PNG')
   assert.equal((await controller.play('start', { view: true })).running, true)
   const playImage = await controller.requestScreenshot()

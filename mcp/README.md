@@ -75,6 +75,10 @@ qxqy_preview_open({ path: "workspace/flappy-fish/flappy-fish.save.json" })
 
 截图工具以标准 MCP image content 返回 PNG；`qxqy_studio_play_screenshot` 需要先 `qxqy_studio_play({ action: "start" })`，且不会推进运行时。
 
+白名单图片截图会先准备远程静态素材，首次可能需要下载，后续复用与 Web/DSH 相同的磁盘缓存。失败项返回 `assetWarnings` 并显示占位，不影响 Lua 状态。缓存目录可用 `QXQY_IMAGE_CACHE_DIR` 指定，详见 [素材缓存](../studio/docs/image-assets.md)。
+
+Lua 2D 音效实例可通过试玩快照的 `audio` 查询（当前玩家 active/recent、sequence/revision）；读取不会消费播放事件。MCP 无浏览器时不输出声音或下载 MP3，存活按 Runtime 时间和固定目录时长确定。浏览器试玩的实际播放与缓存见 [音频说明](../studio/docs/audio-assets.md)。
+
 如果希望在 Codex 保存 JSON 后立即在浏览器查看，而不导入 DSH，可同时启动 `../web`：
 
 ```powershell

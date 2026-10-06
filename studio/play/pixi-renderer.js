@@ -1,6 +1,7 @@
-import { Application, CanvasSource, Container, DOMAdapter, Graphics, Matrix, Sprite, Text, TextStyle, Texture } from 'pixi.js'
+import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Sprite, Text, TextStyle, Texture } from 'pixi.js'
 import { imageFillRect } from './image-fill.js'
 import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './scroll-geometry.js'
+import { loadBrowserImage, subscribeImageRefresh } from '../assets/browser.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.
 import 'pixi.js/unsafe-eval'
@@ -90,6 +91,9 @@ export class PixiPlayRenderer {
     this.app = null
     this.nodes = new Map()
     this.circleTextures = new Map()
+    this.imageTextures = new Map()
+    this.disposed = false
+    this.unsubscribeImages = subscribeImageRefresh(id => this.invalidateImage(id))
     this.canvasWidth = 0
     this.canvasHeight = 0
     this.scratch = new Matrix()
@@ -166,6 +170,52 @@ export class PixiPlayRenderer {
     return texture
   }
 
+  imageTexture(id) {
+    this.imageTextures ||= new Map()
+    if (this.imageTextures.has(id)) return this.imageTextures.get(id)
+    const entry = { texture: null, error: '' }
+    this.imageTextures.set(id, entry)
+    // Do not block scene polling or Lua time on network I/O. Completion
+    // repaints even a paused/static scene, using each node's latest item.
+    entry.promise = loadBrowserImage(id).then(image => {
+      if (this.disposed || this.imageTextures.get(id) !== entry) return
+      // Renderer-owned GPU source; never destroy another renderer's texture
+      // through Pixi's global Texture.from(resource) cache.
+      entry.texture = new Texture({ source: new ImageSource({ resource: image }) })
+      for (const root of this.nodes.values()) {
+        const item = root.__sceneItem
+        if (item?.kind !== 'image' || item.imageId !== id) continue
+        root.__visualKey = ''
+        this.updateNode(root, item, { nested: !root.__flat && item.parent != null })
+      }
+      this.app?.render()
+    }).catch(error => { entry.error = error.message })
+    return entry
+  }
+
+  invalidateImage(id) {
+    const entry = this.imageTextures.get(id)
+    this.imageTextures.delete(id)
+    for (const root of this.nodes.values()) {
+      const item = root.__sceneItem
+      if (item?.kind !== 'image' || item.imageId !== id) continue
+      root.__visualKey = ''
+      this.updateNode(root, item, { nested: !root.__flat && item.parent != null })
+    }
+    entry?.texture?.destroy(true)
+    this.app?.render()
+  }
+
+  pruneImageTextures() {
+    if (!this.imageTextures?.size) return
+    const used = new Set([...this.nodes.values()].filter(root => root.__sceneItem?.primitive === 'sprite').map(root => root.__sceneItem.imageId))
+    for (const [id, entry] of this.imageTextures || []) {
+      if (used.has(id)) continue
+      this.imageTextures.delete(id)
+      entry.texture?.destroy(true)
+    }
+  }
+
   replaceVisual(root, item, width, height) {
     this.clearVisual(root)
     if (!PAINT_KINDS.has(item.kind)) return
@@ -213,6 +263,21 @@ export class PixiPlayRenderer {
       graphic.roundRect(-width / 2, -height / 2, width, height, 6).stroke({ color: 0x70a0ff, alpha: 0.8, width: 1 })
       if (item.pressed) graphic.roundRect(-width / 2, -height / 2, width, height, 6).fill({ color: 0x000000, alpha: 0.28 })
       visual.addChild(graphic)
+    } else if (item.kind === 'image' && item.primitive === 'sprite' && this.imageTexture(item.imageId).texture) {
+      const sprite = new Sprite({ texture: this.imageTextures.get(item.imageId).texture, anchor: 0.5 })
+      const color = argb(item.imageColor, 0xffffffff)
+      sprite.width = width
+      sprite.height = height
+      sprite.tint = color.color
+      sprite.alpha = color.alpha
+      const fill = imageFillRect(item, width, height)
+      sprite.visible = width > 0 && height > 0 && (!fill || (fill.width > 0 && fill.height > 0))
+      if (fill && sprite.visible) {
+        const clip = new Graphics().rect(fill.x, fill.y, fill.width, fill.height).fill(0xffffff)
+        sprite.mask = clip
+        visual.addChild(clip)
+      }
+      visual.addChild(sprite)
     } else if (spriteCircle(item)) {
       const circle = new Sprite({ texture: this.circleTexture(Math.max(width, height)), anchor: 0.5 })
       visual.__circle = circle
@@ -220,7 +285,7 @@ export class PixiPlayRenderer {
     } else if (item.kind !== 'grid') {
       const graphic = new Graphics()
       const color = argb(item.imageColor, 0xffffffff)
-      if (item.primitive === 'missing') {
+      if (item.primitive === 'missing' || item.primitive === 'sprite') {
         graphic.rect(-width / 2, -height / 2, width, height).fill({ color: 0x482228, alpha: 0.36 })
         graphic.rect(-width / 2 + 0.5, -height / 2 + 0.5, Math.max(0, width - 1), Math.max(0, height - 1)).stroke({ color: 0xff7481, alpha: 1, width: 1 })
       } else if (item.primitive === 'circle') {
@@ -390,6 +455,7 @@ export class PixiPlayRenderer {
     }
     for (let i = 0; i < (list || []).length; i += 1) this.upsertSceneNode(list[i])
     for (const root of this.nodes.values()) if (root.__sceneItem?.clipToParent || root.__viewportClip) this.updateViewportClip(root)
+    this.pruneImageTextures()
     this.app.render()
   }
 
@@ -414,11 +480,16 @@ export class PixiPlayRenderer {
       if (visible.has(id)) continue
       this.removeNode(id)
     }
+    this.pruneImageTextures()
     this.app.render()
   }
 
   destroy() {
+    this.disposed = true
+    this.unsubscribeImages?.()
     this.clearNodes()
+    for (const entry of this.imageTextures?.values() || []) entry.texture?.destroy(true)
+    this.imageTextures?.clear()
     for (const texture of this.circleTextures.values()) texture.destroy(true)
     this.circleTextures.clear()
     this.app?.destroy({ removeView: false }, { children: true, texture: true, textureSource: true })

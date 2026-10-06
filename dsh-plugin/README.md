@@ -12,7 +12,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.8.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.10.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -36,6 +36,10 @@ pnpm test:harness
 ```
 
 Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxqy_studio_ui_screenshot`、`qxqy_studio_play_screenshot`、`qxqy_studio_load`。截图由 Host 在进程内根据 `boxes` / `paint` 渲染 PNG，不需要打开模拟器标签或试玩页。
+
+白名单静态素材经同源 `/qxqy-assets/` 路由按需显示，与 Web/MCP 共用磁盘缓存；浏览器复用 HTTP 缓存。图片属性面板可重新下载当前素材。`QXQY_IMAGE_CACHE_DIR` 可指定缓存目录，详情见 [素材缓存](../studio/docs/image-assets.md)。
+
+2.0.10 接通 Lua 2D 音效（`PlayAudio2D` / `StopAudio` / `IsAudioAlive`）；试玩页经 `/qxqy-audio/` 按需加载并缓存 MP3，提供声音解锁/静音按钮。`QXQY_AUDIO_CACHE_DIR` 可指定音频缓存目录，接口与模拟策略见 [音频说明](../studio/docs/audio-assets.md)。
 
 磁盘存档发现与 MCP / Web 共用 Studio 实现：支持超过 8 MiB 的存档，按修改时间选取最新 50 项，并返回扫描限制和读取问题的 `discovery` 信息。显式加载仍允许工作区内的相对路径或绝对路径；隐藏目录、列表上限等自动发现限制不影响指定路径加载，路径穿越与符号链接逃逸仍会被拒绝。控制器加载成功后记住工作区相对路径，后续省略保存路径会写回该文件；未绑定工作区时列表仍返回 `{ bound: false, archives: [] }`。
 

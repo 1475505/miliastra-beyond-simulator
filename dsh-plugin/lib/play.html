@@ -24,7 +24,7 @@
     <header class="bar">
       <div class="brand"><span class="icon">UI</span><strong>模拟器</strong><select id="deviceSel" class="devsel hidden" aria-label="切换设备画布" title="切换设备画布：以新画布重建运行时，GetUICanvasSize 与预设像素一致"></select><select id="playerCountSel" class="playersel hidden" aria-label="试玩人数" title="试玩人数：最多 8 人，每人一份独立客户端"></select><select id="playerViewSel" class="viewsel hidden" aria-label="当前玩家视角" title="切换当前玩家视角：输入、画面和 PlayerSelf 都跟随该玩家"></select><span class="device">设备 <b id="resolution">准备中…</b></span></div>
       <div class="view-tabs" role="tablist" aria-label="试玩页面"><button class="active" data-view="play" role="tab">试玩</button><button data-view="log" role="tab">日志</button></div>
-      <div class="actions"><button id="pause">Ⅱ 暂停运行</button><button id="step" disabled title="暂停后可单帧调试">▷ 单帧调试</button><button class="stop" id="stop">■ 结束试玩</button><button class="primary hidden" id="restart">↻ 重新开始</button><button id="theme" title="切换亮暗主题">◐</button><button id="close">返回编辑</button></div>
+      <div class="actions"><button id="audio" data-audio-toggle title="点击解锁浏览器音效">开启声音</button><button id="pause">Ⅱ 暂停运行</button><button id="step" disabled title="暂停后可单帧调试">▷ 单帧调试</button><button class="stop" id="stop">■ 结束试玩</button><button class="primary hidden" id="restart">↻ 重新开始</button><button id="theme" title="切换亮暗主题">◐</button><button id="close">返回编辑</button></div>
     </header>
     <div class="views">
       <main class="workspace play-view" id="workspace"><div class="stage-shell veiled" id="shell"><div class="stage-label" id="stageLabel"></div><div class="stage" id="stage"><canvas id="cv" class="stage-canvas"></canvas></div></div><div class="loading" id="loading"><span class="spin"></span>正在准备试玩…</div><div class="fatal hidden" id="fatal"></div></main>
@@ -248,9 +248,14 @@
         onSnapshot: renderChrome,
         onStatus: applyStatus,
         onError: showError,
+        onAudioStatus: status => {
+          $('audio').textContent = !status.unlocked ? '开启声音' : status.muted ? '声音已关闭' : '声音已开启'
+          $('audio').title = status.error || (!status.unlocked ? '点击或在画布内操作以解锁音效' : '切换静音')
+        },
         isActive: () => !closing,
       })
       play.bindInput(stage, { keysOn: window })
+      $('audio').addEventListener('click', () => play.audio?.toggle())
 
       $('step').addEventListener('click', () => void play.act('step', { dt: 1 / 30 }))
       $('pause').addEventListener('click', () => void play.act(play.snapshot?.paused ? 'resume' : 'pause'))

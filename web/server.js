@@ -9,6 +9,8 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import { WebSession } from './lib/session.js'
 import { EditorSessions } from './lib/editor-sessions.js'
 import { resolveWorkspaceRoot } from 'qxqy-studio/host/workspace'
+import { serveImageAsset, sharedImageAssets } from 'qxqy-studio/host/image-assets'
+import { serveAudioAsset, sharedAudioAssets } from 'qxqy-studio/host/audio-assets'
 
 const moduleDir = fileURLToPath(new URL('.', import.meta.url))
 const publicDir = resolve(moduleDir, 'public')
@@ -91,6 +93,7 @@ function openBrowser(url) {
 }
 
 export async function createWebServer(options = {}) {
+  options = { ...options, imageAssets: options.imageAssets || sharedImageAssets(), audioAssets: options.audioAssets || sharedAudioAssets() }
   const host = options.host || '127.0.0.1'
   const password = options.password ?? process.env.QXQY_WEB_PASSWORD ?? ''
   const loopback = ['127.0.0.1', 'localhost', '::1'].includes(host)
@@ -142,6 +145,8 @@ export async function createWebServer(options = {}) {
           return
         }
       }
+      if (await serveImageAsset(request, response, options.imageAssets)) return
+      if (await serveAudioAsset(request, response, options.audioAssets)) return
       if (request.method === 'GET' && staticFiles.has(requestUrl.pathname)) {
         const filename = staticFiles.get(requestUrl.pathname)
         const data = readFileSync(resolve(publicDir, filename))
@@ -160,7 +165,7 @@ export async function createWebServer(options = {}) {
         return
       }
       if (request.method === 'GET' && requestUrl.pathname === '/api/editor.png') {
-        sendPng(response, session.editorScreenshot())
+        sendPng(response, await session.editorScreenshot(abort.signal))
         return
       }
       if (request.method === 'GET' && requestUrl.pathname === '/api/events') {

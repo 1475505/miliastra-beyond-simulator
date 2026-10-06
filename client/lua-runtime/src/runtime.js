@@ -69,6 +69,10 @@ export class LuaRuntime {
     this.animations = new Set()
     this.audios = new Map()
     this.nextAudioId = 1
+    this.audioDuration = options.audioDuration || (() => null)
+    this.audioHistory = []
+    this.audioWarnings = new Set()
+    this.audioRevision = 0
     this._nextControlId = 1
     this._playRemoved = []
     this._nextScriptMappingId = 1
@@ -510,19 +514,16 @@ export class LuaRuntime {
         return 1
       },
       PlayAudio2D: (LL) => {
-        const id = rt.nextAudioId++
-        rt.audios.set(id, { audioId: lua.lua_tointeger(LL, 1), alive: true })
+        const id = rt.playAudio(rt.audioInteger(LL))
         lua.lua_pushinteger(LL, id)
         return 1
       },
       StopAudio: (LL) => {
-        const id = lua.lua_tointeger(LL, 1)
-        const a = rt.audios.get(id)
-        if (a) a.alive = false
+        rt.stopAudio(rt.audioInteger(LL))
         return 0
       },
       IsAudioAlive: (LL) => {
-        const a = rt.audios.get(lua.lua_tointeger(LL, 1))
+        const a = rt.audios.get(rt.audioInteger(LL))
         lua.lua_pushboolean(LL, !!(a && a.alive))
         return 1
       },
@@ -599,6 +600,47 @@ export class LuaRuntime {
         }
       },
     }
+  }
+
+  audioInteger(L) {
+    const value = lua.lua_tonumber(L, 1)
+    if (lua.lua_type(L, 1) !== lua.LUA_TNUMBER || !Number.isSafeInteger(value)) {
+      return lauxlib.luaL_error(L, sl('audio argument must be an integer'))
+    }
+    return value
+  }
+
+  playAudio(audioId) {
+    this.audioRevision++
+    const instanceId = this.nextAudioId++
+    const duration = this.audioDuration(audioId)
+    const alive = Number.isFinite(duration) && duration > 0
+    const row = { instanceId, audioId, startedAt: this.clock.time, duration: alive ? duration : 0, alive, stopped: false }
+    this.audioHistory.push(row)
+    if (this.audioHistory.length > 128) this.audioHistory.shift()
+    if (alive) {
+      // Preview policy: bound simultaneous voices and state, independently of
+      // whether a browser is attached. No media/network clocks enter Lua.
+      if (this.audios.size >= 128) this.stopAudio(this.audios.keys().next().value)
+      this.audios.set(instanceId, row)
+    } else if (!this.audioWarnings.has(audioId)) {
+      if (this.audioWarnings.size >= 128) this.audioWarnings.delete(this.audioWarnings.values().next().value)
+      this.audioWarnings.add(audioId)
+      this.log('warn', `音效 ${audioId} 未列入模拟器音频白名单`)
+    }
+    return instanceId
+  }
+
+  stopAudio(instanceId) {
+    const row = this.audios.get(instanceId) || this.audioHistory.find(row => row.instanceId === instanceId)
+    if (row && !row.stopped) { row.alive = false; row.stopped = true; this.audioRevision++ }
+    this.audios.delete(instanceId)
+  }
+
+  audioSnapshot() {
+    return { sequence: this.nextAudioId - 1, revision: this.audioRevision,
+      active: [...this.audios.values()].map(row => ({ ...row })),
+      recent: this.audioHistory.map(row => ({ ...row })) }
   }
 
   instantiate(prefabIndex, parent, phase) {
@@ -1396,6 +1438,9 @@ export class LuaRuntime {
     }
     this.clock.frame++
     this.clock.time += dt
+    for (const [id, audio] of this.audios) {
+      if (this.clock.time + 1e-9 >= audio.startedAt + audio.duration) { audio.alive = false; this.audios.delete(id); this.audioRevision++ }
+    }
     const levelUpdateScheduled = !this.clock.paused
     for (const animation of [...this.animations]) animation.step(dt)
     this.runScriptPhase('OnUpdate', dt)
@@ -1512,6 +1557,9 @@ export class LuaRuntime {
     this.luaFunctions.clear()
     for (const L of [...this.luaStates]) this.closeTrackedLuaState(L)
     this.L = null
+    this.audios.clear()
+    this.audioHistory.length = 0
+    this.audioWarnings.clear()
   }
 }
 

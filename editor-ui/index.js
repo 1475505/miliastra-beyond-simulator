@@ -1,10 +1,14 @@
 import { createScriptSyncPanel } from './script-sync.js'
 import { createPlayLauncher } from './play-launcher.js'
+import { createImagePreview } from './image-preview.js'
+import { isRemoteImage } from '../studio/assets/catalog.js'
+import { refreshBrowserImage } from '../studio/assets/browser.js'
 
 export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
     const e = React.createElement
     const ScriptSyncPanel = createScriptSyncPanel(React)
     const usePlayLauncher = createPlayLauncher(React)
+    const ImagePreview = createImagePreview(React)
 
     const STYLE_ID = 'qxqy-simulator-style'
     const CSS = `
@@ -91,6 +95,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
     }
     function colorHex(value) { return `#${(Number(value) >>> 0).toString(16).padStart(8, '0').toUpperCase()}` }
     function shape(primitive, color) {
+      if (primitive === 'sprite') return { background: 'transparent' }
       if (primitive === 'circle') return { borderRadius: '50%', background: color }
       if (primitive === 'ring') return { borderRadius: '50%', border: `7px solid ${color}`, background: 'transparent' }
       if (primitive === 'triangle') return { background: color, clipPath: 'polygon(50% 0,100% 100%,0 100%)' }
@@ -492,7 +497,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       else if (textKind) { style.background = argb(item.bgColor, 0x00ffffff); style.justifyContent = item.horizontalAlignment === 'Right' ? 'flex-end' : item.horizontalAlignment === 'Middle' ? 'center' : 'flex-start'; style.alignItems = item.verticalAlignment === 'Bottom' ? 'flex-end' : item.verticalAlignment === 'Middle' ? 'center' : 'flex-start'; style.textShadow = item.enableOutline === false ? 'none' : `0 0 2px ${argb(item.outlineColor, 0xff000000)}` }
       else if (kind === 'container') style.background = 'transparent'
       const selected = item.id === snap.selectedId
-      const content = textKind ? (item.text || '') : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, `缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || KIND_META[kind]?.[1] || kind) : null
+      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: item.imageId, item }) : textKind ? (item.text || '') : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, `缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || KIND_META[kind]?.[1] || kind) : null
       return e('div', { key: item.id, className: `qxsim-box ${kind}${selected ? ' selected' : ''}${item.instantiated ? ' dynamic' : ''}${item.pressed ? ' pressed' : ''}`, style }, content, selected && kind !== 'container' ? ['tl', 'tr', 'bl', 'br'].map((pos) => e('i', { key: pos, className: `qxsim-handle ${pos}` })) : null)
     }
 
@@ -503,6 +508,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       const playLauncher = usePlayLauncher({ sessionId, api: callApi, playUrl, onError: setError })
       const [savePath, setSavePath] = React.useState(null)
       const [saving, setSaving] = React.useState(false)
+      const [refreshingImage, setRefreshingImage] = React.useState(false)
       const [notice, setNotice] = React.useState(''); const fileInputRef = React.useRef(null)
       const [exportWarnings, setExportWarnings] = React.useState([])
       const [archives, setArchives] = React.useState([])
@@ -568,6 +574,17 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
         } catch {}
       }
       const commit = (key, value) => void patch({ op: 'set', key, value }).catch(() => {})
+      async function refreshSelectedImage() {
+        const imageId = snapRef.current?.boxes?.find(item => item.id === snapRef.current.selectedId)?.imageId
+        if (!isRemoteImage(imageId)) return
+        setRefreshingImage(true)
+        try {
+          await callApi(sessionId, 'image-refresh', { imageId })
+          refreshBrowserImage(imageId)
+          setNotice(`图片 ${imageId} 已重新下载；同源试玩页会同步刷新。`)
+        } catch (error) { setError(error.message) }
+        finally { setRefreshingImage(false) }
+      }
       async function createStateChild(key, label) {
         const buttonId = snapRef.current?.inspector?.id
         if (!buttonId) return
@@ -830,7 +847,10 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
               canInspectorScript ? e('button', { className: inspectorTab === 'script' ? 'active' : '', onClick: () => setInspectorTab('script') }, '脚本') : null),
             e('div', { className: 'qxsim-inspector-scroll' }, canInspectorScript && inspectorTab === 'script'
               ? e(ControlScriptTab, { snap, addScriptMounted: (controlId) => void addScript({ controlId, controlAsset: snap.asset?.type }).then(() => leavePage('script')), mountScriptTo, unmountScript, openScript: (id) => { setSelectedScriptId(id); leavePage('script') } })
-              : e(BaseInspector, { inspector: snap.inspector, commit, createStateChild })),
+              : e(React.Fragment, null, e(BaseInspector, { inspector: snap.inspector, commit, createStateChild }),
+                isRemoteImage(snap.boxes?.find(item => item.id === snap.selectedId)?.imageId) ? e('div', { className: 'qxsim-section-body' },
+                  e('button', { className: 'qxsim-action', disabled: refreshingImage, onClick: refreshSelectedImage }, refreshingImage ? '正在刷新素材…' : '↻ 重新下载此素材'),
+                  e('p', { className: 'qxsim-muted' }, '白名单图片按需缓存；刷新会重新访问素材源。')) : null)),
             e('div', { className: 'qxsim-tree-foot' }, e('button', { className: 'qxsim-action danger', style: { width: '100%' }, onClick: () => void patch({ op: 'remove' }).catch(() => {}) }, clientTemplates && selectedRow?.depth === 0 ? '⌫ 删除当前模板' : '⌫ 删除当前控件')))
           : e('div', { className: 'qxsim-empty' }, '请选择一个控件'))) : page === 'script' ? e(ScriptPage, { snap, selectedScriptId, selectScript: (id) => { saveScriptDraftSilently(); setSelectedScriptId(id) }, draft: scriptDraft, updateDraft, saveScript: () => void saveScriptDraft().then(() => setNotice('Lua 脚本已保存到当前存档')).catch(() => {}), addScript: () => void addScript(), removeScript, exportLua: (id) => void exportFile('lua', id), exportScripts: () => void exportFile('scripts'), exportScriptsGia: () => void exportFile('scripts-gia'), notice }) : e(ServerLogicPage, { snap, draft: logicDraft, setDraft: setLogicDraft, saveLogic: () => void saveLogicDraft().catch(() => {}), notice, error }))
     }

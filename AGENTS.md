@@ -29,7 +29,8 @@ Lua VM 只放在 Runtime，Authoring/GIA 只放在 Studio，接入层复用共�
 - 按键监听：创作者预告后续版本同层级上层控件优先接收事件。模拟器 `injectKey` 沿同一显示层序派发；这是待版更规则，不能写成已由旧版真机探针证实。
 - `game` 为全局表，函数按官方签名用点号调用；Lua 桥接必须核对参数个数，避免冒号误用在模拟器中静默通过。真机已回传 `GetClientUIRoots()` 零参数报错，见根 [fact.md](../knowledge/fact.md#game-函数误用冒号会在真机多传一个参数)。
 - 仅客户端控件/模板允许挂脚本，以 `controlAsset` 区分两棵树同名 ID；模板脚本随实例化运行。11 类控件按 GIA 证据分级，N/U 字段只读，不伪造。
-- 图片 `100001–100006` 分别用矩形、圆、等腰三角、四角星、五角星、圆环（内外径比 0.8）代理，其他 ID 显示缺失框；代理不代表官方素材。
+- 图片 `100001–100006` 继续使用基础图元代理；`studio/assets/catalog.js` 中的其他白名单 ID 经共用宿主按需下载、恢复透明留白并缓存。未知 ID 和加载失败显示缺失框。来源、刷新及预览边界见 [素材缓存](studio/docs/image-assets.md)，代理及静态预览不代表真机素材渲染契约。
+- Lua 2D 音效通过 Runtime 实例快照投影到浏览器 Web Audio；音频与图片复用 `studio/host/asset-cache.js` 持久缓存。目录、自动播放、时长与停止策略见 [音频缓存](studio/docs/audio-assets.md)，不得把浏览器音频时钟回灌 Lua。
 - 五档画布与 `GetUICanvasSize` 同源，尺寸见根 [fact.md](../knowledge/fact.md)“模拟器画布预设”。原点左下、锚点相对父矩形；手机 16:9（1280×720）完整可见，PC 等比放大/留边。
 - 布局只保存 GIA 四平台 `transformByPlatform`，五种画布从平台参数派生显示。读取入口自动迁移旧存档，运行时不恢复画布布局表或回退读取；保存统一为 version 4、资产 `layoutSchemaVersion: 2`。迁移规则见 [Studio README](studio/README.md#json-画布布局与-gia-平台槽)。
 - 独立脚本 GIA 与整合包的挂载能力不同；按根本地 [GIA 数据结构](../knowledge/ui/02_UI核心数据结构.md) §5“通用关联槽”/§8 和 `studio/gia/codec.js` 实施，不写未观察字段。排错见 [P11](../knowledge/pitfalls.md)。

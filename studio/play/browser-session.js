@@ -1,3 +1,5 @@
+import { BrowserAudioPlayer } from './audio-player.js'
+
 export const PLAY_POLL_INTERVAL_MS = 33
 export const PLAY_MOVE_THROTTLE_MS = 60
 
@@ -19,7 +21,11 @@ export function stagePoint(event, rect, width, height) {
  * Worker semantics stay in studio/host/worker.js; this only observes compact
  * scene snapshots and sends light-weight input.
  */
-export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError, isActive } = {}) {
+export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError, onAudioStatus, audio,
+  isActive } = {}) {
+  audio ||= typeof window !== 'undefined' ? new BrowserAudioPlayer({ onStatus: onAudioStatus }) : null
+  if (typeof window !== 'undefined') audio?.bindUnlock(window)
+  let generation = 0
   let snapshot = null
   let running = false
   let polling = false
@@ -35,9 +41,10 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     if (onError) onError(error)
   }
 
-  async function applyScene(next) {
+  async function applyScene(next, { freshAudio = false } = {}) {
     snapshot = next
     running = next?.running !== false
+    audio?.sync(next, { fresh: freshAudio })
     if (next?.scene && next.scene.format === 'tree-v1') {
       if (next.scene.reset) sceneRev = 0
       await renderer.applyScene(next.scene, next.canvasWidth, next.canvasHeight)
@@ -50,13 +57,18 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
 
   async function poll() {
     if (!running || polling) return
-    if (isActive && !isActive()) return
+    if (isActive && !isActive()) { audio?.reset(); return }
     polling = true
+    const current = generation
     try {
-      await applyScene(await api('get', { view: true, sceneRev, compact: true }))
+      const next = await api('get', { view: true, sceneRev, compact: true })
+      if (current !== generation) return
+      await applyScene(next)
     } catch (error) {
+      if (current !== generation) return
       running = false
       stopPolling()
+      audio?.reset()
       emitError(error)
     } finally {
       polling = false
@@ -96,6 +108,8 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   }
 
   function reset() {
+    generation++
+    audio?.reset()
     clearMove()
     activePointer = null
     running = false
@@ -117,9 +131,14 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   }
 
   async function start(args = {}) {
+    reset()
+    audio?.unlock()
+    const current = generation
     sceneRev = 0
     const next = await api('start', { view: true, compact: true, ...args })
-    await applyScene({ ...next, running: true })
+    if (current !== generation) return next
+    await applyScene({ ...next, running: true }, { freshAudio: true })
+    if (current !== generation) return next
     running = true
     stopPolling()
     startPolling()
@@ -129,27 +148,39 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   async function attach() {
     // Reconnect a reloaded browser to the existing worker without restarting
     // the game, changing its player, or resuming a paused session.
+    reset()
+    const current = generation
     sceneRev = 0
     stopPolling()
     const next = await api('get', { view: true, compact: true, sceneRev: 0 })
+    if (current !== generation) return next
     await applyScene(next)
+    if (current !== generation) return next
     if (running) startPolling()
     return next
   }
 
   async function device(args = {}) {
+    reset()
+    const current = generation
     sceneRev = 0
     stopPolling()
     const next = await api('device', { view: true, compact: true, ...args })
-    await applyScene({ ...next, running: true })
+    if (current !== generation) return next
+    await applyScene({ ...next, running: true }, { freshAudio: true })
+    if (current !== generation) return next
     running = true
     startPolling()
     return next
   }
 
   async function view(args = {}) {
+    generation++
+    audio?.reset()
+    const current = generation
     sceneRev = 0
     const next = await api('view', { view: true, compact: true, ...args })
+    if (current !== generation) return next
     await applyScene({ ...next, running: true })
     return next
   }
@@ -258,9 +289,11 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     reset()
     while (inputDisposers.length) inputDisposers.pop()()
     renderer?.destroy?.()
+    audio?.destroy()
   }
 
   return {
+    audio,
     get snapshot() { return snapshot },
     get running() { return running },
     get sceneRev() { return sceneRev },

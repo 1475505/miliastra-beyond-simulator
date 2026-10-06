@@ -6,6 +6,8 @@
 
 所有编辑操作沿用 Controller snapshot、revision 与 patch 契约。此层不读取文件系统、不注册 Harness 服务，也不处理部署认证。
 
+`image-preview.js` 显示白名单静态图片，复用浏览器图片加载器与 HTTP 缓存，Canvas2D 处理 RGB 乘色、alpha 和填充。宿主需提供同源 `/qxqy-assets/` 路由与 `image-refresh` action；「重新下载此素材」会刷新磁盘副本，并通知同源试玩页面重载纹理。完整边界见 [素材缓存](../studio/docs/image-assets.md)。
+
 ## 试玩窗口与内嵌兜底
 
 `play-launcher.js` 同步尝试打开新标签页；宿主拒绝窗口（`window.open` 返回 `null`）时，保存脚本和服务端逻辑后，在顶层 modal dialog 中嵌入同源试玩页 `?embedded=1#<sessionId>`。底下的编辑器保持挂载。正常浏览器继续使用新标签页。

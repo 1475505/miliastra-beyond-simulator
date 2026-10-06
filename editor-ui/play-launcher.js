@@ -1,5 +1,23 @@
-// A popup is opened synchronously while the click still has user activation.
-// Desktop denies it; the fallback keeps the editor mounted beneath a modal.
+// Known Desktop pages use the modal directly. Other hosts can try a popup
+// synchronously while the click still has user activation.
+function closePopup(popup) {
+  try { popup?.close() } catch { /* A host can revoke access to the window. */ }
+}
+
+export function preparePlayPopup() {
+  if (window.location.protocol === 'dsh-app:') return null
+  let popup
+  try {
+    popup = window.open('about:blank', '_blank')
+    if (!popup || popup.closed) return null
+    popup.document.write('<!doctype html><meta charset="utf-8"><title>正在准备试玩…</title><p>正在保存项目并准备试玩…</p>')
+    return popup
+  } catch {
+    closePopup(popup)
+    return null
+  }
+}
+
 export function createPlayLauncher(React) {
   const e = React.createElement
   // Returning to the same Harness session can remount the editor before its
@@ -114,7 +132,7 @@ export function createPlayLauncher(React) {
       const scope = { active: true, pending: false, popup: null }
       scopeRef.current = scope
       setOpening(false); setEmbedded(null)
-      return () => { scope.active = false; scope.popup?.close() }
+      return () => { scope.active = false; closePopup(scope.popup) }
     }, [sessionId])
 
     async function open(prepare) {
@@ -124,25 +142,29 @@ export function createPlayLauncher(React) {
       const returnFocus = document.activeElement
       setOpening(true)
       try {
-        const popup = window.open('about:blank', '_blank')
+        let popup = preparePlayPopup()
         scope.popup = popup
-        if (popup) {
-          popup.document.write('<!doctype html><meta charset="utf-8"><title>正在准备试玩…</title><p>正在保存项目并准备试玩…</p>')
-        }
         await stopping.get(sessionId)
         if (!scope.active) return
         await prepare()
         if (!scope.active) return
         const url = new URL(playUrl(sessionId), window.location.href)
         if (popup) {
-          popup.location.replace(url.href)
+          try {
+            if (popup.closed) throw new Error('Play window closed')
+            popup.location.replace(url.href)
+          } catch {
+            closePopup(popup)
+            popup = null
+          }
           scope.popup = null // An independent play tab outlives this editor view.
-        } else {
+        }
+        if (!popup) {
           url.searchParams.set('embedded', '1')
           setEmbedded({ sessionId, url: url.href, returnFocus })
         }
       } catch (reason) {
-        scope.popup?.close(); scope.popup = null
+        closePopup(scope.popup); scope.popup = null
         if (scope.active) onError(reason?.message || String(reason))
       } finally {
         scope.pending = false

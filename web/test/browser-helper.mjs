@@ -3,11 +3,11 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-export async function startTestBrowser(directory) {
+export async function startTestBrowser(directory, extraArgs = []) {
   const child = spawn(process.env.QXQY_BROWSER, [
     '--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-popup-blocking',
     '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--remote-debugging-port=0',
-    `--user-data-dir=${join(directory, 'browser')}`, 'about:blank',
+    `--user-data-dir=${join(directory, 'browser')}`, ...extraArgs, 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true })
   let socket
   const closed = once(child, 'close')

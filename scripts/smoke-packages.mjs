@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, copyFile } from 'node:fs/promises'
+import { mkdtemp, readFile, copyFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execFileSync } from 'node:child_process'
@@ -15,6 +15,9 @@ for (const harness of harnessVersions) {
   const destination = await mkdtemp(join(tmpdir(), 'qxqy-package-smoke-'))
   console.log(`Installing release packages with dsh-tools ${harness.tools} outside checkout: ${destination}`)
   try {
+    // Stop npm's project-root lookup at this disposable consumer, even when
+    // the system temporary directory lives inside another npm project.
+    await writeFile(join(destination, 'package.json'), JSON.stringify({ private: true, type: 'module' }))
     npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock',
       ...artifacts.map(a => join(root, 'release', a.filename)),
       `@deepseek-ai/dsh-tools@${harness.tools}`, `@deepseek-ai/cordis@${harness.cordis}`], { cwd: destination, stdio: 'inherit', timeout: 180000 })

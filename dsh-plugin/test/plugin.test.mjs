@@ -314,7 +314,7 @@ test('controller renders play screenshots from Runtime paint without a browser p
 test('controller renders editor screenshots from boxes without the simulator tab', async () => {
   const controller = new SimulatorController()
   try {
-    const captured = controller.requestUiScreenshot()
+    const captured = await controller.requestUiScreenshot()
     assert.equal(captured.page, 'UI 编辑')
     assert.equal(captured.width, 1600)
     assert.equal(captured.height, 900)
@@ -347,6 +347,7 @@ test('plugin registers screenshot capture, API and standalone Pixi play routes, 
   assert.equal(routes[0].path, '/qxqy-simulator/api')
   assert.equal(routes[1].path, '/qxqy-simulator/play')
   assert.equal(routes[2].path, '/qxqy-simulator/play-renderer.js')
+  assert.equal(routes[3].path, '/qxqy-assets')
   const headers = {}
   let body = ''
   const response = {

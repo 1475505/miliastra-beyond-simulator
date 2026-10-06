@@ -39,7 +39,7 @@ const controller = new SimulatorController(workspace)
 try {
   controller.patch({ op: 'renameSave', name: 'Git source install' })
   assert.ok(controller.saveArchive('game.save.json').bytes > 0)
-  assert.equal(controller.requestUiScreenshot().data.subarray(1, 4).toString(), 'PNG')
+  assert.equal((await controller.requestUiScreenshot()).data.subarray(1, 4).toString(), 'PNG')
   assert.equal((await controller.play('start', { view: true })).running, true)
   assert.equal((await controller.requestScreenshot()).data.subarray(1, 4).toString(), 'PNG')
 } finally {

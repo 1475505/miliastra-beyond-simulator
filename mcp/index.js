@@ -190,7 +190,7 @@ async function callTool(name, args = {}, signal) {
     if (name === 'qxqy_script_sync') return controller.scriptSyncAction(args.action, args.args || {})
     if (name === 'qxqy_studio_patch') return controller.patch(args.op)
     if (name === 'qxqy_studio_play') return controller.play(args.action, args.args || {}, signal)
-    if (name === 'qxqy_studio_ui_screenshot') return controller.uiScreenshot()
+    if (name === 'qxqy_studio_ui_screenshot') return controller.uiScreenshot(signal)
     if (name === 'qxqy_studio_play_screenshot') return controller.playScreenshot(signal)
     if (name === 'qxqy_studio_load') {
       return args.path ? controller.loadArchive(args.path) : controller.listArchives()

@@ -6,6 +6,10 @@
 
 `host-png.js` 是无 UI 宿主的编辑器/试玩 PNG 渲染器（截图与测试用）；`host/` 提供工作区边界、持久试玩 Worker 和通用 Controller，`play/pixi-renderer.js` 是 Web/DSH 共用的增量场景渲染器，`play/browser-session.js` 是两边共用的浏览器试玩循环。它们由 MCP、DSH 与本地 Web 适配层共同使用。
 
+白名单静态素材由 `assets/` 与 `host/image-assets.js` 提供目录、透明留白还原、浏览器缓存和持久文件缓存，接入三种渲染路径。使用、刷新、异步截图接口与边界见 [素材缓存](docs/image-assets.md)。
+
+音频目录 `assets/audio-catalog.js`、`host/audio-assets.js` 和 `play/audio-player.js` 接通 Lua 2D 音效与浏览器播放，复用 `host/asset-cache.js` 的按需持久缓存。签名、生命周期策略和验证见 [音效与缓存](docs/audio-assets.md)。
+
 层序回归见 `test/sibling-order.test.mjs`：编辑器静态列表第一项在上；Lua 动态实例根默认后建在上，显式 sibling 排序另行生效。2026-09-28 修复位于 Runtime 实例化边界；PNG/Pixi/命中继续消费同一棵树。来源与生命周期边界见 [默认动态实例层序](../client/lua-runtime/docs/observed-contract.md#默认动态实例层序2026-09-28)。
 
 ```sh

@@ -7,6 +7,7 @@ import { CANVAS_PRESETS } from '../constants.js'
 import { listWorkspaceArchives, resolveWorkspaceFile, resolveWorkspaceOutput, resolveWorkspaceRoot } from './workspace.js'
 import { readClientLanguageType } from './client-language.js'
 import { ScriptSync, contentHash, discoverScriptDirectories } from './script-sync.js'
+import { sharedImageAssets } from './image-assets.js'
 
 // Keep the interactive default short, but allow project replay runners to raise
 // it for control-heavy pixel-art scenes and long deterministic golden cases.
@@ -20,7 +21,7 @@ function abortError() {
 }
 
 export class SimulatorController {
-  constructor(workspacePath = '') {
+  constructor(workspacePath = '', { imageAssets = sharedImageAssets() } = {}) {
     // The DSH adapter can begin before its host exposes a workspace.  Keep the
     // controller usable in that state instead of silently binding it to the
     // process cwd; Web and MCP always pass an explicit workspace.
@@ -34,6 +35,7 @@ export class SimulatorController {
     this.archiveStamp = ''
     this.savedArchive = ''
     this.scriptSync = new ScriptSync(this)
+    this.imageAssets = imageAssets
   }
 
   /** Serialize calls for one project handle, including worker operations. */
@@ -231,7 +233,8 @@ export class SimulatorController {
   async playScreenshot(signal) {
     if (!this.worker) throw new Error('play session has not started')
     const snapshot = await this.request('get', { view: true }, signal, SCREENSHOT_TIMEOUT_MS)
-    const image = renderScenePng(snapshot.scene, snapshot.canvasWidth, snapshot.canvasHeight)
+    const assets = await this.imageAssets.prepare(snapshot.scene?.nodes, signal)
+    const image = renderScenePng(snapshot.scene, snapshot.canvasWidth, snapshot.canvasHeight, assets)
     return {
       data: image.data,
       canvasId: String(snapshot.canvasId || ''),
@@ -241,11 +244,14 @@ export class SimulatorController {
       height: image.height,
       pixelWidth: image.pixelWidth,
       pixelHeight: image.pixelHeight,
+      assetWarnings: assets.warnings,
     }
   }
 
-  uiScreenshot() {
-    const image = renderEditorPng(this.studio.get())
+  async uiScreenshot(signal) {
+    const snapshot = this.studio.get()
+    const assets = await this.imageAssets.prepare(snapshot.boxes, signal)
+    const image = renderEditorPng(snapshot, assets)
     return {
       data: image.data,
       page: image.page,
@@ -253,6 +259,7 @@ export class SimulatorController {
       height: image.height,
       pixelWidth: image.pixelWidth,
       pixelHeight: image.pixelHeight,
+      assetWarnings: assets.warnings,
     }
   }
 

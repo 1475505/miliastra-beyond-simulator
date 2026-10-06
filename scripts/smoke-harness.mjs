@@ -18,6 +18,7 @@ delete env.DSH_BUNDLED_SKILL_DIR
 let child
 let output = ''
 try {
+  await writeFile(join(temporary, 'package.json'), JSON.stringify({ private: true, type: 'module' }))
   let cli = process.argv[2] && resolve(process.argv[2])
   if (!cli) {
     npm(['install', '--no-audit', '--no-fund', '--no-package-lock', '@deepseek-ai/dsh@0.2.0-rc.2'], {
