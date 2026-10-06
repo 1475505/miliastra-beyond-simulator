@@ -5,9 +5,10 @@ let studio = null
 let ticking = false
 let lastTick = 0
 let accumulator = 0
+let clockMode = 'realtime'
 
-// Shared fixed-step play clock.  Every host (DSH, MCP and local Web) runs the
-// same 30 FPS simulation in the worker; page code only observes it.
+// Web/DSH use the 30 FPS wall clock. MCP defaults to manual: only explicit
+// step / case replay advances Lua, including between observation requests.
 const CLOCK_INTERVAL_MS = 33
 const FIXED_DT = 1 / 30
 const MAX_CATCHUP_STEPS = 5
@@ -37,7 +38,7 @@ function respond(args = {}) {
 }
 
 function tickClock() {
-  if (!studio || ticking) return
+  if (!studio || ticking || clockMode !== 'realtime') return
   const status = studio.playStatus()
   if (!status.running || status.paused) {
     lastTick = 0
@@ -69,8 +70,11 @@ const clockTimer = setInterval(tickClock, CLOCK_INTERVAL_MS)
 
 function run(action, args = {}) {
   if (action === 'start') {
+    const requestedMode = args.clockMode ?? 'realtime'
+    if (requestedMode !== 'manual' && requestedMode !== 'realtime') throw new Error('clockMode must be manual or realtime')
     if (studio) studio.playStop()
     studio = createStudio(args.archive || args.project, { workspacePath: args.workspacePath || '' })
+    clockMode = requestedMode
     lastTick = 0
     accumulator = 0
     return studio.playStart(startOptions(args))
@@ -95,10 +99,14 @@ function run(action, args = {}) {
   }
   if (action === 'pause') {
     studio.playPause({ observe: false })
+    lastTick = 0
+    accumulator = 0
     return respond(args)
   }
   if (action === 'resume') {
     studio.playResume({ observe: false })
+    lastTick = 0
+    accumulator = 0
     return respond(args)
   }
   if (action === 'device') {
@@ -133,7 +141,10 @@ function run(action, args = {}) {
 parentPort.on('message', (message) => {
   const { id, action, args = {} } = message || {}
   try {
-    parentPort.postMessage({ id, ok: true, value: run(action, args), error: null })
+    const value = run(action, args)
+    // Include the clock on all play snapshots, including light/input responses.
+    const result = typeof value?.running === 'boolean' ? { ...value, clockMode } : value
+    parentPort.postMessage({ id, ok: true, value: result, error: null })
   } catch (error) {
     parentPort.postMessage({ id, ok: false, value: null, error: error?.message || String(error) })
   }

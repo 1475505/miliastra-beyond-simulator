@@ -88,14 +88,14 @@ const tools = [
   },
   {
     name: 'qxqy_studio_play',
-    description: '控制指定工程的确定性 Lua 试玩 Worker：start、step、输入、暂停/继续、设备/多人视角、服务端变量/信号和用例回放。start 后才能进行输入和 step；stop 是确定性回收方式。',
+    description: '控制指定工程的 Lua 试玩 Worker。MCP 默认 manual 时钟，仅显式 step/用例回放推进时间；等待、get 和截图不会自动推进。start 可传 clockMode="realtime" 自动运行。start 后才能输入和 step；stop 回收 Worker。',
     inputSchema: objectSchema({
       ...handleProperty,
       action: {
         type: 'string',
         enum: ['start', 'device', 'view', 'get', 'step', 'pointer', 'key', 'click', 'pause', 'resume', 'stop', 'serverGet', 'serverSet', 'serverSend', 'history', 'saveCase', 'runCase'],
       },
-      args: { type: 'object', description: '动作参数。pointer 使用 type/x/y；step 使用 dt；start/device 使用 canvasId；serverSet 使用 entityType/name/value。', additionalProperties: true },
+      args: { type: 'object', description: '动作参数。pointer 使用 type/x/y；step 使用 dt（秒）；start/device 使用 canvasId 和可选 clockMode="manual"|"realtime"；device 省略模式时保留当前模式，start 省略时恢复 manual；pause/resume 不改变时钟模式；serverSet 使用 entityType/name/value。', additionalProperties: true },
     }, ['handle', 'action']),
   },
   {
@@ -105,7 +105,7 @@ const tools = [
   },
   {
     name: 'qxqy_studio_play_screenshot',
-    description: '获取当前试玩 Runtime 画面的 PNG，用于检查 Lua、动画和输入后的实际画面；必须先 start，不会步进时间。',
+    description: '获取当前试玩 Runtime 画面的 PNG；必须先 start，截图不调用 step。默认 manual 模式保持当前帧；显式 realtime 模式在调用之间仍自动运行。回执含 frame/time/clockMode。',
     inputSchema: objectSchema(handleProperty, ['handle']),
   },
   {
@@ -164,7 +164,7 @@ async function callTool(name, args = {}, signal) {
   if (name === 'qxqy_preview_open') return preview.open(args.path, signal)
   if (name === 'qxqy_project_open') {
     const handle = `project-${nextHandle++}`
-    const controller = new SimulatorController(workspaceRoot)
+    const controller = new SimulatorController(workspaceRoot, { clockMode: 'manual' })
     try {
       const path = String(args.path || '').trim()
       if (path) controller.loadArchive(path)

@@ -41,4 +41,4 @@ jobs:
       - name: Verify Harness 0.2 host integration
         run: pnpm test:harness
       - name: Stage changed versions
-        run: node scripts/publish-npm.mjs
+        run: node scripts/publish-npm.mjs ${{ startsWith(github.ref_name, 'npm-mcp-') && '--product=mcp' || '' }}

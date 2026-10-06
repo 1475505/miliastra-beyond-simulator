@@ -2,7 +2,18 @@
 
 范围：[1475505/miliastra-beyond-simulator](https://github.com/1475505/miliastra-beyond-simulator) 的未关闭 #4–#7，同时核对已关闭 #2/#3 的后续回传。初次核验代码基线为 `864f5fd` 加当时工作区已有改动；MCP 包版本 0.3.3。初次核验使用自包含合成存档，通过真实 MCP stdio → Controller → Worker → Lua 链路执行，未使用报告者未上传的游戏存档。
 
-**当前状态：用户要求先撤回缺少官方文档或真机依据的修改。本轮新增的时钟模式、点击参数校验及配套 MCP 测试/说明均已撤回。以下模拟器观察仅保留为调查记录，不代表采纳修复方案。仅保留按官方 API 编写、与数组顺序无关的 GetChildren 控件操作测试。**
+**当前状态：初次候选修改按用户要求撤回后，用户进一步确认并授权修复 #5 的计时问题。现实现 MCP 默认手动时钟、可选实时模式，Web/DSH 保持默认实时；详见下节。这是用户确认的工具设计，不宣称官方/真机要求。#4 的点击参数校验仍未修改，#7 仅保留与数组顺序无关的 GetChildren 控件操作测试。**
+
+## #5 后续授权修复（2026-10-07）
+
+- 实测旧行为：10 秒倒计时启动后 `step(2)` 得到 time=2；等待3秒再截图已是 time=5。先 pause 再 step(2)，等待后仍为 time=2。截图自身不调用 step，问题是调用间自动计时。
+- 经用户明确同意，MCP 创建 Controller 时默认 `manual`，Worker 在此模式下不自动推进。`start {clockMode:"realtime"}` 可恢复实时运行；共享 Controller/Web/DSH 的默认模式仍为 realtime。
+- `pause/resume` 不改变模式；暂停时仍允许显式 step。`device` 默认继承本局模式，新的 start 未传模式时恢复该宿主默认值。非法模式在销毁旧 Worker 前拒绝。
+- 运行快照及截图回执返回 `clockMode`；截图的异步素材准备也不会让 manual Worker 偷跑。Lua 生命周期、Tween 算法与绘制逻辑未因时钟模式改变。
+- 依据：用户确认的模拟器产品要求 + 本地复现，`evidence_source=observed`、运行端 `simulator`；不作为千星真机时钟结论。
+- 回归：`mcp/test/protocol.test.mjs` 用真实 stdio 检查等待/截图/step、暂停恢复、实时选项、设备切换及参数失败后会话保留；`studio/test/host-clock.test.mjs` 检查异步截图等待。修改前新增 MCP 计时测试两项失败。
+- #5.3 仍未复现：同一 handle 上的 stop/load/start，内联 source v1/v2 与磁盘 Lua v1/v2 均执行新标记；保留回归，没有添加未经证实的缓存修复。
+- 验证：Windows / Node 22.23.2，冻结锁文件安装与根 `pnpm test` 通过（304 通过、7 跳过、0 失败）；MCP 本地构建通过。相同10秒倒计时经真实 MCP stdio 复测：step(2)→等3秒→截图仍 time=2/frame=1；再等2秒→step(0.2) 为 time=2.2/frame=2，Lua 显示剩余7.80秒。随后按用户要求纳入 MCP 0.3.5 单包 npm 发布；Web/DSH 不升版，不创建 GitHub Release。
 
 ## 证据口径
 
@@ -18,7 +29,7 @@
 | Issue | 判定 | 依据与处理 |
 |---|---|---|
 | [#4](https://github.com/1475505/miliastra-beyond-simulator/issues/4) 光标事件永远不派发 | **核心指控未复现；参数错误静默成功属实** | 动态创建光标区，`pointer down/up` 和按名 `click` 均触发 Lua；raycast=false / showCursor=false 阻止点击，恢复后再次生效。漏传 `click.name` 会被 `String(undefined)` 写入历史，恰好复现 issue 的 `"undefined"`。新增名称/类型校验属于工具设计，无官方或真机依据，现已撤回。原工程 pointer 失败原因仍缺其存档和调用参数，不能仅凭初次模拟器测试定因。 |
-| [#5](https://github.com/1475505/miliastra-beyond-simulator/issues/5) 3.1 截图时刻前移 / 3.2 调用间时间流逝 | **模拟器现象属实** | 截图只 get，不直接 step；共享 Worker 的 33ms timer 持续推进，等待约180ms 后 time 从0变为约0.167。与 MCP “确定性”说明冲突，但改为默认手动时钟不是官方/真机要求。新增模式与计时重置策略已撤回，恢复改动前行为。 |
+| [#5](https://github.com/1475505/miliastra-beyond-simulator/issues/5) 3.1 截图时刻前移 / 3.2 调用间时间流逝 | **已复现，并经用户授权修复** | 截图只 get，不直接 step；旧 Worker 的 timer 持续推进。初次候选方案撤回后，用户确认采用 MCP 默认 manual、可选 realtime 的工具设计，见上节。 |
 | #5 3.3 stop → load → start 执行旧脚本 | **未复现** | 每次 start 终止旧 Worker，重新取工程和脚本。内联 source v1/v2、磁盘 Lua v1/v2 均执行新标记。非空 source 优先于 path 是既有契约；仅改磁盘文件或只刷新另一进程可表现为旧内容，但未证实这就是报告者原因。 |
 | [#6](https://github.com/1475505/miliastra-beyond-simulator/issues/6) 4.1 get 缺运行树 | **能力已存在，参数说明不足** | `args:{inspect:true}` 即返回 tree，初次核验验证了动态控件、文本、射线标记与固定几何。原默认 tree=[] 为轻量观察策略；本轮补充的工具参数说明随回滚撤回。 |
 | #6 4.2 GIA/GIL 导入 | **部分属实，应拆分** | Studio/Web/DSH 已支持 GIA UI 和脚本资产子集；MCP 打开工具确实只接完整 JSON。GIL 整关卡导入未实现，属于新增格式支持，现有客户端 API/探针不足以推导完整协议。本轮未改格式实现。 |
@@ -39,7 +50,7 @@ C 置顶 → [C,B,A]
 
 每次调用都成功且立即改变树，最终相同不等于方法 no-op。数组是一次性引用列表，控件不是只读快照。若按已知目标排序，优先保留控件引用并显式 `SetSiblingIndex`，不要把未知的真机 GetChildren 数组顺序当作排序依据。
 
-## 回滚范围与保留项
+## 初次回滚范围与保留项（历史）
 
 - 撤回 `studio/host/worker.js`、`studio/host/controller.js`、`mcp/index.js` 中本轮新增的时钟模式、模式回执、默认模式和暂停/恢复计时残量处理。
 - 撤回 `studio/play/session.js` 中本轮新增的点击名称/目标校验。
@@ -53,7 +64,7 @@ C 置顶 → [C,B,A]
 node --test client/lua-runtime/test/children-reference.test.mjs mcp/test/protocol.test.mjs
 ```
 
-上述测试不证明未提供的原游戏已修复，也不新增真机行为结论。回滚后本轮没有保留运行行为修复。
+上述测试不证明未提供的原游戏已修复，也不新增真机行为结论。初次回滚时没有保留运行行为修复；后续 #5 授权修复见本文开头。
 
 ### 回滚后验证
 

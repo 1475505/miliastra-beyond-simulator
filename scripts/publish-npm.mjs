@@ -1,13 +1,17 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { parseArgs } from 'node:util'
 import { root } from './paths.mjs'
 import { npm } from './npm.mjs'
 
 const registry = 'https://registry.npmjs.org'
-const args = process.argv.slice(2)
-if (args.some(arg => arg !== '--check')) throw new Error('Usage: node scripts/publish-npm.mjs [--check]')
-const checkOnly = args.includes('--check')
+const { values } = parseArgs({ options: { check: { type: 'boolean' }, product: { type: 'string' } } })
+const checkOnly = values.check === true
+const product = values.product
+if (product !== undefined && !['dsh-plugin', 'mcp', 'web'].includes(product)) {
+  throw new Error('--product must be dsh-plugin, mcp, or web')
+}
 if (!checkOnly && (process.env.GITHUB_ACTIONS !== 'true'
   || process.env.GITHUB_REPOSITORY !== '1475505/miliastra-beyond-simulator'
   || !process.env.GITHUB_REF?.startsWith('refs/tags/npm-'))) {
@@ -24,7 +28,7 @@ for (const artifact of artifacts) {
 }
 
 const pending = []
-for (const artifact of artifacts) {
+for (const artifact of artifacts.filter(artifact => product === undefined || artifact.product === product)) {
   const { name, version, filename, sha256 } = artifact
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name) || filename !== `${name}-${version}.tgz`) {
     throw new Error(`Invalid artifact identity: ${name}@${version} (${filename})`)

@@ -73,7 +73,29 @@ qxqy_preview_open({ path: "workspace/flappy-fish/flappy-fish.save.json" })
 
 `qxqy_project_open` 返回的 `handle` 是 MCP server 进程内的工程句柄；工程级读写和试玩工具必须带它，预览工具无需句柄。写操作必须使用最新的 `expectedRevision`。工程保存是显式操作，不会因为 `patch` 自动写盘。保存省略 `path` 时沿用最近成功打开或保存的路径；只有新工程默认使用 `qxqy-simulator.save.json`。传入新路径表示另存，此后省略路径会写回该新路径。
 
-截图工具以标准 MCP image content 返回 PNG；`qxqy_studio_play_screenshot` 需要先 `qxqy_studio_play({ action: "start" })`，且不会推进运行时。
+截图工具以标准 MCP image content 返回 PNG；`qxqy_studio_play_screenshot` 需要先启动试玩，截图本身不调用 step。MCP 默认使用手动时钟：等待下一次工具调用、读取状态和截图都不推进游戏时间。
+
+### 试玩时钟（0.3.5）
+
+```text
+qxqy_studio_play({ handle: "project-1", action: "start" })
+qxqy_studio_play({ handle: "project-1", action: "step", args: { dt: 2 } })
+qxqy_studio_play_screenshot({ handle: "project-1" })
+```
+
+上述操作停在游戏第 2 秒；两次调用之间等待多久都不再自动前进。若需连续运行，可显式启动实时时钟：
+
+```text
+qxqy_studio_play({ handle: "project-1", action: "start", args: { clockMode: "realtime" } })
+```
+
+- `manual`：只有显式 `step` 或用例回放推进时间；不必先 pause。输入回调仍会同步执行。
+- `realtime`：Worker 以固定 30 FPS 自动推进。get/截图不主动 step，但调用间的等待会改变游戏时间。
+- `pause/resume` 不切换模式；manual 下 resume 后仍需 step。暂停状态也允许手动 step。
+- `device` 重建运行时并保留本局模式，也可显式指定模式；新的 `start` 未指定时恢复 MCP 默认 manual。
+- 运行快照和截图回执含 `clockMode`。Web/DSH 的交互试玩默认仍为 realtime。
+
+这是用户确认的模拟器工具设计，用于解决 [#5](https://github.com/1475505/miliastra-beyond-simulator/issues/5) 调用间计时问题，不是新增真机行为结论。升级到 0.3.5（源码运行需重新构建）并重启 MCP 服务后生效。脚本重载子问题未复现：非空内联 `scripts[].source` 优先于磁盘 `path`，文件保存后使用 `stop → load → start` 重新加载对应工程。
 
 白名单图片截图会先准备远程静态素材，首次可能需要下载，后续复用与 Web/DSH 相同的磁盘缓存。失败项返回 `assetWarnings` 并显示占位，不影响 Lua 状态。缓存目录可用 `QXQY_IMAGE_CACHE_DIR` 指定，详见 [素材缓存](../studio/docs/image-assets.md)。
 

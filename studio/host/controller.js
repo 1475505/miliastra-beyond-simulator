@@ -20,8 +20,13 @@ function abortError() {
   return error
 }
 
+function validateClockMode(value) {
+  if (value !== 'manual' && value !== 'realtime') throw new Error('clockMode must be manual or realtime')
+  return value
+}
+
 export class SimulatorController {
-  constructor(workspacePath = '', { imageAssets = sharedImageAssets() } = {}) {
+  constructor(workspacePath = '', { imageAssets = sharedImageAssets(), clockMode = 'realtime' } = {}) {
     // The DSH adapter can begin before its host exposes a workspace.  Keep the
     // controller usable in that state instead of silently binding it to the
     // process cwd; Web and MCP always pass an explicit workspace.
@@ -36,6 +41,8 @@ export class SimulatorController {
     this.savedArchive = ''
     this.scriptSync = new ScriptSync(this)
     this.imageAssets = imageAssets
+    this.defaultClockMode = validateClockMode(clockMode)
+    this.playClockMode = this.defaultClockMode
   }
 
   /** Serialize calls for one project handle, including worker operations. */
@@ -198,11 +205,14 @@ export class SimulatorController {
       if (language) args = { ...args, language }
     }
     if (action === 'start') {
+      const clockMode = validateClockMode(args.clockMode ?? this.defaultClockMode)
       await this.terminateWorker()
+      this.playClockMode = clockMode
       return this.request('start', {
         archive: this.studio.archiveData(),
         workspacePath: this.activeWorkspacePath(),
         ...args,
+        clockMode,
       }, signal)
     }
     if (action === 'device') {
@@ -210,12 +220,15 @@ export class SimulatorController {
       if (!CANVAS_PRESETS[canvasId]) {
         throw new Error(`unknown canvas preset: ${canvasId || '(empty)'} (available: ${Object.keys(CANVAS_PRESETS).join(', ')})`)
       }
+      const clockMode = validateClockMode(args.clockMode ?? this.playClockMode)
       await this.terminateWorker()
+      this.playClockMode = clockMode
       return this.request('start', {
         archive: this.studio.archiveData(),
         workspacePath: this.activeWorkspacePath(),
         ...args,
         canvasId,
+        clockMode,
       }, signal)
     }
     if (action === 'stop') {
@@ -240,6 +253,7 @@ export class SimulatorController {
       canvasId: String(snapshot.canvasId || ''),
       frame: Number.isFinite(Number(snapshot.frame)) ? Number(snapshot.frame) : 0,
       time: Number.isFinite(Number(snapshot.time)) ? Number(snapshot.time) : 0,
+      clockMode: snapshot.clockMode,
       width: image.width,
       height: image.height,
       pixelWidth: image.pixelWidth,

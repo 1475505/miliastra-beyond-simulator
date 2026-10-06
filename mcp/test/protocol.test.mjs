@@ -1,11 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const mcpDir = fileURLToPath(new URL('..', import.meta.url))
 const entry = join(mcpDir, 'index.js')
@@ -162,5 +163,126 @@ test('tool failures are returned as MCP isError results', async () => {
   } finally {
     await stopServer(server)
     rmSync(workspace, { recursive: true, force: true })
+  }
+})
+
+async function clockFixture(t) {
+  const workspace = mkdtempSync(join(tmpdir(), 'qxqy-mcp-clock-'))
+  const server = startServer(workspace)
+  t.after(async () => {
+    await stopServer(server)
+    rmSync(workspace, { recursive: true, force: true })
+  })
+  const raw = async (name, args) => (await server.request('tools/call', { name, arguments: args })).result
+  const call = async (name, args) => {
+    const result = await raw(name, args)
+    assert.notEqual(result.isError, true, JSON.stringify(result))
+    return result.structuredContent
+  }
+  const { handle } = await call('qxqy_project_open', {})
+  const snapshot = await call('qxqy_studio_get', { handle })
+  await call('qxqy_studio_patch', { handle, op: {
+    op: 'addScript', path: 'clock.lua', controlId: 'n1', controlAsset: 'server-control-template',
+    expectedRevision: snapshot.version, source: `
+local elapsed = 0
+function OnStart()
+  script:EnableUpdate(true)
+end
+function OnUpdate(dt)
+  elapsed = elapsed + dt
+  script.object:GetChild("文本框").text = string.format("%.2f", elapsed)
+end`,
+  } })
+  const play = (action, args = {}) => call('qxqy_studio_play', { handle, action, args })
+  return { workspace, raw, call, handle, play }
+}
+
+test('MCP manual clock advances only on step, including across screenshots and pause/resume (#5)', { timeout: 15000 }, async t => {
+  const { call, handle, play } = await clockFixture(t)
+  const start = await play('start')
+  await delay(250)
+  const idle = await play('get')
+  assert.equal(idle.time, start.time, 'waiting between MCP calls must not advance Lua')
+  assert.equal(idle.frame, start.frame)
+  assert.equal(idle.clockMode, 'manual')
+  const step = await play('step', { dt: 2, inspect: true })
+  assert.equal(step.time, 2)
+  assert.equal(step.frame, 1)
+  assert.equal(step.tree[0].children.find(node => node.kind === 'textbox').text, '2.00')
+  await delay(250)
+  const image = await call('qxqy_studio_play_screenshot', { handle })
+  assert.equal(image.time, 2)
+  assert.equal(image.frame, 1)
+  assert.equal(image.clockMode, 'manual')
+  const after = await play('get', { light: true })
+  assert.equal(after.time, 2)
+  assert.equal(after.frame, 1)
+  await play('pause')
+  const pausedStep = await play('step', { dt: 0.25 })
+  assert.equal(pausedStep.time, 2.25)
+  assert.equal(pausedStep.paused, true)
+  await play('resume')
+  await delay(250)
+  assert.equal((await play('get')).time, 2.25)
+  const device = await play('device', { canvasId: 'mobile-16-9' })
+  assert.equal(device.clockMode, 'manual')
+  assert.equal(device.time, 0)
+  await delay(250)
+  assert.equal((await play('get')).time, 0)
+})
+
+async function waitForFrames(play, previous) {
+  const deadline = Date.now() + 3000
+  while (Date.now() < deadline) {
+    await delay(50)
+    const next = await play('get', { light: true })
+    if (next.frame > previous.frame) return next
+  }
+  assert.fail('realtime clock did not advance')
+}
+
+test('MCP realtime is opt-in, pauses correctly and preserves mode on device changes (#5)', { timeout: 15000 }, async t => {
+  const { raw, handle, play } = await clockFixture(t)
+  const start = await play('start', { clockMode: 'realtime' })
+  assert.equal(start.clockMode, 'realtime')
+  assert.ok((await waitForFrames(play, start)).time > start.time)
+  const paused = await play('pause')
+  await delay(250)
+  assert.equal((await play('get')).time, paused.time)
+  await play('resume')
+  assert.ok((await waitForFrames(play, paused)).time > paused.time)
+  const device = await play('device', { canvasId: 'pc-21-9' })
+  assert.equal(device.clockMode, 'realtime')
+  await waitForFrames(play, device)
+  const restarted = await play('start')
+  assert.equal(restarted.clockMode, 'manual', 'a fresh MCP start returns to its default')
+  for (const action of ['start', 'device']) {
+    const result = await raw('qxqy_studio_play', { handle, action, args: { canvasId: 'pc-16-9', clockMode: 'invalid' } })
+    assert.equal(result.isError, true)
+    assert.match(result.content[0].text, /clockMode must be/)
+  }
+  const unchanged = await play('get')
+  assert.equal(unchanged.clockMode, 'manual')
+  assert.equal(unchanged.time, restarted.time, 'invalid options must not replace the running worker')
+})
+
+test('MCP stop/load/start uses updated inline and file-backed scripts (#5.3)', { timeout: 15000 }, async t => {
+  const { workspace, call, handle, play } = await clockFixture(t)
+  await call('qxqy_project_save', { handle, path: 'reload.save.json' })
+  const path = join(workspace, 'reload.save.json')
+  const archive = JSON.parse(readFileSync(path, 'utf8'))
+  for (const sourceKind of ['inline', 'file']) {
+    for (const version of [1, 2]) {
+      const marker = `${sourceKind}-v${version}`
+      const source = `function OnStart() print("${marker}") end`
+      archive.assets.scripts[0].source = sourceKind === 'inline' ? source : ''
+      writeFileSync(join(workspace, 'clock.lua'), sourceKind === 'inline' ? 'error("inline source must win")' : source)
+      writeFileSync(path, JSON.stringify(archive))
+      await play('stop')
+      await call('qxqy_studio_load', { handle, path: 'reload.save.json' })
+      const started = await play('start')
+      assert.equal(started.mountError, null)
+      assert.deepEqual(started.logs.map(row => row.text), [marker])
+    }
   }
 })

@@ -68,6 +68,8 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 以后发布时，先为发生变更的包更新 `package.json` 版本并提交推送，再在该提交创建并推送一个新 tag，例如 `npm-2026-09-24-1`。只改代码而不增加对应包的版本号会触发“同版本不同内容”保护，不会覆盖 npm 上已发布的内容；未变化的包会跳过。工作流成功后，在 npmjs.com 的 **Staged Packages** 页面逐个检查并点击 **Approve**，通过 2FA 后版本才会公开；也可以使用 `npm stage list <包名>` 查找 stage ID，再运行 `npm stage approve <stage-id>`。审批后到 npm registry 可查询可能有几分钟延迟。
 
+仅发布 MCP 时使用 `npm-mcp-<日期>-<序号>` tag，例如 `npm-mcp-2026-10-07-1`。仍执行完整构建/验收，最后以 `--product=mcp` 只校验和暂存 MCP tarball，不检查或发布 Web/DSH 的同版本产物。本地预检可运行 `node scripts/publish-npm.mjs --check --product=mcp`；普通 `npm-<日期>-<序号>` tag 仍按三包流程执行。Git tag 触发 npm 流程，不会自动创建 GitHub Release。
+
 ## 验收入口与证据范围
 
 日常回归执行 `pnpm test`；分发改动另执行 `pnpm pack:release`、`pnpm test:packages`；Git 源码安装入口、根 `prepare` 或 DSH exports 改动另执行 `pnpm test:git-install`。测试使用仓库内合成数据，不依赖父级知识库或游戏工程。
