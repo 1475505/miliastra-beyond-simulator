@@ -61,7 +61,7 @@ try {
   const report = await response.json()
   assert.equal(response.status, 200, JSON.stringify(report))
   assert.equal(report.ok, true, JSON.stringify(report))
-  console.log(`PASS Harness ${harness.version}: CLI tarball admission, full Web boot, preset/Skill discovery, real tool calls, attachments and HTTP play`)
+  console.log(`PASS Harness ${harness.version}: CLI tarball admission, full Web boot, preset/Skill discovery, real tool calls, attachments, HTTP play and plugin restart lifecycle`)
 } catch (error) {
   // Do not print the launch URL's temporary authentication token.
   if (output) console.error(output.replace(/token=[^\s]+/g, 'token=<redacted>'))

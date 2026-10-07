@@ -8,7 +8,15 @@ import * as plugin from 'dsh-plugin-beyond-simulator'
 export async function smokeDshTools(workspace) {
   const ctx = new Context()
   ctx.provide('systemPrompt', { tools() {} })
-  ctx.provide('webServer', { register() {} })
+  const routes = new Map()
+  ctx.provide('webServer', {
+    register(route) {
+      const key = `${route.kind} ${route.path}`
+      if (routes.has(key)) throw new Error(`duplicate route: ${key}`)
+      routes.set(key, route)
+      return () => { routes.delete(key) }
+    },
+  })
   ctx.provide('attachments', {
     async saveImage({ data, mediaType, name }) {
       assert.equal(data.subarray(1, 4).toString(), 'PNG')
@@ -52,8 +60,16 @@ export async function smokeDshTools(workspace) {
     })
     assert.equal(stale.isError, true)
     assert.match(JSON.stringify(stale), /revision conflict/)
+    for (let cycle = 0; cycle < 2; cycle++) {
+      await owner.restart()
+      assert.equal(routes.size, 5)
+      assert.equal(tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 7)
+      assert.equal((await call('qxqy_studio_get')).value.save.name, '未命名存档')
+    }
   } finally {
     await owner.dispose()
   }
-  console.log('PASS installed DSH tool pipeline: registration, session isolation, JSON args, revisions, Worker and image content')
+  assert.equal(routes.size, 0)
+  assert.equal(tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 0)
+  console.log('PASS installed DSH tool pipeline: registration, session isolation, JSON args, revisions, Worker, image content and restart cleanup')
 }

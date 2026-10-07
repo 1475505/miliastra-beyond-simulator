@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot'
+import * as simulator from 'dsh-plugin-beyond-simulator'
 
 export const inject = ['webServer', 'tools', 'agentPresets', 'skills', 'sessions']
 export function apply(ctx, config) {
@@ -54,6 +55,27 @@ export function apply(ctx, config) {
       })).json()
       assert.equal(snapshot.ok, true)
       assert.equal(snapshot.value.workspace.path, config.workspace)
+      const runtime = ctx.registry.get(simulator)
+      assert.ok(runtime, 'The installed simulator must be loaded by Harness')
+      const owners = [...runtime.fibers]
+      assert.equal(owners.length, 1, 'Lifecycle regression uses exactly one plugin instance')
+      for (let cycle = 0; cycle < 2; cycle++) {
+        // A live Worker and all routes must be disposed before this activation
+        // is replaced. Previously the very first restart hit duplicate prefix.
+        await call('qxqy_studio_play', { action: 'start' })
+        await owners[0].restart()
+        assert.equal(ctx.tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 7)
+        const beforeRestartEdit = (await call('qxqy_studio_get')).value
+        await call('qxqy_studio_patch', { op: { op: 'renameSave', name: `restart-${cycle}`, expectedRevision: beforeRestartEdit.version } })
+        const reloaded = await (await fetch(`${url}/qxqy-simulator/api/get`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId }), signal: AbortSignal.timeout(5_000),
+        })).json()
+        assert.equal(reloaded.ok, true, JSON.stringify(reloaded))
+        assert.equal(reloaded.value.save.name, `restart-${cycle}`, 'HTTP and tools must share the new registry')
+        for (const path of ['/qxqy-simulator/play', '/qxqy-simulator/play-renderer.js']) {
+          assert.equal((await fetch(url + path, { signal: AbortSignal.timeout(5_000) })).status, 200, path)
+        }
+      }
       response.end(JSON.stringify({ ok: true }))
     } catch (error) {
       response.statusCode = 500

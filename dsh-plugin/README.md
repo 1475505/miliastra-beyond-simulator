@@ -12,7 +12,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.10.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.11.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -52,6 +52,20 @@ Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxq
 ## Desktop 内嵌试玩（2.0.8）
 
 DSH Desktop 0.2 拒绝页面创建子窗口，旧版插件因此误报“浏览器阻止了试玩标签页”。2.0.8 在新窗口不可用时，保存成功后用全屏 iframe 加载同一试玩页，无需修改浏览器弹窗权限。点击“返回编辑”“关闭试玩”或按 Escape 会等待停止成功后关闭；停止失败时可重试。编辑器保持原页面、草稿、选择和滚动状态。技术说明与浏览器/Electron 验证边界见 [共用编辑器](../editor-ui/README.md#试玩窗口与内嵌兜底)。
+
+## 路由重复注册（2.0.11）
+
+**现象：** 主组件报 `webserver: duplicate prefix route "/qxqy-simulator/api"`，Skill 与两种预设组件仍运行。用户反馈 2.0.8 / 2.0.10 在单份安装、完整退出重装、原版 bundle patch 下仍出现；原始完整日志待补（`evidence_source=provided_unverified`，运行端 `unknown`，`device_status=not_required`）。
+
+**已复现的缺陷：** Harness [`WebServer.register()`](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/host/webserver/src/index.ts) 返回普通注销函数，不会自动把路由绑定到调用组件的生命周期。旧插件丢弃返回值；同一组件重启或 `tools` 依赖重载后，工具已清理而 HTTP 路由仍保留，下一次 `apply()` 在第一条 API 路由上失败。只需一个插件实例即可复现，故这条报错本身不能证明 patch 插入了两次；用户环境中触发再激活的具体事件仍未知。
+
+**修复：** 所有五条 HTTP 路由统一使用 `ctx.effect(() => ctx.webServer.register(route))` 接管注销，包括 API、试玩页、渲染脚本、图片与音频。注册中途抛错时回滚本次已注册的路由；会话清理提前登记并等待 Worker 退出。已卸载的 Registry 拒绝仍在等请求体或工作区查询的旧请求。真实的同时挂载冲突仍报错，不吞异常、不覆盖其他组件的路由，也不让新工具连着旧 HTTP Registry。
+
+**获取修复：** 修复版本为 2.0.11，更新内容与安装方式见 [版本公告](CHANGELOG.md#2011--2026-10-07)。npm 暂存流程需维护者审核后才公开，可先安装 Release 附带的 `dsh-plugin-beyond-simulator-2.0.11.tgz`。替换旧代码后完整退出并重启一次，以清掉旧进程中未托管的路由。保留原版 `qxqy-simulator` insert；注释它会移除主组件，继续重装旧包也不会补上清理逻辑。
+
+**回归入口与边界：** `test/lifecycle.test.mjs` 覆盖单组件反复重启、依赖重载、部分失败回滚、Worker 退出等待和卸载后的迟到请求，并通过 HTTP/工具双向修改验证共用当前 Registry。`scripts/smoke-dsh-tools.mjs` 在旧/新 Cordis 与工具运行时矩阵检查安装包重启和卸载；`scripts/smoke-harness-probe.mjs` 在完整 Harness 0.2.0-rc.2 宿主对唯一实例执行带活跃 Worker 的重启。修复前分别复现重复路由、残留路由和 Worker 未等待。
+
+2026-10-07 在 Windows x64 / Node.js 22.23.2 / pnpm 10.15.0 完成：冻结锁文件安装；`pnpm test`（309 通过、7 项条件测试跳过、0 失败，其中插件 35 项全通过）；`pnpm pack:release`；`pnpm test:packages`（dsh-tools 0.1.0-rc.6 + Cordis 4.0.1、dsh-tools 0.2.0-rc.2 + Cordis 4.0.4）；`pnpm test:harness`（真实 Harness 0.2.0-rc.2，唯一实例两轮带 Worker 重启，HTTP/工具状态一致）。以上为本地直接观察：`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。反馈者 Desktop 的原始再激活触发链与修复包回验仍未覆盖。
 
 ## Harness 0.2 兼容性
 

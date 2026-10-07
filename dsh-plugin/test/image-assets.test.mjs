@@ -33,8 +33,8 @@ test('DSH registered asset route and headless screenshot reuse the same cache', 
     })
   }
   const routes = [], tools = []
-  let dispose
-  apply({ tools: { register(tool) { tools.push(tool) } }, webServer: { register(route) { routes.push(route) } }, effect(factory) { dispose = factory() } })
+  const disposers = []
+  apply({ tools: { register(tool) { tools.push(tool) } }, webServer: { register(route) { routes.push(route) } }, effect(factory) { disposers.push(factory()) } })
   const server = createServer((request, response) => {
     const path = new URL(request.url, 'http://localhost').pathname
     const route = routes.find(row => row.kind === 'exact' ? path === row.path : path === row.path || path.startsWith(row.path + '/'))
@@ -43,7 +43,8 @@ test('DSH registered asset route and headless screenshot reuse the same cache', 
   })
   const controller = new SimulatorController()
   t.after(async () => {
-    await controller.dispose(); dispose?.()
+    await controller.dispose()
+    await Promise.all(disposers.map(dispose => dispose?.()))
     await new Promise(resolve => server.close(resolve))
     Object.assign(store, original)
     Object.assign(audioStore, originalAudio)

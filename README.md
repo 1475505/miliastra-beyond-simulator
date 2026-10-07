@@ -97,7 +97,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.10.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.0.11.tgz
 
 dsh --profile web --dump-config
 dsh web

@@ -68,7 +68,15 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 以后发布时，先为发生变更的包更新 `package.json` 版本并提交推送，再在该提交创建并推送一个新 tag，例如 `npm-2026-09-24-1`。只改代码而不增加对应包的版本号会触发“同版本不同内容”保护，不会覆盖 npm 上已发布的内容；未变化的包会跳过。工作流成功后，在 npmjs.com 的 **Staged Packages** 页面逐个检查并点击 **Approve**，通过 2FA 后版本才会公开；也可以使用 `npm stage list <包名>` 查找 stage ID，再运行 `npm stage approve <stage-id>`。审批后到 npm registry 可查询可能有几分钟延迟。
 
-仅发布 MCP 时使用 `npm-mcp-<日期>-<序号>` tag，例如 `npm-mcp-2026-10-07-1`。仍执行完整构建/验收，最后以 `--product=mcp` 只校验和暂存 MCP tarball，不检查或发布 Web/DSH 的同版本产物。本地预检可运行 `node scripts/publish-npm.mjs --check --product=mcp`；普通 `npm-<日期>-<序号>` tag 仍按三包流程执行。Git tag 触发 npm 流程，不会自动创建 GitHub Release。
+按产品发布时使用以下 tag；仍执行完整构建/验收，最后仅校验和暂存所选产品的 tarball，不检查或发布其他产品的同版本产物：
+
+| 发布范围 | Tag 示例 | 本地预检 |
+|---|---|---|
+| 仅 DSH 插件 | `npm-dsh-2026-10-07-1` | `node scripts/publish-npm.mjs --check --product=dsh-plugin` |
+| 仅 MCP | `npm-mcp-2026-10-07-1` | `node scripts/publish-npm.mjs --check --product=mcp` |
+| 三包 | `npm-2026-10-07-1` | `node scripts/publish-npm.mjs --check` |
+
+Git tag 触发 npm 流程，不会自动创建 GitHub Release。版本公告单独创建 Release，并仅附加本次发布产品的安装包。
 
 ## 验收入口与证据范围
 

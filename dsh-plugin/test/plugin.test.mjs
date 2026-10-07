@@ -325,15 +325,16 @@ test('controller renders editor screenshots from boxes without the simulator tab
   }
 })
 
-test('plugin registers screenshot capture, API and standalone Pixi play routes, and cleanup effect', () => {
+test('plugin registers screenshot capture, API and standalone Pixi play routes, and cleanup effects', t => {
   const tools = []
   const routes = []
   const effects = []
   const ctx = {
     tools: { register(tool) { tools.push(tool) } },
     webServer: { register(route) { routes.push(route) } },
-    effect(factory) { effects.push(factory) },
+    effect(factory) { effects.push(factory()) },
   }
+  t.after(() => Promise.all(effects.map(dispose => dispose?.())))
   apply(ctx)
   assert.deepEqual(tools.map((tool) => tool.name), [
     'qxqy_script_sync',
@@ -400,7 +401,7 @@ test('plugin registers screenshot capture, API and standalone Pixi play routes, 
   })
   assert.match(rendererHeaders['content-type'], /text\/javascript/)
   assert.match(rendererBody, /WebGL/)
-  assert.equal(effects.length, 1)
+  assert.equal(effects.length, 6)
 })
 
 test('client bundle loads through Harness ModuleLoader and exposes the slot plugin', () => {
@@ -442,12 +443,13 @@ test('lookupSessionWorkspace prefers the live session then persistence inspect',
   assert.equal(await lookupSessionWorkspace('s1', {}), '')
 })
 
-test('editor HTTP get binds the live session cwd instead of the host startup directory', async () => {
+test('editor HTTP get binds the live session cwd instead of the host startup directory', async t => {
   const routes = []
+  const effects = []
   const ctx = {
     tools: { register() {} },
     webServer: { register(route) { routes.push(route) } },
-    effect() {},
+    effect(factory) { effects.push(factory()) },
     get(name) {
       if (name === 'sessions') {
         return { get: () => ({ header: { cwd: testWorkspace } }) }
@@ -455,6 +457,7 @@ test('editor HTTP get binds the live session cwd instead of the host startup dir
       return undefined
     },
   }
+  t.after(() => Promise.all(effects.map(dispose => dispose?.())))
   apply(ctx)
   const api = routes.find((route) => route.path === '/qxqy-simulator/api')
   const chunks = [Buffer.from(JSON.stringify({ sessionId: 'sess-http' }))]

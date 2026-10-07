@@ -144,6 +144,7 @@ export async function lookupSessionWorkspace(sessionId, services = {}) {
 
 function createRegistry() {
   const sessions = new Map()
+  let disposed = false
   function prune() {
     if (sessions.size < MAX_SESSIONS) return
     const oldest = [...sessions.entries()].sort((a, b) => a[1].touchedAt - b[1].touchedAt)[0]
@@ -154,6 +155,7 @@ function createRegistry() {
   }
   return {
     get(sessionId, workspacePath = '') {
+      if (disposed) throw new Error('simulator plugin has been disposed')
       const id = sessionIdOf(sessionId)
       let controller = sessions.get(id)
       if (!controller) {
@@ -169,8 +171,10 @@ function createRegistry() {
       return controller
     },
     async dispose() {
-      await Promise.all([...sessions.values()].map((controller) => controller.dispose()))
+      disposed = true
+      const controllers = [...sessions.values()]
       sessions.clear()
+      await Promise.all(controllers.map((controller) => controller.dispose()))
     },
   }
 }
@@ -215,8 +219,15 @@ function loadPlayRenderer() {
 
 let playRendererCache = null
 
+function registerRoute(ctx, route) {
+  // Unlike tools.register(), webServer.register() returns a plain disposer.
+  // Own it in this activation so restart, dependency reload and failed startup
+  // all remove the old handler before registering a new session registry.
+  return ctx.effect(() => ctx.webServer.register(route), `qxqy-simulator: ${route.kind} ${route.path}`)
+}
+
 function registerPlayPage(ctx) {
-  ctx.webServer.register({
+  registerRoute(ctx, {
     kind: 'prefix',
     path: PLAY_PATH,
     handler(request, response) {
@@ -237,7 +248,7 @@ function registerPlayPage(ctx) {
 }
 
 function registerPlayRenderer(ctx) {
-  ctx.webServer.register({
+  registerRoute(ctx, {
     kind: 'exact',
     path: PLAY_RENDERER_PATH,
     handler(request, response) {
@@ -461,7 +472,7 @@ function registerTools(ctx, registry) {
 }
 
 function registerApi(ctx, registry) {
-  ctx.webServer.register({
+  registerRoute(ctx, {
     kind: 'prefix',
     path: API_PREFIX,
     async handler(request, response) {
@@ -507,13 +518,12 @@ function registerApi(ctx, registry) {
 
 export function apply(ctx) {
   const registry = createRegistry()
+  // Install cleanup before registration can throw, and let Cordis await workers.
+  ctx.effect(() => () => registry.dispose(), 'qxqy-simulator: dispose sessions')
   registerTools(ctx, registry)
   registerApi(ctx, registry)
   registerPlayPage(ctx)
   registerPlayRenderer(ctx)
-  ctx.webServer.register({ kind: 'prefix', path: '/qxqy-assets', handler: (request, response) => serveImageAsset(request, response) })
-  ctx.webServer.register({ kind: 'prefix', path: '/qxqy-audio', handler: (request, response) => serveAudioAsset(request, response) })
-  ctx.effect(() => () => {
-    void registry.dispose()
-  }, 'qxqy-simulator: dispose sessions')
+  registerRoute(ctx, { kind: 'prefix', path: '/qxqy-assets', handler: (request, response) => serveImageAsset(request, response) })
+  registerRoute(ctx, { kind: 'prefix', path: '/qxqy-audio', handler: (request, response) => serveAudioAsset(request, response) })
 }
