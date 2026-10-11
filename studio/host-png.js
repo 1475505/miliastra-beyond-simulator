@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module'
 import { imageFillRect } from './play/image-fill.js'
 import { tintedImage } from './assets/raster.js'
+import { imageAssetKey } from './assets/catalog.js'
 import { scrollBarGeometry } from './play/scroll-geometry.js'
 
 const require = createRequire(import.meta.url)
@@ -187,9 +188,10 @@ function drawButtonItem(ctx, item, width, height) {
 
 function drawPrimitive(ctx, item, width, height, assets) {
   const color = argb(item.imageColor, 0xffffffff)
-  const image = assets?.images?.get(item.imageId)
+  const assetKey = imageAssetKey(item.imageId, item.imageSource)
+  const image = assets?.images?.get(assetKey)
   if (item.primitive === 'sprite' && image) {
-    const key = `${item.imageId}:${Number(item.imageColor ?? 0xffffffff) & 0xffffff}`
+    const key = `${assetKey}:${Number(item.imageColor ?? 0xffffffff) & 0xffffff}`
     let tinted = assets.tints.get(key)
     if (!tinted) {
       tinted = tintedImage(image, item.imageColor, loadCanvas().createCanvas)

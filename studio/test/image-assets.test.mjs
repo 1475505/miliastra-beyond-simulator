@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { ImageAssetStore } from '../host/image-assets.js'
-import { isRemoteImage } from '../assets/catalog.js'
+import { isRemoteImage, imageAssetKey } from '../assets/catalog.js'
 import { restoreSprite } from '../assets/raster.js'
 import { imagePrimitive } from '../constants.js'
 import { renderEditorPng, renderPaintPng } from '../host-png.js'
@@ -95,7 +95,7 @@ test('failure cooldown, invalid PNG and unsupported packing fail visibly without
 
 test('Host paint/editor PNG preserve trim, multiply RGB/alpha and clip fill', async t => {
   const { store } = await setup(t)
-  const images = new Map([[101001, (await store.get(101001)).image]])
+  const images = new Map([[imageAssetKey(101001), (await store.get(101001)).image]])
   const base = { id: 1, kind: 'image', primitive: 'sprite', imageId: 101001, imageColor: 0xffff80ff,
     left: 10, bottom: 10, width: 100, height: 80, sourceWidth: 100, sourceHeight: 80 }
   const a = await decoded(renderPaintPng([base], 120, 100, { images }).data)
@@ -116,7 +116,7 @@ test('Host paint/editor PNG preserve trim, multiply RGB/alpha and clip fill', as
 test('Pixi sprite uses shared texture, tint, fill and parent transform without destroying shared source', t => {
   const renderer = Object.create(PixiPlayRenderer.prototype)
   const texture = new Texture({ source: new CanvasSource({ resource: createCanvas(10, 8) }) })
-  renderer.imageTextures = new Map([[101001, { texture }]])
+  renderer.imageTextures = new Map([[imageAssetKey(101001), { texture }]])
   renderer.scratch = new Matrix()
   renderer.canvasHeight = 100
   const root = new Container(), second = new Container()

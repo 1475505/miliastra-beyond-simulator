@@ -48,8 +48,8 @@ export class EditorSessions {
     return controller.exclusive(async () => {
       if (action === 'get') return this.snapshot(row)
       if (action === 'image-refresh') {
-        await controller.imageAssets.refresh(body.imageId)
-        return { imageId: body.imageId, refreshed: true }
+        await controller.imageAssets.refresh(body.imageId, { imageSource: body.imageSource })
+        return { imageId: body.imageId, imageSource: body.imageSource || 'StaticReference', refreshed: true }
       }
       if (action === 'script-sync') return controller.scriptSyncAction(body.action, body.args || {})
       if (action === 'script-sync-apply') return controller.scriptSync.apply(body)

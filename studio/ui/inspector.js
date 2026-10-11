@@ -53,7 +53,7 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       renderHeight: render.height,
       renderRotationZ: render.rotationZ,
       renderMatrix: matrix,
-      primitive: node.kind === 'image' ? imagePrimitive(node.imageId) : null,
+      primitive: node.kind === 'image' ? imagePrimitive(node.imageId, node.imageSource) : null,
       ...((node.kind === 'textbox' || node.kind === 'textwindow') ? {
         text: node.text ?? '',
         fontSize: node.fontSize,
@@ -216,8 +216,9 @@ export function inspectorDto(node, canvasId, box, guidById) {
       ? node.fillType
       : `__unrecognized:${rawFillType}`
     fields.push(
-      field('imageSource', '图片源', 'enum', node.imageSource, { readonly: true, evidence: 'W', options: [
+      field('imageSource', '图片源', 'enum', node.imageSource, { options: [
         { value: 'StaticReference', label: '静态引用' },
+        { value: 'Prefab', label: '元件' },
       ] }),
       field('imageId', 'imageId', 'number', node.imageId ?? 0),
       field('imageColor', '填充色', 'color', node.imageColor),

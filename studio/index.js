@@ -349,6 +349,7 @@ export function createStudio(seed, options = {}) {
         name: node.name,
         text: node.text ?? null,
         imageId: node.imageId ?? null,
+        imageSource: node.imageSource ?? null,
         fontSize: node.fontSize ?? null,
         fontColor: node.fontColor ?? null,
         bgColor: node.bgColor ?? null,

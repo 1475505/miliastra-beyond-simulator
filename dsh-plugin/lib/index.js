@@ -505,7 +505,10 @@ function registerApi(ctx, registry) {
         else if (action === 'save') value = controller.saveForScriptSync(body.path, body.expectedRevision)
         else if (action === 'script-sync') value = controller.scriptSyncAction(body.action, body.args || {})
         else if (action === 'script-sync-apply') value = controller.scriptSync.apply(body)
-        else if (action === 'image-refresh') { await controller.imageAssets.refresh(body.imageId); value = { imageId: body.imageId, refreshed: true } }
+        else if (action === 'image-refresh') {
+          await controller.imageAssets.refresh(body.imageId, { imageSource: body.imageSource })
+          value = { imageId: body.imageId, imageSource: body.imageSource || 'StaticReference', refreshed: true }
+        }
         else if (action === 'play') value = await controller.play(body.action, body.args || {}, abort.signal)
         else throw new Error('unknown API action')
         sendJson(response, 200, { ok: true, value, error: null })

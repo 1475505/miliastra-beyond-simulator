@@ -90,7 +90,7 @@ test('real browser: DOM tint, HTTP cache, Pixi static completion, stale-ID races
     window.item={id:1,parent:null,z:0,kind:'image',primitive:'sprite',imageId:101001,imageColor:0x80ff80ff,sourceWidth:100,sourceHeight:80,matrix:{a:1,b:0,c:0,d:1,tx:60,ty:50}};
     await r.applyScene({format:'tree-v1',reset:true,nodes:[item]},120,100);
   })()`)
-  await wait(`!!r.imageTextures.get(101001)?.texture`)
+  await wait(`!!r.imageTextures.get('StaticReference:101001')?.texture`)
   // Extract over opaque black: Pixi 8's raw transparent readback is
   // premultiplied, whereas Canvas2D getImageData returns straight RGBA.
   const colors = await evaluate(`(()=>{const cv=r.app.renderer.extract.canvas({target:r.nodes.get(1).__visual,resolution:1,clearColor:'#000000'});return Array.from(cv.getContext('2d').getImageData(25,55,1,1).data)})()`)
@@ -101,12 +101,12 @@ test('real browser: DOM tint, HTTP cache, Pixi static completion, stale-ID races
   // A slow old ID cannot resurrect a removed node or replace its newer ID.
   await evaluate(`(async()=>{await r.applyScene({format:'tree-v1',changed:[{...item,imageId:101002}]},120,100);await r.applyScene({format:'tree-v1',changed:[item],removed:[2]},120,100)})()`)
   await evaluate(`new Promise(resolve=>setTimeout(resolve,500))`)
-  assert.equal(await evaluate(`r.nodes.size===1 && r.nodes.get(1).__sceneItem.imageId===101001 && !r.imageTextures.has(101002)`), true)
+  assert.equal(await evaluate(`r.nodes.size===1 && r.nodes.get(1).__sceneItem.imageId===101001 && !r.imageTextures.has('StaticReference:101002')`), true)
   // Load completion doesn't need another scene delta; removal frees GPU source.
   await evaluate(`r.applyScene({format:'tree-v1',reset:true,nodes:[{...item,imageId:101002}]},120,100)`)
-  await wait(`!!r.imageTextures.get(101002)?.texture`)
-  assert.equal(await evaluate(`r.nodes.get(1).__visual.children[0].texture === r.imageTextures.get(101002).texture`), true)
-  await evaluate(`window.oldTexture=r.imageTextures.get(101002).texture;r.destroy()`)
+  await wait(`!!r.imageTextures.get('StaticReference:101002')?.texture`)
+  assert.equal(await evaluate(`r.nodes.get(1).__visual.children[0].texture === r.imageTextures.get('StaticReference:101002').texture`), true)
+  await evaluate(`window.oldTexture=r.imageTextures.get('StaticReference:101002').texture;r.destroy()`)
   assert.equal(await evaluate('oldTexture.destroyed'), true)
 
   // Refresh notifications cross documents (the real editor/play relationship),
@@ -114,15 +114,15 @@ test('real browser: DOM tint, HTTP cache, Pixi static completion, stale-ID races
   await evaluate(`(()=>{const frame=document.createElement('iframe');frame.id='asset-frame';frame.src='/asset-frame';document.body.append(frame)})()`)
   await wait(`document.querySelector('#asset-frame')?.contentDocument?.URL.endsWith('/asset-frame') && document.querySelector('#asset-frame').contentDocument.readyState === 'complete'`)
   await evaluate(`(async()=>{const w=document.querySelector('#asset-frame').contentWindow;const m=await w.eval("import('/play-renderer.js')");const cv=w.document.createElement('canvas');w.document.body.append(cv);w.r=new m.PixiPlayRenderer(cv);await w.r.applyScene({format:'tree-v1',reset:true,nodes:[item]},120,100)})()`)
-  await wait(`!!document.querySelector('#asset-frame').contentWindow.r.imageTextures.get(101001)?.texture`)
-  await evaluate(`(()=>{const w=document.querySelector('#asset-frame').contentWindow;w.old=w.r.imageTextures.get(101001).texture})()`)
+  await wait(`!!document.querySelector('#asset-frame').contentWindow.r.imageTextures.get('StaticReference:101001')?.texture`)
+  await evaluate(`(()=>{const w=document.querySelector('#asset-frame').contentWindow;w.old=w.r.imageTextures.get('StaticReference:101001').texture})()`)
   env.recolor()
   const before = requests.length
   await evaluate(`document.querySelectorAll('button').forEach(b=>{if(b.textContent==='↻ 重新下载此素材')b.click()})`)
   await wait(`document.body.textContent.includes('图片 101001 已重新下载')`)
   assert.equal(requests.length, before + 2)
   await wait(`document.querySelector('canvas[data-image-id="101001"]')?.width === 10`)
-  await wait(`(()=>{const w=document.querySelector('#asset-frame').contentWindow;return w.old.destroyed && !!w.r.imageTextures.get(101001)?.texture})()`)
+  await wait(`(()=>{const w=document.querySelector('#asset-frame').contentWindow;return w.old.destroyed && !!w.r.imageTextures.get('StaticReference:101001')?.texture})()`)
   assert.deepEqual(await evaluate(`Array.from(document.querySelector('canvas[data-image-id="101001"]').getContext('2d').getImageData(2,5,1,1).data)`), [64, 64, 192, 255])
   const refreshed = await evaluate(`(()=>{const w=document.querySelector('#asset-frame').contentWindow;const cv=w.r.app.renderer.extract.canvas({target:w.r.nodes.get(1).__visual,resolution:1,clearColor:'#000000'});return Array.from(cv.getContext('2d').getImageData(25,55,1,1).data)})()`)
   refreshed.forEach((v, i) => assert.ok(Math.abs(v - [32, 32, 96, 255][i]) <= 2, JSON.stringify(refreshed)))

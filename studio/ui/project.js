@@ -191,7 +191,7 @@ const DIRECT_FIELDS = new Set([
   'isolateNavigation', 'disableKeyEventPassthrough', 'disableCursorEventPassthrough', 'showCursor',
   'fontSize', 'adaptiveFontSize', 'minimumFontSize', 'fontColor', 'bgColor',
   'enableOutline', 'outlineColor', 'horizontalAlignment', 'verticalAlignment', 'text',
-  'imageId', 'imageColor', 'enableMask', 'enableSoftEdge', 'softEdgeMode',
+  'imageSource', 'imageId', 'imageColor', 'enableMask', 'enableSoftEdge', 'softEdgeMode',
   'softEdgeWidthX', 'softEdgeWidthY', 'horizontalSoftRange', 'verticalSoftRange',
   'enableFill', 'fillType', 'fillHorizontalType', 'fillVerticalType',
   'fillRadial90Type', 'fillRadialType', 'fillAmount', 'reverseMaskArea',
@@ -248,7 +248,7 @@ const BOOLEAN_FIELDS = new Set([
   'enableFill', 'reverseMaskArea', 'raycastTarget', 'interactable', 'showScrollBar',
 ])
 const STRING_FIELDS = new Set([
-  'name', 'horizontalAlignment', 'verticalAlignment', 'text', 'softEdgeMode',
+  'name', 'imageSource', 'horizontalAlignment', 'verticalAlignment', 'text', 'softEdgeMode',
   'fillType', 'fillHorizontalType', 'fillVerticalType', 'fillRadial90Type', 'fillRadialType',
   'scrollDirection', 'layoutConstraint', 'referencedPrefabId', 'animationId',
 ])
@@ -256,6 +256,7 @@ const STATE_NODE_FIELDS = new Set([
   'unavailableChildId', 'hoverChildId', 'pressedChildId', 'selectedChildId',
 ])
 const ENUM_VALUES = {
+  imageSource: ['StaticReference', 'Prefab'],
   scrollDirection: ['Horizontal', 'Vertical'],
   layoutConstraint: ['AutoWrap', 'Fixed'],
   softEdgeMode: ['Percentage', 'Pixel'],

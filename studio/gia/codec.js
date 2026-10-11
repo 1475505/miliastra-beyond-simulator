@@ -340,6 +340,9 @@ function typeData(node, guid, guidById, warnings) {
     return [generic, ref(64, 84, 'empty74', 'textConfig', textConfig), footer]
   }
   if (node.kind === 'image') {
+    if (node.imageSource && node.imageSource !== 'StaticReference') {
+      warnings.push(`${node.name}: 图片来源 ${node.imageSource} 仅保存在 JSON，尚未映射到 GIA；请在 Lua 中用 SetImage(Enum.ImageSource.${node.imageSource}, ${node.imageId}) 设置。`)
+    }
     const semanticFillType = { Horizontal: 1, Vertical: 2, Radial90: 3, Radial180: 4, Radial360: 5 }[node.fillType]
     const fillType = Number.isFinite(raw.imageFillType) ? Math.trunc(raw.imageFillType) : (semanticFillType || 1)
     if (node.enableFill && !fillType) warnings.push(`${node.name}: 填充形状原始枚举为 0，已关闭导出文件中的进度填充。`)

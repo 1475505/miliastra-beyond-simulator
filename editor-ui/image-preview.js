@@ -1,6 +1,7 @@
 import { loadBrowserImage, subscribeImageRefresh } from '../studio/assets/browser.js'
 import { tintedImage } from '../studio/assets/raster.js'
 import { imageFillRect } from '../studio/play/image-fill.js'
+import { imageAssetKey, imageSourceName } from '../studio/assets/catalog.js'
 
 function canvas(width, height) {
   const node = document.createElement('canvas')
@@ -11,18 +12,19 @@ function canvas(width, height) {
 export function createImagePreview(React) {
   const e = React.createElement
   return function ImagePreview({ item }) {
+    const key = imageAssetKey(item.imageId, item.imageSource)
     const ref = React.useRef(null)
     const [state, setState] = React.useState({ image: null, error: '' })
     const [revision, setRevision] = React.useState(0)
-    React.useEffect(() => subscribeImageRefresh(id => { if (id === item.imageId) setRevision(v => v + 1) }), [item.imageId])
+    React.useEffect(() => subscribeImageRefresh(changedKey => { if (changedKey === key) setRevision(v => v + 1) }), [key])
     React.useEffect(() => {
       let active = true
       setState({ image: null, error: '' })
-      loadBrowserImage(item.imageId).then(image => { if (active) setState({ image, error: '' }) }, error => {
+      loadBrowserImage(item.imageId, item.imageSource).then(image => { if (active) setState({ image, error: '' }) }, error => {
         if (active) setState({ image: null, error: error.message })
       })
       return () => { active = false }
-    }, [item.imageId, revision])
+    }, [key, revision])
     React.useEffect(() => {
       const el = ref.current
       if (!state.image || !el) return
@@ -35,6 +37,6 @@ export function createImagePreview(React) {
       ctx.drawImage(image, 0, 0)
     }, [state.image, item.imageColor, item.enableFill, item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillAmount])
     if (!state.image) return e('span', { className: 'qxsim-box-label', title: state.error, role: state.error ? 'status' : undefined }, state.error ? `图片 ${item.imageId} 加载失败` : `加载图片 ${item.imageId}…`)
-    return e('canvas', { ref, 'data-image-id': item.imageId, 'aria-label': `图片 ${item.imageId}`, style: { display: 'block', position: 'absolute', inset: 0, width: '100%', height: '100%' } })
+    return e('canvas', { ref, 'data-image-id': item.imageId, 'data-image-source': imageSourceName(item.imageSource), 'aria-label': `图片 ${item.imageId}`, style: { display: 'block', position: 'absolute', inset: 0, width: '100%', height: '100%' } })
   }
 }

@@ -1,3 +1,5 @@
+import { PREFAB_CACHE_VERSION, prefabImageSize } from './prefab-catalog.js'
+
 // Pinned from https://oss.070077.xyz/images/data.json (2026-10-02).
 // 1,522 non-empty entries; all paths verified as sprite/<id>.png and
 // border/<id>.json. Empty/missing entries are deliberately not admitted.
@@ -17,10 +19,24 @@ const RANGES = [
   [112001, 112042],
 ]
 
-export function isRemoteImage(id) {
-  return Number.isSafeInteger(id) && id > 100006 && RANGES.some(([min, max]) => id >= min && id <= max)
+export function imageSourceName(source) {
+  // Legacy/synthetic image specs omitted the source. Only that omission defaults
+  // to StaticReference; unsupported explicit sources must not borrow its IDs.
+  if (source == null || source === '') return 'StaticReference'
+  return typeof source === 'string' ? source : (typeof source.Name === 'string' ? source.Name : 'Unknown')
 }
 
-export function imageAssetUrl(id, revision = 0) {
-  return `${IMAGE_ASSET_PREFIX}${IMAGE_CACHE_VERSION}/${id}.png${revision ? `?refresh=${revision}` : ''}`
+export function imageAssetKey(id, source) { return `${imageSourceName(source)}:${id}` }
+
+export function isRemoteImage(id, source) {
+  const name = imageSourceName(source)
+  if (name === 'Prefab') return prefabImageSize(id) !== null
+  return name === 'StaticReference' && Number.isSafeInteger(id) && id > 100006 && RANGES.some(([min, max]) => id >= min && id <= max)
+}
+
+export function imageAssetUrl(id, revision = 0, source) {
+  const name = imageSourceName(source)
+  if (!['StaticReference', 'Prefab'].includes(name)) throw new Error(`Unsupported image source: ${name}`)
+  const version = name === 'Prefab' ? PREFAB_CACHE_VERSION : IMAGE_CACHE_VERSION
+  return `${IMAGE_ASSET_PREFIX}${version}/${id}.png${revision ? `?refresh=${revision}` : ''}`
 }

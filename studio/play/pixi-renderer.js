@@ -2,6 +2,7 @@ import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics
 import { imageFillRect } from './image-fill.js'
 import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './scroll-geometry.js'
 import { loadBrowserImage, subscribeImageRefresh } from '../assets/browser.js'
+import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.
 import 'pixi.js/unsafe-eval'
@@ -55,9 +56,9 @@ function pointsFor(item, width, height) {
 }
 
 function visualKeyOf(item, width, height) {
-  if (spriteCircle(item)) return [item.kind, item.primitive, item.imageId, 'sprite'].join('\t')
+  if (spriteCircle(item)) return [item.kind, item.primitive, item.imageId, imageSourceName(item.imageSource), 'sprite'].join('\t')
   return [
-    item.kind, item.primitive, width, height, item.imageColor, item.imageId,
+    item.kind, item.primitive, width, height, item.imageColor, item.imageId, imageSourceName(item.imageSource),
     item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillAmount,
     item.text, item.fontSize, item.fontColor, item.bgColor, item.enableOutline,
     item.outlineColor, item.horizontalAlignment, item.verticalAlignment, item.pressed,
@@ -93,7 +94,7 @@ export class PixiPlayRenderer {
     this.circleTextures = new Map()
     this.imageTextures = new Map()
     this.disposed = false
-    this.unsubscribeImages = subscribeImageRefresh(id => this.invalidateImage(id))
+    this.unsubscribeImages = subscribeImageRefresh(key => this.invalidateImage(key))
     this.canvasWidth = 0
     this.canvasHeight = 0
     this.scratch = new Matrix()
@@ -170,21 +171,22 @@ export class PixiPlayRenderer {
     return texture
   }
 
-  imageTexture(id) {
+  imageTexture(id, source) {
     this.imageTextures ||= new Map()
-    if (this.imageTextures.has(id)) return this.imageTextures.get(id)
+    const key = imageAssetKey(id, source)
+    if (this.imageTextures.has(key)) return this.imageTextures.get(key)
     const entry = { texture: null, error: '' }
-    this.imageTextures.set(id, entry)
+    this.imageTextures.set(key, entry)
     // Do not block scene polling or Lua time on network I/O. Completion
     // repaints even a paused/static scene, using each node's latest item.
-    entry.promise = loadBrowserImage(id).then(image => {
-      if (this.disposed || this.imageTextures.get(id) !== entry) return
+    entry.promise = loadBrowserImage(id, source).then(image => {
+      if (this.disposed || this.imageTextures.get(key) !== entry) return
       // Renderer-owned GPU source; never destroy another renderer's texture
       // through Pixi's global Texture.from(resource) cache.
       entry.texture = new Texture({ source: new ImageSource({ resource: image }) })
       for (const root of this.nodes.values()) {
         const item = root.__sceneItem
-        if (item?.kind !== 'image' || item.imageId !== id) continue
+        if (item?.kind !== 'image' || imageAssetKey(item.imageId, item.imageSource) !== key) continue
         root.__visualKey = ''
         this.updateNode(root, item, { nested: !root.__flat && item.parent != null })
       }
@@ -193,12 +195,12 @@ export class PixiPlayRenderer {
     return entry
   }
 
-  invalidateImage(id) {
-    const entry = this.imageTextures.get(id)
-    this.imageTextures.delete(id)
+  invalidateImage(key) {
+    const entry = this.imageTextures.get(key)
+    this.imageTextures.delete(key)
     for (const root of this.nodes.values()) {
       const item = root.__sceneItem
-      if (item?.kind !== 'image' || item.imageId !== id) continue
+      if (item?.kind !== 'image' || imageAssetKey(item.imageId, item.imageSource) !== key) continue
       root.__visualKey = ''
       this.updateNode(root, item, { nested: !root.__flat && item.parent != null })
     }
@@ -208,7 +210,7 @@ export class PixiPlayRenderer {
 
   pruneImageTextures() {
     if (!this.imageTextures?.size) return
-    const used = new Set([...this.nodes.values()].filter(root => root.__sceneItem?.primitive === 'sprite').map(root => root.__sceneItem.imageId))
+    const used = new Set([...this.nodes.values()].filter(root => root.__sceneItem?.primitive === 'sprite').map(root => imageAssetKey(root.__sceneItem.imageId, root.__sceneItem.imageSource)))
     for (const [id, entry] of this.imageTextures || []) {
       if (used.has(id)) continue
       this.imageTextures.delete(id)
@@ -263,8 +265,8 @@ export class PixiPlayRenderer {
       graphic.roundRect(-width / 2, -height / 2, width, height, 6).stroke({ color: 0x70a0ff, alpha: 0.8, width: 1 })
       if (item.pressed) graphic.roundRect(-width / 2, -height / 2, width, height, 6).fill({ color: 0x000000, alpha: 0.28 })
       visual.addChild(graphic)
-    } else if (item.kind === 'image' && item.primitive === 'sprite' && this.imageTexture(item.imageId).texture) {
-      const sprite = new Sprite({ texture: this.imageTextures.get(item.imageId).texture, anchor: 0.5 })
+    } else if (item.kind === 'image' && item.primitive === 'sprite' && this.imageTexture(item.imageId, item.imageSource).texture) {
+      const sprite = new Sprite({ texture: this.imageTextures.get(imageAssetKey(item.imageId, item.imageSource)).texture, anchor: 0.5 })
       const color = argb(item.imageColor, 0xffffffff)
       sprite.width = width
       sprite.height = height

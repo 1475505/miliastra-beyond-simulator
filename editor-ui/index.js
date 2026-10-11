@@ -2,7 +2,7 @@ import { createScriptSyncPanel } from './script-sync.js'
 import { createPlayLauncher } from './play-launcher.js'
 import { createImagePreview } from './image-preview.js'
 import { createColorField } from './color-field.js'
-import { isRemoteImage } from '../studio/assets/catalog.js'
+import { isRemoteImage, imageAssetKey } from '../studio/assets/catalog.js'
 import { refreshBrowserImage } from '../studio/assets/browser.js'
 
 export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
@@ -496,7 +496,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       else if (textKind) { style.background = argb(item.bgColor, 0x00ffffff); style.justifyContent = item.horizontalAlignment === 'Right' ? 'flex-end' : item.horizontalAlignment === 'Middle' ? 'center' : 'flex-start'; style.alignItems = item.verticalAlignment === 'Bottom' ? 'flex-end' : item.verticalAlignment === 'Middle' ? 'center' : 'flex-start'; style.textShadow = item.enableOutline === false ? 'none' : `0 0 2px ${argb(item.outlineColor, 0xff000000)}` }
       else if (kind === 'container') style.background = 'transparent'
       const selected = item.id === snap.selectedId
-      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: item.imageId, item }) : textKind ? (item.text || '') : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, `缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || KIND_META[kind]?.[1] || kind) : null
+      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: imageAssetKey(item.imageId, item.imageSource), item }) : textKind ? (item.text || '') : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, `缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || KIND_META[kind]?.[1] || kind) : null
       return e('div', { key: item.id, className: `qxsim-box ${kind}${selected ? ' selected' : ''}${item.instantiated ? ' dynamic' : ''}${item.pressed ? ' pressed' : ''}`, style }, content, selected && kind !== 'container' ? ['tl', 'tr', 'bl', 'br'].map((pos) => e('i', { key: pos, className: `qxsim-handle ${pos}` })) : null)
     }
 
@@ -574,12 +574,12 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       }
       const commit = (key, value) => void patch(current => ({ op: 'set', key, value: typeof value === 'function' ? value(current.inspector.fields.find(field => field.key === key)?.value) : value })).catch(() => {})
       async function refreshSelectedImage() {
-        const imageId = snapRef.current?.boxes?.find(item => item.id === snapRef.current.selectedId)?.imageId
-        if (!isRemoteImage(imageId)) return
+        const { imageId, imageSource } = snapRef.current?.boxes?.find(item => item.id === snapRef.current.selectedId) || {}
+        if (!isRemoteImage(imageId, imageSource)) return
         setRefreshingImage(true)
         try {
-          await callApi(sessionId, 'image-refresh', { imageId })
-          refreshBrowserImage(imageId)
+          await callApi(sessionId, 'image-refresh', { imageId, imageSource })
+          refreshBrowserImage(imageId, imageSource)
           setNotice(`图片 ${imageId} 已重新下载；同源试玩页会同步刷新。`)
         } catch (error) { setError(error.message) }
         finally { setRefreshingImage(false) }
@@ -847,7 +847,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
             e('div', { className: 'qxsim-inspector-scroll' }, canInspectorScript && inspectorTab === 'script'
               ? e(ControlScriptTab, { snap, addScriptMounted: (controlId) => void addScript({ controlId, controlAsset: snap.asset?.type }).then(() => leavePage('script')), mountScriptTo, unmountScript, openScript: (id) => { setSelectedScriptId(id); leavePage('script') } })
               : e(React.Fragment, null, e(BaseInspector, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, commit, createStateChild }),
-                isRemoteImage(snap.boxes?.find(item => item.id === snap.selectedId)?.imageId) ? e('div', { className: 'qxsim-section-body' },
+                snap.boxes?.some(item => item.id === snap.selectedId && isRemoteImage(item.imageId, item.imageSource)) ? e('div', { className: 'qxsim-section-body' },
                   e('button', { className: 'qxsim-action', disabled: refreshingImage, onClick: refreshSelectedImage }, refreshingImage ? '正在刷新素材…' : '↻ 重新下载此素材'),
                   e('p', { className: 'qxsim-muted' }, '白名单图片按需缓存；刷新会重新访问素材源。')) : null)),
             e('div', { className: 'qxsim-tree-foot' }, e('button', { className: 'qxsim-action danger', style: { width: '100%' }, onClick: () => void patch({ op: 'remove' }).catch(() => {}) }, clientTemplates && selectedRow?.depth === 0 ? '⌫ 删除当前模板' : '⌫ 删除当前控件')))

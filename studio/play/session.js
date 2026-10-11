@@ -16,6 +16,7 @@ import { recordEvent } from '../autotest/format.js'
 import { textWindowMetrics, clamp } from './scroll.js'
 import { scrollBarGeometry } from './scroll-geometry.js'
 import { audioDuration } from '../assets/audio-catalog.js'
+import { imageSourceName } from '../assets/catalog.js'
 import { randomUUID } from 'node:crypto'
 
 function prepareScroll(session) {
@@ -124,7 +125,8 @@ export function controlSnapshot(control, boxes) {
     enableOutline: control.kind === 'textbox' || control.kind === 'textwindow' ? control.enableOutline === true : null,
     outlineColor: control.kind === 'textbox' || control.kind === 'textwindow' ? control.outlineColor : null,
     imageId: control.kind === 'image' ? (control.imageId ?? 0) : null,
-    primitive: control.kind === 'image' ? imagePrimitive(control.imageId) : null,
+    imageSource: control.kind === 'image' ? imageSourceName(control.imageSource) : null,
+    primitive: control.kind === 'image' ? imagePrimitive(control.imageId, control.imageSource) : null,
     imageColor: control.kind === 'image' ? control.imageColor : null,
     enableMask: control.kind === 'image' ? control.enableMask === true : null,
     enableSoftEdge: control.kind === 'image' ? control.enableSoftEdge === true : null,
@@ -322,7 +324,8 @@ function compactPaint(control, box, transform) {
     ...scrollFields(control),
   }
   if (control.kind === 'image') {
-    item.primitive = imagePrimitive(control.imageId)
+    item.imageSource = imageSourceName(control.imageSource)
+    item.primitive = imagePrimitive(control.imageId, item.imageSource)
     item.imageColor = control.imageColor
     item.imageId = control.imageId
     Object.assign(item, imageFillFields(control))
@@ -374,7 +377,8 @@ function visualFields(control, box) {
     ...scrollFields(control),
   }
   if (control.kind === 'image') {
-    fields.primitive = imagePrimitive(control.imageId)
+    fields.imageSource = imageSourceName(control.imageSource)
+    fields.primitive = imagePrimitive(control.imageId, fields.imageSource)
     fields.imageColor = control.imageColor
     fields.imageId = control.imageId
     Object.assign(fields, imageFillFields(control))
@@ -411,7 +415,7 @@ function sceneFingerprint(node) {
     node.parent, node.z, node.group ? 1 : 0,
     m.a, m.b, m.c, m.d, m.tx, m.ty,
     node.kind, node.name, node.sourceWidth, node.sourceHeight, node.pressed,
-    node.primitive, node.imageColor, node.imageId,
+    node.primitive, node.imageColor, node.imageId, node.imageSource,
     node.fillType, node.fillHorizontalType, node.fillVerticalType, node.fillAmount,
     node.text, node.fontSize, node.fontColor, node.bgColor,
     node.enableOutline, node.outlineColor, node.horizontalAlignment, node.verticalAlignment,
