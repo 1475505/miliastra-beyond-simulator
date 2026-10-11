@@ -6,6 +6,8 @@
 
 所有编辑操作沿用 Controller snapshot、revision 与 patch 契约。此层不读取文件系统、不注册 Harness 服务，也不处理部署认证。
 
+颜色属性使用「颜色 + 透明度」两个编辑栏：颜色提供原生取色器与 `#RRGGBB` 输入，透明度提供滑块与 0–100 的整数百分比输入（Alpha：0% 完全透明、100% 完全不透明）。图片填充色、文本色、背景色和描边色共用 `color-field.js`，底层仍保存 uint32 ARGB；每次提交只替换对应通道，基于编辑队列中的最新快照合并，避免连续修改两栏时互相覆盖。Alpha 编辑后按 8 位量化，百分比四舍五入显示整数；仅查看、聚焦或失焦不重写原始 Alpha，未修改的通道原样保留。
+
 `image-preview.js` 显示白名单静态图片，复用浏览器图片加载器与 HTTP 缓存，Canvas2D 处理 RGB 乘色、alpha 和填充。宿主需提供同源 `/qxqy-assets/` 路由与 `image-refresh` action；「重新下载此素材」会刷新磁盘副本，并通知同源试玩页面重载纹理。完整边界见 [素材缓存](../studio/docs/image-assets.md)。
 
 ## 试玩窗口与内嵌兜底
