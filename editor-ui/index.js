@@ -1,13 +1,16 @@
 import { createScriptSyncPanel } from './script-sync.js'
+import { createControlGuidSyncPanel } from './control-guid-sync.js'
 import { createPlayLauncher } from './play-launcher.js'
 import { createImagePreview, createImageTypeField } from './image-preview.js'
 import { createColorField } from './color-field.js'
+import { controlTransformStyle } from './control-transform.js'
 import { isRemoteImage, imageAssetKey } from '../studio/assets/catalog.js'
 import { refreshBrowserImage } from '../studio/assets/browser.js'
 
 export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
     const e = React.createElement
     const ScriptSyncPanel = createScriptSyncPanel(React)
+    const ControlGuidSyncPanel = createControlGuidSyncPanel(React)
     const usePlayLauncher = createPlayLauncher(React)
     const ImagePreview = createImagePreview(React)
     const ImageTypeField = createImageTypeField(React)
@@ -24,7 +27,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
 .qxsim-toolbar{height:50px;flex:0 0 50px;display:grid;grid-template-columns:minmax(190px,1fr) auto minmax(280px,1fr);align-items:center;padding:0 10px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--toolbarA),var(--toolbarB));box-shadow:0 1px 8px var(--shadow);z-index:3}.qxsim-brand,.qxsim-toolbar-center,.qxsim-actions{display:flex;align-items:center}.qxsim-brand{gap:8px;min-width:0}.qxsim-appicon{width:26px;height:26px;display:grid;place-items:center;border:1px solid var(--line);border-radius:5px;font-size:11px;background:var(--input)}.qxsim-brand-text{min-width:0}.qxsim-brand-text strong,.qxsim-brand-text span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qxsim-brand-text strong{font-size:13px}.qxsim-brand-text span{color:var(--muted);font-size:10px}.qxsim-toolbar-center{gap:6px}.qxsim-actions{justify-content:flex-end;gap:6px}.qxsim-io{display:flex;align-items:center;gap:4px;padding-right:6px;margin-right:2px;border-right:1px solid var(--line)}
 .qxsim-editor-nav{height:40px;flex:0 0 40px;display:flex;align-items:stretch;padding:0 10px;border-bottom:1px solid var(--line);background:var(--panel)}.qxsim-editor-nav button{min-width:116px;padding:0 18px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-weight:650}.qxsim-editor-nav button.active{border-bottom-color:var(--blue);color:var(--text);background:color-mix(in srgb,var(--blue) 8%,transparent)}.qxsim-editor-nav .save-summary{display:flex;align-items:center;margin-left:auto;color:var(--muted);font-size:10px}
 .qxsim-control,.qxsim-iconbtn,.qxsim-action{height:32px;border:1px solid var(--line);background:var(--input);border-radius:6px}.qxsim-control{min-width:156px;padding:0 28px 0 9px}.qxsim-control.zoom{min-width:78px}.qxsim-iconbtn{width:32px}.qxsim-action{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 11px;white-space:nowrap}.qxsim-action.primary{color:#fff;border-color:#3265d8;background:linear-gradient(#5388fa,#376ad8)}.qxsim-action.danger{color:var(--danger)}.qxsim-action:hover,.qxsim-iconbtn:hover{border-color:var(--blue);background:var(--hover)}
-.qxsim-main{display:grid;grid-template-columns:clamp(220px,17cqi,280px) minmax(360px,1fr) clamp(310px,22cqi,356px);flex:1;min-height:0}.qxsim-tree,.qxsim-inspector{min-height:0;background:var(--panel)}.qxsim-tree{display:flex;flex-direction:column;border-right:1px solid var(--line)}.qxsim-inspector{display:flex;flex-direction:column;border-left:1px solid var(--line)}.qxsim-pane-head{height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-bottom:1px solid var(--lineSoft)}.qxsim-pane-title{font-weight:650;font-size:13px}.qxsim-muted{color:var(--muted);font-size:10px}.qxsim-asset-switch{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin:8px 8px 0;padding:3px;border:1px solid var(--line);border-radius:18px;background:var(--input)}.qxsim-asset-switch button{height:29px;min-width:0;border:0;border-radius:15px;background:transparent;color:var(--muted);font-weight:600;white-space:nowrap}.qxsim-asset-switch button.active{color:#fff;background:linear-gradient(#4f86ff,#3c6ed8);box-shadow:0 2px 7px #1d4b9f55}.qxsim-template-tag{padding:1px 5px;border:1px solid currentColor;border-radius:8px;color:#9cc2ff;font-size:9px}.qxsim-template-id{color:var(--muted);font:9px ui-monospace,Consolas,monospace}.qxsim-palette-head{display:flex;align-items:center;justify-content:space-between;gap:4px;margin:0 0 4px;color:var(--muted);font-size:10px}.qxsim-palette-head>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qxsim-add-mode{display:flex;flex:0 0 auto;gap:2px;padding:1px;border:1px solid var(--line);border-radius:10px;background:var(--input)}.qxsim-add-mode button{height:18px;padding:0 6px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:9px}.qxsim-add-mode button.active{color:var(--text);background:var(--hover)}
+.qxsim-main{position:relative;display:grid;grid-template-columns:clamp(220px,17cqi,280px) minmax(360px,1fr) clamp(310px,22cqi,356px);flex:1;min-height:0}.qxsim-tree,.qxsim-inspector{min-height:0;background:var(--panel)}.qxsim-tree{display:flex;flex-direction:column;border-right:1px solid var(--line)}.qxsim-inspector{display:flex;flex-direction:column;border-left:1px solid var(--line)}.qxsim-pane-head{height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 10px;border-bottom:1px solid var(--lineSoft)}.qxsim-pane-title{font-weight:650;font-size:13px}.qxsim-muted{color:var(--muted);font-size:10px}.qxsim-asset-switch{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin:8px 8px 0;padding:3px;border:1px solid var(--line);border-radius:18px;background:var(--input)}.qxsim-asset-switch button{height:29px;min-width:0;border:0;border-radius:15px;background:transparent;color:var(--muted);font-weight:600;white-space:nowrap}.qxsim-asset-switch button.active{color:#fff;background:linear-gradient(#4f86ff,#3c6ed8);box-shadow:0 2px 7px #1d4b9f55}.qxsim-template-tag{padding:1px 5px;border:1px solid currentColor;border-radius:8px;color:#9cc2ff;font-size:9px}.qxsim-template-id{color:var(--muted);font:9px ui-monospace,Consolas,monospace}.qxsim-palette-head{display:flex;align-items:center;justify-content:space-between;gap:4px;margin:0 0 4px;color:var(--muted);font-size:10px}.qxsim-palette-head>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qxsim-add-mode{display:flex;flex:0 0 auto;gap:2px;padding:1px;border:1px solid var(--line);border-radius:10px;background:var(--input)}.qxsim-add-mode button{height:18px;padding:0 6px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:9px}.qxsim-add-mode button.active{color:var(--text);background:var(--hover)}
 .qxsim-search{height:32px;margin:8px;display:flex;align-items:center;gap:7px;padding:0 9px;border:1px solid var(--line);border-radius:16px;background:var(--input);color:var(--muted)}.qxsim-search input{min-width:0;flex:1;border:0;outline:0;background:transparent}.qxsim-search button{border:0;background:transparent;color:var(--muted)}.qxsim-tree-scroll{flex:1;min-height:0;overflow:auto;padding:3px 6px 8px}.qxsim-row{position:relative;height:32px;display:flex;align-items:center;gap:6px;padding-right:7px;border:1px solid transparent;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden}.qxsim-row.template-root{height:38px;margin-top:5px;border-top-color:var(--lineSoft);background:color-mix(in srgb,var(--blue) 5%,transparent)}.qxsim-row.template-root:first-child{margin-top:0}.qxsim-row:not(.template-root):before{content:"";position:absolute;left:13px;top:-6px;bottom:16px;border-left:1px solid var(--lineSoft);pointer-events:none}.qxsim-row:hover{background:var(--hover)}.qxsim-row.active{background:linear-gradient(90deg,#3569cf,#315a9f);border-color:#4d7ee4;color:#fff}.qxsim-chevron{width:9px;color:var(--muted);font-size:9px}.qxsim-kind{width:19px;height:19px;display:inline-grid;place-items:center;flex:0 0 19px;border:1px solid currentColor;border-radius:3px;font-size:9px}.qxsim-row-label{min-width:0;overflow:hidden;text-overflow:ellipsis}.qxsim-row-end{margin-left:auto;display:flex;align-items:center;gap:4px;flex:0 0 auto}.qxsim-row.canvas-hidden .qxsim-row-label{opacity:.45}.qxsim-eye{width:20px;height:20px;display:grid;place-items:center;border:0;border-radius:4px;background:transparent;color:var(--muted);font-size:12px;line-height:1}.qxsim-eye:hover{background:var(--hover);color:var(--text)}.qxsim-row.active .qxsim-eye{color:#d7e6ff}.qxsim-row.active .qxsim-eye:hover{background:#ffffff24;color:#fff}.qxsim-eye.off{opacity:.55}.qxsim-incomplete{color:#e4a743;font-size:9px}.qxsim-tree-foot{flex:0 0 auto;padding:5px;border-top:1px solid var(--lineSoft)}.qxsim-hierarchy{margin-bottom:5px;padding:5px;border:1px solid var(--line);border-radius:6px;background:color-mix(in srgb,var(--input) 78%,transparent)}.qxsim-hierarchy-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;font-size:10px}.qxsim-hierarchy-head strong{font-weight:650}.qxsim-hierarchy-head span{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}.qxsim-parent-row{display:grid;grid-template-columns:minmax(0,1fr) 24px 24px;gap:3px}.qxsim-parent-row select,.qxsim-parent-row button{height:24px;min-width:0;border:1px solid var(--line);border-radius:4px;background:var(--button)}.qxsim-parent-row select{padding:0 5px}.qxsim-hierarchy-note{margin-top:3px;color:var(--muted);font-size:9px;line-height:1.3}.qxsim-add{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}.qxsim-add button{height:22px;padding:0 4px;border:1px solid var(--line);border-radius:4px;background:var(--button);color:var(--muted);font-size:11px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qxsim-add button:hover{color:var(--text);border-color:var(--blue)}
 .qxsim-center{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:var(--workspace)}.qxsim-workspace{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:34px 22px 20px;overflow:auto;background-color:var(--workspace);background-image:radial-gradient(#ffffff0b 1px,transparent 1px),linear-gradient(135deg,#ffffff09 25%,transparent 25%,transparent 75%,#00000008 75%);background-size:4px 4px,24px 24px}.qxsim-stage-shell{position:relative;flex:0 0 auto;max-width:100%;filter:drop-shadow(0 12px 24px #0004)}.qxsim-stage-label{position:absolute;left:0;right:0;top:-27px;display:flex;align-items:center;gap:7px;color:var(--muted);font-size:10px}.qxsim-stage-label b{padding:2px 7px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);font-weight:600}.qxsim-stage{position:relative;max-width:100%;background-color:#28313e;background-image:linear-gradient(45deg,#ffffff08 25%,transparent 25%),linear-gradient(-45deg,#ffffff08 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ffffff08 75%),linear-gradient(-45deg,transparent 75%,#ffffff08 75%),radial-gradient(circle at 50% 45%,#466f9b38,transparent 48%);background-position:0 0,0 8px,8px -8px,-8px 0,0 0;background-size:16px 16px,16px 16px,16px 16px,16px 16px,100% 100%;border:1px solid #40b8cf;outline:1px solid #1f2732b3;overflow:hidden;touch-action:none;user-select:none}.qxsim-stage:before,.qxsim-stage:after{content:"";position:absolute;pointer-events:none;opacity:.12}.qxsim-stage:before{left:50%;top:0;bottom:0;border-left:1px dashed #cfe9ff}.qxsim-stage:after{top:50%;left:0;right:0;border-top:1px dashed #cfe9ff}
 .qxsim-box{position:absolute;box-sizing:border-box;border:1px solid #cbdaged80;overflow:visible;display:flex;align-items:center;justify-content:center;white-space:pre-wrap;pointer-events:none;transform:rotate(var(--rotation,0deg));transform-origin:center}.qxsim-box.container{border-color:#4ea5e66b;background:transparent}.qxsim-box.textbox,.qxsim-box.textwindow{overflow:hidden}.qxsim-box.cursor{border-style:dashed;background:#4a8eb519}.qxsim-box.reference{border-style:dashed;background:#7365c219}.qxsim-box.grid{background-image:linear-gradient(#6a92bd26 1px,transparent 1px),linear-gradient(90deg,#6a92bd26 1px,transparent 1px);background-size:20px 20px}.qxsim-box.keyhint{border-radius:4px;background:#2b3441b8}.qxsim-box.animation,.qxsim-box.fullscreen{border-style:dotted}.qxsim-box.button{border-radius:6px;background:linear-gradient(#465467e6,#28313ee6);box-shadow:inset 0 0 0 1px #ffffff14}.qxsim-box.selected{z-index:2;border-color:#61b9ff;box-shadow:inset 0 0 0 1px #3a76ff,0 0 0 1px #0006}.qxsim-box.dynamic{border-style:dashed}.qxsim-box.pressed{filter:brightness(.72);transform:rotate(var(--rotation,0deg)) scale(.98)}.qxsim-box-label{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 4px;border-radius:3px;color:#e7edf5;background:#111925a8;text-shadow:0 1px 2px #000;font-size:10px}.qxsim-box.fullscreen>.qxsim-box-label{position:absolute;left:5px;top:5px}.qxsim-handle{position:absolute;width:7px;height:7px;border:1px solid #fff;background:#4388ff;box-shadow:0 0 0 1px #2d4e88}.qxsim-handle.tl{left:-4px;top:-4px}.qxsim-handle.tr{right:-4px;top:-4px}.qxsim-handle.bl{left:-4px;bottom:-4px}.qxsim-handle.br{right:-4px;bottom:-4px}
@@ -39,7 +42,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
 .qxsim-toolbar{grid-template-columns:minmax(170px,1fr) auto auto;column-gap:12px}.qxsim-toolbar-center .zoom{width:78px;min-width:78px}.qxsim-actions{min-width:0}
 @container(max-width:1180px){.qxsim-toolbar{grid-template-columns:minmax(130px,1fr) auto auto;column-gap:8px}.qxsim-action{padding:0 8px}.qxsim-main{grid-template-columns:200px minmax(300px,1fr) 292px}.qxsim-control{min-width:132px}.qxsim-control.ratio{width:128px}.qxsim-io .qxsim-control{width:96px}.qxsim-device-switch button{padding:0 7px}.qxsim-workspace{padding-left:12px;padding-right:12px}.qxsim-brand-text span{display:none}.qxsim-asset-switch button{font-size:11px}}
 @container(max-width:1000px){.qxsim-toolbar{height:90px;flex-basis:90px;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:42px 42px}.qxsim-toolbar-center{justify-self:end}.qxsim-actions{grid-column:1 / -1}.qxsim-editor-nav .save-summary{display:none}.qxsim-inspector{top:130px}}
-@container(max-width:820px){.qxsim-main{grid-template-columns:180px minmax(280px,1fr)}.qxsim-inspector{position:absolute;right:0;top:130px;bottom:0;width:285px;z-index:5;box-shadow:-10px 0 24px var(--shadow)}.qxsim-script-page{grid-template-columns:190px minmax(320px,1fr)}.qxsim-script-editor{padding:12px}.qxsim-script-fields{grid-template-columns:1fr}}
+@container(max-width:820px){.qxsim-main{grid-template-columns:180px minmax(280px,1fr)}.qxsim-inspector{position:absolute;right:0;top:0;bottom:0;width:285px;z-index:5;box-shadow:-10px 0 24px var(--shadow)}.qxsim-script-page{grid-template-columns:190px minmax(320px,1fr)}.qxsim-script-editor{padding:12px}.qxsim-script-fields{grid-template-columns:1fr}}
 `
 
     const KIND_META = {
@@ -211,7 +214,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       const typeTitle = inspector.kind === 'textbox' ? '文本框设置' : inspector.kind === 'button' ? '按钮设置' : `${inspector.label}设置`
       return e(React.Fragment, null,
         e(Section, { title: '节点信息', open: false }, e(DraftField, { field: f.name, commit })),
-        e(Section, { title: '变换' }, f.posX ? e(Pair, { label: '位置', x: f.posX, y: f.posY, commit }) : null, f.width ? e(Pair, { label: '大小', x: f.width, y: f.height, xAxis: 'W', yAxis: 'H', commit }) : null, f.rotationZ ? e(DraftField, { field: f.rotationZ, commit }) : null, f.syncAllDevices ? e(DraftField, { field: f.syncAllDevices, commit }) : null, f.anchorType ? e(DraftField, { field: f.anchorType, commit }) : null, f.anchorMinX ? e(Pair, { label: 'Min', x: f.anchorMinX, y: f.anchorMinY, commit }) : null, f.anchorMaxX ? e(Pair, { label: 'Max', x: f.anchorMaxX, y: f.anchorMaxY, commit }) : null, f.pivotX ? e(Pair, { label: '中心', x: f.pivotX, y: f.pivotY, commit }) : null),
+        e(Section, { title: '变换' }, f.posX ? e(Pair, { label: '位置', x: f.posX, y: f.posY, commit }) : null, f.width ? e(Pair, { label: '大小', x: f.width, y: f.height, xAxis: 'W', yAxis: 'H', commit }) : null, ...['rotationX', 'rotationY', 'rotationZ'].map(key => f[key] ? e(DraftField, { key, field: f[key], commit }) : null), f.syncAllDevices ? e(DraftField, { field: f.syncAllDevices, commit }) : null, f.anchorType ? e(DraftField, { field: f.anchorType, commit }) : null, f.anchorMinX ? e(Pair, { label: 'Min', x: f.anchorMinX, y: f.anchorMinY, commit }) : null, f.anchorMaxX ? e(Pair, { label: 'Max', x: f.anchorMaxX, y: f.anchorMaxY, commit }) : null, f.pivotX ? e(Pair, { label: '中心', x: f.pivotX, y: f.pivotY, commit }) : null),
         e(Section, { title: '创建设置' }, f.active ? e(DraftField, { field: f.active, commit }) : null, f.visible ? e(DraftField, { field: f.visible, commit }) : null),
         typeSections || (typeFields.length ? e(Section, { title: typeTitle }, typeFields) : null),
         f.canControllerFocus ? e(Section, { title: '手柄导航', open: false }, e(DraftField, { field: f.canControllerFocus, commit })) : null,
@@ -425,11 +428,16 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
           e('div', { className: 'qxsim-logic-actions-foot' }, e('button', { className: 'qxsim-action', onClick: addRule }, '＋ 添加监听规则')),
           e('div', { className: 'qxsim-script-footer', style: { marginTop: 16 } }, e('span', null, draft?.dirty ? '有未保存的修改' : (notice || '保存后会写入当前存档，下次试玩生效')), e('span', { className: 'spacer' }))))
     }
-    function ControlGuidEditor({ inspector, onSave }) {
+    function ControlGuidEditor({ inspector, autofill, onSave }) {
       const [draft, setDraft] = React.useState(String(inspector.guid ?? ''))
+      const [automatic, setAutomatic] = React.useState(false)
       const [busy, setBusy] = React.useState(false)
       const [error, setError] = React.useState('')
-      React.useEffect(() => { setDraft(String(inspector.guid ?? '')); setError('') }, [inspector.guid])
+      React.useEffect(() => { setDraft(String(inspector.guid ?? '')); setAutomatic(false); setError('') }, [inspector.id, inspector.guid])
+      const canAutofill = autofill?.count > 1 && autofill.selectedOffset >= 0
+      const firstGuid = /^[0-9]+$/.test(draft.trim()) ? Number(draft) - (autofill?.selectedOffset || 0) : NaN
+      const lastGuid = firstGuid + (autofill?.count || 0) - 1
+      const validRange = Number.isSafeInteger(firstGuid) && firstGuid >= 1 && lastGuid <= 2147483647
       async function submit(event) {
         event.preventDefault()
         const value = draft.trim()
@@ -438,7 +446,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
           return
         }
         setBusy(true); setError('')
-        try { await onSave(inspector.id, Number(value)) }
+        try { await onSave(inspector.id, Number(value), automatic && canAutofill) }
         catch (reason) { setError(reason?.message || String(reason)) }
         finally { setBusy(false) }
       }
@@ -447,9 +455,15 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
           e('span', { className: 'qxsim-field-label' }, '客户端控件索引'),
           e('div', { style: { display: 'flex', gap: 6 } },
             e('input', { type: 'text', inputMode: 'numeric', 'aria-label': '客户端控件索引', value: draft, disabled: busy, onChange: (event) => { setDraft(event.target.value); setError('') }, onKeyDown: (event) => { if (event.key === 'Escape') { setDraft(String(inspector.guid)); setError('') } } }),
-            e('button', { type: 'submit', className: 'qxsim-action', disabled: busy || draft.trim() === String(inspector.guid) }, busy ? '保存中' : '修改'))),
+            e('button', { type: 'submit', className: 'qxsim-action', disabled: busy || (!automatic && draft.trim() === String(inspector.guid)) || (automatic && !validRange) }, busy ? '保存中' : '修改'))),
+        canAutofill ? e('label', { style: { display: 'flex', gap: 6, alignItems: 'center', margin: '6px 0' } },
+          e('input', { type: 'checkbox', checked: automatic, disabled: busy, onChange: (event) => setAutomatic(event.target.checked) }), '自动修改其他客户端索引值') : null,
+        automatic && canAutofill ? e('div', { className: 'qxsim-note', 'aria-label': '自动填充索引预览' },
+          `以当前控件为基准，按 GIA 导入顺序填充 ${autofill.count} 个控件（${autofill.templateCount} 个模板及其子控件）。`,
+          e('div', null, validRange ? `索引范围：${firstGuid}–${lastGuid}` : '索引范围超出有效范围，请检查输入。'),
+          e('div', null, '适用于整批导入后未增删、重排的模板。服务端界面和脚本索引需单独填写。')) : null,
         error ? e('div', { role: 'alert', className: 'qxsim-note' }, error) : null,
-        e('div', { className: 'qxsim-muted', style: { lineHeight: 1.5 } }, '填写 GIA 导入后实际显示的索引；修改后须让 AI 同步 Lua 脚本中的引用。'))
+        e('div', { className: 'qxsim-muted', style: { lineHeight: 1.5 } }, '填写 GIA 导入后实际显示的索引；修改后从页面上方继续同步 Lua。'))
     }
     function ControlScriptTab({ snap, addScriptMounted, mountScriptTo, unmountScript, openScript }) {
       const mountedScripts = (snap.scripts || []).filter((script) => script.controlId === snap.selectedId)
@@ -494,6 +508,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       const width = box.renderWidth ?? box.width; const height = box.renderHeight ?? box.height
       const rotationZ = box.renderRotationZ ?? item.rotationZ ?? 0
       const style = { left: `${left / canvasWidth * 100}%`, bottom: `${bottom / canvasHeight * 100}%`, width: `${width / canvasWidth * 100}%`, height: `${height / canvasHeight * 100}%`, '--rotation': `${-Number(rotationZ)}deg`, fontSize: Math.max(8, Math.min(40, Number(item.fontSize || 12))), color: textKind ? argb(item.fontColor, 0xffffffff) : '#fff' }
+      Object.assign(style, controlTransformStyle(box, canvasWidth, canvasHeight))
       if (kind === 'image') Object.assign(style, shape(item.primitive, argb(item.imageColor, 0xffffffff)))
       else if (textKind) { style.background = argb(item.bgColor, 0x00ffffff); style.justifyContent = item.horizontalAlignment === 'Right' ? 'flex-end' : item.horizontalAlignment === 'Middle' ? 'center' : 'flex-start'; style.alignItems = item.verticalAlignment === 'Bottom' ? 'flex-end' : item.verticalAlignment === 'Middle' ? 'center' : 'flex-start'; style.textShadow = item.enableOutline === false ? 'none' : `0 0 2px ${argb(item.outlineColor, 0xff000000)}` }
       else if (kind === 'container') style.background = 'transparent'
@@ -553,26 +568,36 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
         const run = async () => { const current = snapRef.current; if (!current) throw new Error('editor is not ready'); try { if (assetType && current.asset?.type !== assetType) throw new Error('当前资产已切换，请重新选择控件后修改索引'); const next = await callApi(sessionId, 'patch', { op: { ...(typeof op === 'function' ? op(current) : op), expectedRevision: current.version } }); setError(''); return accept(next) } catch (reason) { setError(reason?.message || String(reason)); if (/revision conflict/.test(String(reason?.message || reason))) await reload(); throw reason } }
         queueRef.current = queueRef.current.then(run, run); return queueRef.current
       }
-      async function changeControlGuid(id, guid, assetType) {
-        await patch({ op: 'setControlGuid', id, guid }, assetType)
-        setNotice('控件索引已修改；请让 AI 根据索引变更记录同步 Lua 脚本引用。')
+      async function changeControlGuid(id, guid, assetType, automatic = false) {
+        await saveScriptDraft()
+        await patch({ op: 'setControlGuid', id, guid, autoFillClientGuids: automatic }, assetType)
+        setNotice('控件索引已修改。请选择上方「全量替换脚本索引」或「复制提示词给 AI」。')
       }
       async function copyGuidChanges() {
-        const changes = snapRef.current?.controlGuidChanges || []
-        const lines = changes.map((row) => `${row.controlAsset} / ${row.controlName}（${row.controlId}）：${row.oldGuid} → ${row.newGuid}；记录 ${row.id}`)
-        const prompt = ['请同步当前模拟器工程的客户端控件索引引用：', ...lines,
-          '先读取最新快照的 controlGuidChanges，按控件身份和变更顺序核对全部 Lua 脚本的索引常量、配置表与调用，修改存档中的 source 及相关 Lua 源文件。不要全局替换同值数字，也不要改运行时实例 ID 或图片资源 ID。',
-          '检查旧索引引用并重新试玩；确认完成后用 acknowledgeControlGuidChanges 的 changeIds 清除已核对记录，再保存完整存档。'].join('\n')
-        try { await navigator.clipboard.writeText(prompt); setNotice('已复制索引变更及脚本同步要求，可粘贴给 AI。') }
-        catch { setError('无法访问剪贴板，请将上方索引变更记录交给 AI，并要求同步 Lua 脚本引用。') }
-      }
-      async function acknowledgeGuidChanges() {
-        const changeIds = (snapRef.current?.controlGuidChanges || []).map((row) => row.id)
-        try {
-          await saveScriptDraft()
-          await patch({ op: 'acknowledgeControlGuidChanges', changeIds })
-          setNotice('已确认脚本索引引用完成同步；请保存完整存档。')
-        } catch {}
+        await saveScriptDraft()
+        await saveLogicDraft()
+        await queueRef.current
+        const current = snapRef.current
+        if (!current.storage?.path) {
+          if (saveToWorkspace) setSavePath(`${current.save?.name || 'project'}.save.json`)
+          throw new Error('请先保存完整存档，再复制提示词；AI 需要读取这次实际修改的存档。')
+        }
+        await callApi(sessionId, 'save', { path: current.storage.path, expectedRevision: current.version })
+        const changes = current.controlGuidChanges || []
+        const prompt = ['请完成模拟器控件索引与 Lua 引用同步。',
+          `工作区：${current.workspace?.path || '请先核对工作区'}`,
+          `最新完整存档：${current.storage.path}（编辑器已保存）`,
+          `Lua 文件：${(current.scripts || []).map(row => row.path || `内联脚本 ${row.id}`).join('、') || '暂无'}`,
+          '先从上述文件重新加载最新存档，不要使用另一个 MCP/Web 进程里的旧工程。',
+          `获取新旧映射：读取该 JSON 顶层的 controlGuidChanges 数组，当前共 ${changes.length} 条，必须读取全部记录。oldGuid 是旧索引，newGuid 是新索引；controlAsset + controlId 标识控件，controlName 是名称，id 是记录编号，batchId 是批次。`,
+          '获取脚本：读取 assets.scripts 数组；每项的 source 是存档内源码，path 是脚本文件路径（相对路径以工作区为基准）。',
+          '按控件身份和变更顺序核对全部 Lua 脚本的索引常量、配置表与调用，修改存档中的 source 及相关 Lua 源文件和生成器映射，避免重建后覆盖。不要全局替换同值数字，也不要改运行时实例 ID 或图片资源 ID。',
+          '同一 batchId 是同时映射，须按原值一次性应用，不能逐条替换导致索引串改。',
+          '检查旧索引引用并重新试玩；仅在引用全部同步或明确没有引用后，用 acknowledgeControlGuidChanges 的 changeIds 清除已核对记录，保存完整存档。未判断的记录继续保留。',
+          '完成后告知用户重新载入这个存档，再通过「Lua 脚本 → 实机脚本同步」更新游戏文件；不要重新导入 GIA，也不要擅自复制到游戏目录。'].join('\n')
+        try { await navigator.clipboard.writeText(prompt); setNotice('存档已保存，提示词已复制，包含完整映射的读取方式。粘贴给 AI；处理后重新载入存档。') }
+        catch { setNotice('存档已保存。剪贴板不可用，可从下方文本框手动复制提示词。') }
+        return prompt
       }
       const commit = (key, value) => void patch(current => ({ op: 'set', key, value: typeof value === 'function' ? value(current.inspector.fields.find(field => field.key === key)?.value) : value })).catch(() => {})
       async function refreshSelectedImage() {
@@ -812,13 +837,9 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
             e('button', { className: 'qxsim-iconbtn', title: '重新载入', onClick: reload }, '↻'))),
         e('nav', { className: 'qxsim-editor-nav', 'aria-label': '编辑页面' }, e('button', { className: page === 'ui' ? 'active' : '', onClick: () => leavePage('ui') }, 'UI 编辑'), e('button', { className: page === 'script' ? 'active' : '', onClick: () => leavePage('script') }, 'Lua 脚本'), e('button', { className: page === 'logic' ? 'active' : '', onClick: () => leavePage('logic') }, '服务端逻辑'), e('span', { className: 'save-summary' }, '一个存档 · 服务器控件模板 + 客户端控件模板 + Lua 脚本 + 服务端逻辑')),
         page === 'script' ? e(ScriptSyncPanel, { snap, patch, request: (action, body) => callApi(sessionId, action, body), refresh: async () => accept(await callApi(sessionId, 'get')), prepare: async () => { await queueRef.current; await saveScriptDraft(); await saveLogicDraft(); return snapRef.current } }) : null,
-        snap.controlGuidChanges?.length ? e('details', { className: 'qxsim-note', open: true, style: { flexShrink: 0, maxHeight: 170, overflow: 'auto' } },
-          e('summary', { style: { cursor: 'pointer' } }, `待同步 Lua 索引引用（${snap.controlGuidChanges.length} 项）`),
-          e('div', null, '控件索引已修改。请让 AI 更新存档脚本和相关 Lua 源文件，并重新试玩核对。'),
-          e('ul', { style: { margin: '5px 0' } }, snap.controlGuidChanges.map((row) => e('li', { key: row.id }, `${row.controlAsset === 'client-control-template' ? '客户端模板' : '服务端界面'} · ${row.controlName}：${row.oldGuid} → ${row.newGuid}`))),
-          e('div', { style: { display: 'flex', gap: 6 } },
-            e('button', { className: 'qxsim-action', onClick: copyGuidChanges }, '复制给 AI'),
-            e('button', { className: 'qxsim-action', title: '仅在已修改或确认不涉及脚本引用，并完成核对后使用', onClick: acknowledgeGuidChanges }, '已完成脚本同步'))) : null,
+        e(ControlGuidSyncPanel, { snap, patch, prepare: saveScriptDraft, copy: copyGuidChanges,
+          onScripts: () => leavePage('script'), onError: setError,
+          reloadArchive: () => loadWorkspaceArchive(snapRef.current.storage?.path) }),
         exportWarnings.length ? e('details', { className: 'qxsim-export-warnings', open: true, role: 'status', style: { flexShrink: 0, maxHeight: 180, overflow: 'auto', padding: '8px 16px', borderBottom: '1px solid currentColor' } },
           e('summary', { style: { cursor: 'pointer' } }, `上次导出说明（${exportWarnings.length} 项，请核对导入后的效果）`),
           e('button', { className: 'qxsim-action', onClick: () => setExportWarnings([]) }, '关闭导出说明'),
@@ -842,7 +863,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
               e('div', { className: 'qxsim-add' }, CONTROL_TYPES.filter(([kind]) => clientTemplates || kind !== 'container').map(([kind, label]) => e('button', { key: kind, title: `${clientTemplates && addMode === 'template' ? '新增' : '添加'}${label}`, onClick: () => addControl(kind, label) }, `＋ ${label}`))))),
           e('main', { className: 'qxsim-center' }, e('div', { className: 'qxsim-workspace', ref: workspaceRef }, e('div', { className: 'qxsim-stage-shell', style: { width: `${Math.max(40, Math.round(canvasWidth * effectiveZoom))}px` } }, e('div', { className: 'qxsim-stage-label' }, e('b', null, clientTemplates ? 'Lua 模板预览' : '界面控件组'), e('span', { className: 'qxsim-platform-tag' }, snap.canvas.platform), e('span', null, `${activeRatio} · ${canvasWidth}×${canvasHeight} · 左下原点`)), e('div', { className: 'qxsim-stage', style: { width: '100%', aspectRatio: `${canvasWidth} / ${canvasHeight}` }, onClick: (event) => { const rect = event.currentTarget.getBoundingClientRect(); void patch({ op: 'pick', x: (event.clientX - rect.left) * canvasWidth / rect.width, y: (rect.bottom - event.clientY) * canvasHeight / rect.height }).catch(() => {}) } }, renderBoxes.map((item) => renderControl(item, snap, canvasWidth, canvasHeight))))), error ? e('div', { className: 'qxsim-status error' }, '⚠ ', error) : e('div', { className: 'qxsim-status' }, e('span', null, `● ${snap.asset?.label || '控件'}编辑`), e('span', null, notice || (selectedRow ? `当前：${selectedRow.name}` : '')), e('span', { className: 'spacer' }), e('span', null, clientTemplates ? 'GIA 导出后可在 Lua 中按 prefabId 实例化' : '字段在失焦或 Enter 时提交'), e('a', { className: 'qxsim-community', href: 'https://space.bilibili.com/23358791', target: '_blank', rel: 'noreferrer', title: '作者 B站主页' }, '作者B站'), e('a', { className: 'qxsim-community', href: 'https://qm.qq.com/q/DpuMvxAfhm', target: '_blank', rel: 'noreferrer', title: '加入 QQ 群 1007538100' }, 'QQ群 1007538100'))),
           e('aside', { className: 'qxsim-inspector' }, snap.inspector ? e(React.Fragment, null,
-            e('div', { className: 'qxsim-inspector-head' }, e('div', { className: 'qxsim-inspector-line' }, e('span', { className: 'qxsim-kind' }, (KIND_META[snap.inspector.kind] || ['◇'])[0]), e('strong', null, snap.inspector.label), clientTemplates && selectedRow?.depth === 0 ? e('span', { className: 'qxsim-template-tag' }, '可实例化') : null), e('div', { className: 'qxsim-node-id' }, clientTemplates && selectedRow?.depth === 0 ? '模板索引 ' : '控件 GUID ', e('code', null, snap.inspector.guid ?? snap.inspector.id), ' · ', selectedRow?.name || '节点'), snap.inspector.kind !== 'server-container' ? e(ControlGuidEditor, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, onSave: (id, guid) => changeControlGuid(id, guid, snap.asset.type) }) : null),
+            e('div', { className: 'qxsim-inspector-head' }, e('div', { className: 'qxsim-inspector-line' }, e('span', { className: 'qxsim-kind' }, (KIND_META[snap.inspector.kind] || ['◇'])[0]), e('strong', null, snap.inspector.label), clientTemplates && selectedRow?.depth === 0 ? e('span', { className: 'qxsim-template-tag' }, '可实例化') : null), e('div', { className: 'qxsim-node-id' }, clientTemplates && selectedRow?.depth === 0 ? '模板索引 ' : '控件 GUID ', e('code', null, snap.inspector.guid ?? snap.inspector.id), ' · ', selectedRow?.name || '节点'), snap.inspector.kind !== 'server-container' ? e(ControlGuidEditor, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, autofill: snap.clientGuidAutofill, onSave: (id, guid, automatic) => changeControlGuid(id, guid, snap.asset.type, automatic) }) : null),
             e('div', { className: 'qxsim-tabs', style: canInspectorScript ? undefined : { gridTemplateColumns: '1fr' } },
               e('button', { className: inspectorTab === 'base' ? 'active' : '', onClick: () => setInspectorTab('base') }, '基础属性'),
               canInspectorScript ? e('button', { className: inspectorTab === 'script' ? 'active' : '', onClick: () => setInspectorTab('script') }, '脚本') : null),

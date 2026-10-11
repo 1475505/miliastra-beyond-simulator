@@ -8,6 +8,7 @@ import { listWorkspaceArchives, resolveWorkspaceFile, resolveWorkspaceOutput, re
 import { readClientLanguageType } from './client-language.js'
 import { ScriptSync, contentHash, discoverScriptDirectories } from './script-sync.js'
 import { sharedImageAssets } from './image-assets.js'
+import { ControlGuidSync } from './control-guid-sync.js'
 
 // Keep the interactive default short, but allow project replay runners to raise
 // it for control-heavy pixel-art scenes and long deterministic golden cases.
@@ -40,6 +41,7 @@ export class SimulatorController {
     this.archiveStamp = ''
     this.savedArchive = ''
     this.scriptSync = new ScriptSync(this)
+    this.controlGuidSync = new ControlGuidSync(this)
     this.imageAssets = imageAssets
     this.defaultClockMode = validateClockMode(clockMode)
     this.playClockMode = this.defaultClockMode
@@ -90,6 +92,8 @@ export class SimulatorController {
   }
 
   patch(op) {
+    if (op?.op === 'previewControlGuidSync') return { ...this.get(), controlGuidSyncPreview: this.controlGuidSync.preview() }
+    if (op?.op === 'syncControlGuidReferences') return this.controlGuidSync.apply(op)
     return { ...this.studio.patch(op), storage: { path: this.archivePath } }
   }
 

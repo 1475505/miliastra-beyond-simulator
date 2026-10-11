@@ -46,6 +46,8 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       name: node.name,
       visible: node.visible !== false,
       active: node.active !== false,
+      rotationX: transform.rotation.x,
+      rotationY: transform.rotation.y,
       rotationZ: transform.rotation.z,
       renderLeft: render.left,
       renderBottom: render.bottom,
@@ -146,6 +148,8 @@ export function inspectorDto(node, canvasId, box, guidById) {
     field('posY', '位置 Y', 'number', vis.posY, { computed: true }),
     field('width', '大小 W', 'number', vis.width, { computed: true }),
     field('height', '大小 H', 'number', vis.height, { computed: true }),
+    field('rotationX', '旋转 X', 'number', transform.rotation.x),
+    field('rotationY', '旋转 Y', 'number', transform.rotation.y),
     field('rotationZ', '旋转 Z', 'number', transform.rotation.z),
     field('syncAllDevices', '同步信息至所有设备', 'bool', node.syncAllDevices !== false),
     field('anchorType', '锚点类型', 'enum', classifyAnchor(transform), {

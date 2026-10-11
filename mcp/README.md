@@ -135,6 +135,8 @@ Web 的 `/` 预览页会监听磁盘：启动时还没有存档，会在 Codex �
 
 真实编辑器导入 GIA 后若重新分配了客户端控件索引，可在 Web/DSH 编辑器修改选中客户端控件的「索引」，或使用当前资产的 `setControlGuid`。`id` 是存档内部控件 ID，`guid` 是用户回传的实际索引（整数 `1–2147483647`）；操作保留内部 ID 和脚本挂载，拒绝服务端容器及工程中重复的控件/脚本索引。
 
+同一批客户端模板导入且结构未改动时，可在客户端资产下附加 `autoFillClientGuids: true`：以指定控件为锚点，按 GIA 原生父先子后顺序填写全部模板及子控件。它不是全体旧 GUID 加固定偏移；服务端界面和脚本不参与，越界或与范围外控件/脚本冲突会整批拒绝。变更账本中的同一 `batchId` 代表同时映射，处理 Lua 引用时不可按数字逐条替换。Web/DSH 有对应的默认关闭复选框及区间预览。规则依据与适用边界见 [编辑器说明](../editor-ui/README.md)。
+
 先确认当前资产与目标控件一致；需要时调用 `selectAsset`，其 `assetType` 为 `server-control-template` 或 `client-control-template`，然后重新 `get` 读取控件及 revision。
 
 ```text
@@ -144,7 +146,9 @@ qxqy_studio_patch({ handle: "project-1", op: {
 } })
 ```
 
-此操作不会自动修改 Lua。快照与完整存档的 `controlGuidChanges` 按时间保存 `{ id, controlAsset, controlId, controlName, oldGuid, newGuid }`，AI 必须结合控件身份把连续变更解析到最终索引，检查并同步相关 `scripts[].source` 和实际 `.lua` 源文件中的调用、常量、配置表及身份校验。非空内联 `source` 会优先于 `path` 文件执行，不能遗漏其中一份。模板索引、运行时控件 `Id`、图片 ID 和脚本映射 ID 各有含义，禁止全局替换同值数字；无法读取或判断的引用保留为未处理。
+此操作本身不会修改 Lua。用户明确选择全量文本替换时，可通过 Host patch `previewControlGuidSync` 预检，若 `controlGuidSyncPreview.canApply` 为真，再用 `syncControlGuidReferences` 携带 `planId` 和最新 `expectedRevision` 替换全部已登记脚本中的同值十进制文本（包括非索引内容）；文件变化会拒绝过期计划，写前备份，不复制到游戏目录。编辑器另提供「复制提示词给 AI」，包含从已保存存档获取完整映射的方法，AI 默认按语义处理。详见 [Lua 索引同步](../studio/docs/control-guid-sync.md)。
+
+快照与完整存档的 `controlGuidChanges` 按时间保存 `{ id, controlAsset, controlId, controlName, oldGuid, newGuid }`，可附加 `batchId` 和 `scriptSignature`。AI 必须结合控件身份把连续变更解析到最终索引，检查并同步相关 `scripts[].source` 和实际 `.lua` 源文件中的调用、常量、配置表、身份校验及生成器映射。非空内联 `source` 会优先于 `path` 文件执行，不能遗漏其中一份。模板索引、运行时控件 `Id`、图片 ID 和脚本映射 ID 各有含义，AI 语义同步不全局替换同值数字；无法读取或判断的引用保留为未处理。
 
 确认引用全部同步，或该变更无 Lua 引用后，才清理对应记录。每次写操作使用当时最新的 revision，随后显式保存完整存档并重启试玩验证受影响流程：
 

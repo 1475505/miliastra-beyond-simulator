@@ -56,8 +56,7 @@ export class EditorSessions {
       if (action === 'archives') return controller.listArchives()
       if (action === 'patch') {
         if (!Number.isInteger(body.op?.expectedRevision)) throw new Error('expectedRevision is required')
-        controller.patch(body.op)
-        return this.snapshot(row)
+        return { ...controller.patch(body.op), storage: { path: row.path } }
       }
       if (action === 'export') return controller.studio.exportData(body.format, body.assetType)
       if (action === 'play') return controller.play(body.action, body.args || {}, signal)

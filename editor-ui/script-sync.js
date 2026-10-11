@@ -65,7 +65,7 @@ export function createScriptSyncPanel(React) {
         plan ? e('section', { 'aria-label': '脚本同步确认' },
           e('p', { style: { overflowWrap: 'anywhere' } }, `本次更新到：${plan.root}`),
           !plan.rows.length ? e('p', null, '这个存档还没有 Lua 脚本。请先在下方添加脚本，再查看更新。') : plan.rows.every(row => row.status === '未变化') ? e('p', { role: 'status' }, '所有脚本都与游戏文件夹里的内容相同，无需复制。') : null,
-          plan.pendingGuidChanges ? e('p', { role: 'alert' }, '有控件编号改动尚未确认。请先核对脚本里用到的控件编号，在页面上点击「已完成脚本同步」，再重新查看更新。') : null,
+          plan.pendingGuidChanges ? e('p', { role: 'alert' }, '有控件索引尚未同步到 Lua。请先在上方「全量替换脚本索引」，或「复制提示词给 AI」；处理完成后再查看游戏脚本更新。') : null,
           plan.rows.map(row => e('div', { key: row.id, style: { borderTop: '1px solid var(--line)', padding: 6 } },
             e('label', { style: { overflowWrap: 'anywhere' } }, e('input', { type: 'checkbox', disabled: busy || Boolean(row.error) || row.status === '未变化', checked: selected.includes(row.id), onChange: event => setSelected(event.target.checked ? [...selected, row.id] : selected.filter(id => id !== row.id)) }), ` ${row.path} · ${statusLabel[row.status] || row.status}`),
             e('div', null, `复制的代码来自：${sourceLabel[row.sourceKind] || row.sourceKind}`),

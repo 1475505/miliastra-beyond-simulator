@@ -476,10 +476,10 @@ function applyPatchMutating(project, op) {
       writeTransform(project, node, next)
       return project
     }
-    if (key === 'rotationZ') {
+    if (['rotationX', 'rotationY', 'rotationZ'].includes(key)) {
       const next = {
         ...current,
-        rotation: { ...current.rotation, z: finiteNumber(value, key) },
+        rotation: { ...current.rotation, [key.slice(-1).toLowerCase()]: finiteNumber(value, key) },
       }
       writeTransform(project, node, next)
       return project

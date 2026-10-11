@@ -110,7 +110,7 @@ test('new nested assets retain creation-order indices even when tree order diffe
     const indices = byName(buffer)
     for (const [name, index] of Object.entries(observed)) assert.equal(indices[name], index, `${format}.${name}`)
     const images = readIndices(buffer).filter(row => ['ImageB', 'ImageA', 'DeepImage'].includes(row.name))
-    assert.deepEqual(images.map(row => row.index), [6, 8, 7], 'export tree order must not determine asset registration numbers')
+    assert.deepEqual(images.map(row => row.index), [7, 6, 8], 'native bottom-first DFS must retain the original asset registration numbers')
   }
 })
 

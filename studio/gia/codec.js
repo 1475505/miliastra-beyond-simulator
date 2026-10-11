@@ -5,6 +5,7 @@ import { toJson } from '../json.js'
 import { createNode, walk } from '../ui/authoring.js'
 import { GUID_BASE, collectUsedGuids, isValidGuid, nextFreeGuid } from './guid.js'
 import { ensureClientAssetIndices, isValidAssetIndex } from './asset-indices.js'
+import { collectClientNodes } from './client-order.js'
 
 export { GUID_BASE, collectUsedGuids, isValidGuid, nextFreeGuid }
 
@@ -234,7 +235,7 @@ function rectTransform(rt) {
     offset: { x: rt.offset.x, y: rt.offset.y },
     size: { x: rt.size.x, y: rt.size.y },
     pivot: { x: rt.pivot.x, y: rt.pivot.y },
-    field508: rt.rotation.z ? { z: rt.rotation.z } : {},
+    field508: Object.fromEntries(Object.entries(rt.rotation).filter(([, value]) => value !== 0)),
   }
 }
 
@@ -488,8 +489,8 @@ function canonicalFilePath(project, isClientTemplates) {
 
 function graphUnit(node, parent, guidById, allClientGuids, warnings, isGroup = false, isTemplate = false, includeTypeIndex = isTemplate, reverseSiblings = false) {
   const guid = guidById.get(node.id)
-  // 官方服务端容器样本的 children / relatedIds / accessories 与编辑器左树相反。
-  // Authoring 保持前序（先出现的在上）；导出服务端容器时倒序对齐官方 wire 样本。
+  // Native server samples and the 2026-10-12 client-template device comparison
+  // put sibling wire entries bottom-first. Authoring stays foreground-first.
   const sourceChildren = reverseSiblings ? [...(node.children || [])].reverse() : (node.children || [])
   const childGuids = sourceChildren.map((child) => guidById.get(child.id))
   const related = isGroup ? allClientGuids : childGuids
@@ -528,14 +529,6 @@ function graphUnit(node, parent, guidById, allClientGuids, warnings, isGroup = f
       },
     },
   }
-}
-
-function collectClientNodes(project) {
-  const clientNodes = []
-  walk(project.root, (node, parent) => {
-    if (node.kind !== 'server-container') clientNodes.push({ node, parent })
-  })
-  return clientNodes
 }
 
 function scriptMounts(scripts, targetAsset) {
@@ -584,7 +577,7 @@ function exportGameVersion(project) {
 }
 
 function buildClientTemplateRootObject(project, guidById, warnings, filePath, scripts = []) {
-  const clientNodes = collectClientNodes(project)
+  const clientNodes = collectClientNodes(project, true)
   const templateEntries = clientNodes.filter(({ parent }) => parent?.kind === 'server-container')
   if (!templateEntries.length) throw new Error('客户端控件模板列表至少需要一个模板')
   const templateIds = new Set(templateEntries.map(({ node }) => node.id))
@@ -592,10 +585,10 @@ function buildClientTemplateRootObject(project, guidById, warnings, filePath, sc
   const allClientGuids = clientNodes.map(({ node }) => guidById.get(node.id))
   return withScriptMounts(project, scripts, CLIENT_CONTROL_ASSET, () => ({
     graph: templateEntries.map(({ node, parent }) => graphUnit(
-      node, parent, guidById, allClientGuids, warnings, false, true,
+      node, parent, guidById, allClientGuids, warnings, false, true, true, true,
     )),
     accessories: accessoryEntries.map(({ node, parent }) => graphUnit(
-      node, parent, guidById, allClientGuids, warnings, false, false, true,
+      node, parent, guidById, allClientGuids, warnings, false, false, true, true,
     )),
     filePath: filePath || canonicalFilePath(project, true),
     gameVersion: exportGameVersion(project),
@@ -879,7 +872,7 @@ function transformMaps(unit) {
       scale: rt.scale
         ? { x: rt.scale.x ?? 0, y: rt.scale.y ?? 0, z: rt.scale.z ?? 0 }
         : { x: 1, y: 1, z: 1 },
-      rotation: { x: 0, y: 0, z: rt.field508?.z ?? 0 },
+      rotation: { x: rt.field508?.x ?? 0, y: rt.field508?.y ?? 0, z: rt.field508?.z ?? 0 },
       anchorMin: { x: rt.anchorMin?.x ?? 0, y: rt.anchorMin?.y ?? 0 },
       anchorMax: { x: rt.anchorMax?.x ?? 0, y: rt.anchorMax?.y ?? 0 },
       offset: { x: rt.offset?.x ?? 0, y: rt.offset?.y ?? 0 },
@@ -1140,6 +1133,8 @@ export function importGia(input) {
     }
   }
   if (clientUnits.length) {
+    // Register missing/legacy identities in the original wire-tree order first.
+    // Changing paint direction must not change the device-verified index repair.
     const forest = materializeControlForest(clientUnits, { reverseSiblings: false, idOffset: 1000 })
     warnings.push(...forest.warnings)
     if (!forest.rootCandidates.length) throw new Error('GIA 未找到客户端模板')
@@ -1167,6 +1162,9 @@ export function importGia(input) {
       root: holder,
     }
     ensureClientAssetIndices(clientProject, { warnings })
+    // Convert only real control siblings to the foreground-first editor order;
+    // the synthetic holder still lists independent templates in graph order.
+    for (const root of forest.rootCandidates) walk(root, node => node.children.reverse())
     if (!project) project = clientProject
   }
   return {

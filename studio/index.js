@@ -28,6 +28,8 @@ import { CANVAS_PRESETS } from './constants.js'
 import { MAX_PLAYERS, PLAYER_SLOTS, normalizePlayerCount, normalizePlayerIndex, normalizeServerLogic } from 'qxqy-server'
 import { exportGia, exportCombinedGia, importGia, inspectGia, validateGiaCompatibility, validateServerGiaCompatibility, exportScriptGia, importScriptGia, isScriptGia } from './gia/codec.js'
 import { collectUsedGuids, isValidGuid, nextFreeGuid } from './gia/guid.js'
+import { collectClientNodes } from './gia/client-order.js'
+import { scriptGuidSignature } from './control-guid-lua.js'
 
 // 脚本与测试从 qxqy-studio 包入口直接消费这些 GIA 工具导出。
 export { exportGia, exportCombinedGia, importGia, inspectGia, validateGiaCompatibility, validateServerGiaCompatibility, exportScriptGia, importScriptGia, isScriptGia }
@@ -95,9 +97,17 @@ function readControlGuidChanges(raw = []) {
       throw new Error('controlGuidChanges 包含无效或重复的变更记录')
     }
     ids.add(entry.id)
+    if (entry.batchId !== undefined && (typeof entry.batchId !== 'string' || !entry.batchId)) {
+      throw new Error('controlGuidChanges 包含无效的 batchId')
+    }
+    if (entry.scriptSignature !== undefined && !/^[a-f0-9]{64}$/.test(entry.scriptSignature)) {
+      throw new Error('controlGuidChanges 包含无效的 scriptSignature')
+    }
     return {
       id: entry.id, controlAsset: entry.controlAsset, controlId: entry.controlId, controlName: entry.controlName,
       oldGuid: controlGuid(entry.oldGuid), newGuid: controlGuid(entry.newGuid),
+      ...(entry.batchId ? { batchId: entry.batchId } : {}),
+      ...(entry.scriptSignature ? { scriptSignature: entry.scriptSignature } : {}),
     }
   })
 }
@@ -447,6 +457,14 @@ export function createStudio(seed, options = {}) {
     snap.serverLogic = serverLogic
     snap.migrationWarnings = [...migrationWarnings]
     snap.controlGuidChanges = toJson(controlGuidChanges)
+    if (activeAssetType === CLIENT_ASSET) {
+      const ordered = collectClientNodes(project, true)
+      snap.clientGuidAutofill = {
+        count: ordered.length,
+        templateCount: ordered.filter(({ parent }) => parent?.kind === 'server-container').length,
+        selectedOffset: ordered.findIndex(({ node }) => node.id === snap.selectedId),
+      }
+    }
     snap.scriptSync = toJson(scriptSync)
     assertNoUndefined(snap)
     return snap
@@ -499,8 +517,24 @@ export function createStudio(seed, options = {}) {
     const node = findNode(project.root, op.id ?? project.selectedId)
     if (!node || node.kind === 'server-container') throw new Error('仅客户端控件或客户端控件模板允许修改索引')
     const guid = controlGuid(op.guid)
-    const oldGuid = controlGuid(node.guid)
-    if (guid === oldGuid) return get()
+    controlGuid(node.guid)
+    if (op.autoFillClientGuids !== undefined && typeof op.autoFillClientGuids !== 'boolean') {
+      throw new Error('autoFillClientGuids 必须是布尔值')
+    }
+    const automatic = op.autoFillClientGuids === true
+    if (automatic && activeAssetType !== CLIENT_ASSET) {
+      throw new Error('自动填充仅支持客户端模板列表；服务端界面的索引需单独填写')
+    }
+    const targets = automatic ? collectClientNodes(project, true).map(({ node }) => node) : [node]
+    const base = guid - targets.indexOf(node)
+    const mappings = targets.map((target, offset) => ({
+      node: target, oldGuid: controlGuid(target.guid), newGuid: controlGuid(base + offset),
+    }))
+    const changes = mappings.filter(({ oldGuid, newGuid }) => oldGuid !== newGuid)
+    if (!changes.length) return get()
+    const remap = new Map(mappings.map(({ oldGuid, newGuid }) => [oldGuid, newGuid]))
+    if (remap.size !== mappings.length) throw new Error('客户端模板存在重复旧索引，无法自动填充；请先消除歧义')
+    const targetSet = new Set(targets)
     const nodes = []
     for (const entry of Object.values(projects)) {
       walk(entry.root, (candidate) => {
@@ -508,9 +542,12 @@ export function createStudio(seed, options = {}) {
         nodes.push({ node: candidate, project: entry })
       })
     }
-    if (nodes.some((entry) => entry.node !== node && Number(entry.node.guid) === guid)
-      || scripts.some((script) => Number(script.guid) === guid)) {
-      throw new Error(`控件索引 ${guid} 已被其他控件或脚本占用`)
+    const occupied = new Map([
+      ...nodes.filter((entry) => !targetSet.has(entry.node)).map(({ node }) => [Number(node.guid), node.name]),
+      ...scripts.map((script) => [Number(script.guid), script.path || 'Lua 脚本']),
+    ])
+    for (const { newGuid } of changes) {
+      if (occupied.has(newGuid)) throw new Error(`控件索引 ${newGuid} 已被「${occupied.get(newGuid)}」占用；请先填写它的实际索引。本次未修改任何索引。`)
     }
     // These three fields are explicit GUID references. Internal ids, button
     // state ids, image ids and Lua numbers must never be replaced by value.
@@ -518,28 +555,36 @@ export function createStudio(seed, options = {}) {
     const collectReference = (owner, key, entry) => {
       const value = owner?.[key]
       if ((typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value.trim())))
-        && Number(value) === oldGuid) references.push({ owner, key, project: entry.project })
+        && remap.has(Number(value)) && remap.get(Number(value)) !== Number(value)) {
+        references.push({ owner, key, project: entry.project, oldGuid: Number(value), newGuid: remap.get(Number(value)) })
+      }
     }
     for (const entry of nodes) {
       collectReference(entry.node, 'referencedPrefabId', entry)
       collectReference(entry.node, 'itemPrefabId', entry)
       collectReference(entry.node.giaRaw, 'templateRefSlot', entry)
     }
-    if (references.length && nodes.filter((entry) => Number(entry.node.guid) === oldGuid).length !== 1) {
-      throw new Error(`旧索引 ${oldGuid} 在多棵资产树中重复，无法确定模板引用归属；请先消除歧义后修改`)
-    }
-    const change = {
-      id: randomUUID(), controlAsset: activeAssetType, controlId: node.id,
-      controlName: node.name, oldGuid, newGuid: guid,
+    const occurrences = new Map()
+    for (const { node } of nodes) occurrences.set(Number(node.guid), (occurrences.get(Number(node.guid)) || 0) + 1)
+    for (const { oldGuid } of references) {
+      if (occurrences.get(oldGuid) !== 1) throw new Error(`旧索引 ${oldGuid} 在多棵资产树中重复，无法确定模板引用归属；请先消除歧义后修改`)
     }
     // All validation is complete before changing either tree or the ledger.
-    node.guid = guid
+    // One batch is a simultaneous permutation, never a chain of replacements.
+    const batchId = automatic ? randomUUID() : ''
+    const scriptSignature = scriptGuidSignature(scripts)
+    for (const { node, oldGuid, newGuid } of changes) {
+      node.guid = newGuid
+      controlGuidChanges.push({
+        id: randomUUID(), controlAsset: activeAssetType, controlId: node.id,
+        controlName: node.name, oldGuid, newGuid, scriptSignature, ...(batchId ? { batchId } : {}),
+      })
+    }
     const changedProjects = new Set([project])
-    for (const { owner, key, project: referencedProject } of references) {
-      owner[key] = typeof owner[key] === 'string' ? String(guid) : guid
+    for (const { owner, key, project: referencedProject, newGuid } of references) {
+      owner[key] = typeof owner[key] === 'string' ? String(newGuid) : newGuid
       changedProjects.add(referencedProject)
     }
-    controlGuidChanges.push(change)
     for (const changed of changedProjects) changed.version += 1
     return get()
   }

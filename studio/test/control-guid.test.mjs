@@ -31,7 +31,8 @@ test('control GUID edit preserves internal ids, selection, parent and script/but
   assert.equal(node(studio, 'n6').children[0].id, target.id)
   assert.equal(node(studio, 'n9').imageId, oldGuid)
   assert.deepEqual(result.scripts, before.scripts)
-  assert.deepEqual(result.controlGuidChanges.map(({ id, ...entry }) => entry), [{
+  assert.match(result.controlGuidChanges[0].scriptSignature, /^[a-f0-9]{64}$/)
+  assert.deepEqual(result.controlGuidChanges.map(({ id, scriptSignature, ...entry }) => entry), [{
     controlAsset: SERVER, controlId: target.id, controlName: target.name, oldGuid, newGuid: 19001,
   }])
   assert.equal(typeof result.controlGuidChanges[0].id, 'string')

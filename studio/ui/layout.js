@@ -170,20 +170,27 @@ export function invertMatrix(matrix) {
  * space. Scale and rotation are both about the RectTransform pivot.
  */
 export function localRectMatrix(box, transform) {
-  const rotation = transform.rotation || { z: transform.localRotationZ }
+  const rotation = transform.rotation || { x: transform.localRotationX, y: transform.localRotationY, z: transform.localRotationZ }
   const scale = transform.scale || { x: transform.localScaleX, y: transform.localScaleY }
   const pivot = transform.pivot || { x: transform.pivotX, y: transform.pivotY }
   const radians = num(rotation?.z) * Math.PI / 180
   const cos = Math.cos(radians)
   const sin = Math.sin(radians)
+  // ROTXY2 PC device: single-axis orthographic compression, edge-on at 90°,
+  // and visible mirrored backs. Mixed axes follow Runtime's Z-X-Y Euler
+  // convention (Ry * Rx * Rz); that composition remains simulator policy.
+  const rx = num(rotation?.x) * Math.PI / 180
+  const ry = num(rotation?.y) * Math.PI / 180
+  const cx = Math.cos(rx), sx = Math.sin(rx), cy = Math.cos(ry), sy = Math.sin(ry)
+  const clean = value => Math.abs(value) < 1e-12 ? 0 : value
   const scaleX = num(scale?.x, 1)
   const scaleY = num(scale?.y, 1)
   const pivotX = box.left + box.width * num(pivot?.x, 0.5)
   const pivotY = box.bottom + box.height * num(pivot?.y, 0.5)
-  const a = cos * scaleX
-  const b = sin * scaleX
-  const c = -sin * scaleY
-  const d = cos * scaleY
+  const a = clean(cy * cos + sy * sx * sin) * scaleX
+  const b = clean(cx * sin) * scaleX
+  const c = clean(-cy * sin + sy * sx * cos) * scaleY
+  const d = clean(cx * cos) * scaleY
   return {
     a,
     b,

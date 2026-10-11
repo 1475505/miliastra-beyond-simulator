@@ -89,6 +89,8 @@ qxqy_studio_play { "action": "view",  "args": { "playerIndex": 2 } }     ← 切
 
 **AI 必须把索引变更与 Lua 引用同步作为同一项修复完成：**
 
+用户从编辑器「复制提示词给 AI」后，先按任务里的存档路径重新加载磁盘文件；Web/MCP 不共享内存，不能沿用另一进程的旧快照。按提示词读取顶层 `controlGuidChanges` 的全部新旧映射和 `assets.scripts`，再依以下步骤语义核对。共享 Host 的 `previewControlGuidSync` / `syncControlGuidReferences` 是会连非索引内容一起修改的全量文本替换，仅在用户明确选择这种方式时使用。边界及备份见 [Lua 索引同步](../studio/docs/control-guid-sync.md)。AI 完成后，用户通过「AI 已处理，重新载入存档」回到编辑器。
+
 1. 先 `get` 读取当前控件资产、全部脚本和 `controlGuidChanges`；需要查看另一类资产时，用 `selectAsset` 的 `assetType` 切换后再读取。变更记录按时间排列，含 `id`、`controlAsset`、`controlId`、`controlName`、`oldGuid`、`newGuid`；用资产和内部控件身份确认目标。连续变更应沿记录追到该控件的最终索引，不能逐条盲替换数字。
 2. 检查全部相关脚本的索引引用，包括直接调用、常量、配置表、别名和 `prefabIndex` 身份校验，按语义修改为最终索引。`game.InstantiateClientUIControl` 的首参是模板索引；`game.GetClientUIControl` 的参数与控件 `Id` 是运行时实例 ID，不能当作模板索引替换。图片 ID、脚本映射 ID、同级顺序和无关数值也不能随之改动。
 3. 同步存档 `scripts[].source` 与对应的工作区 `.lua` 源文件。试玩优先使用非空 `source`，仅当它为空时读取 `path`；只改外部文件可能仍会运行旧源码。路径脚本没有内联内容时保持该存储方式，但必须检查实际文件。找不到相关源码或无法判定引用时，保留未处理记录并说明缺项。
@@ -171,7 +173,7 @@ play 动作：`start`（重建运行时；可带 `canvasId` 指定设备画布�
 
 常用 patch op：`select`（id）、`pick`（x/y 命中）、`setCanvas`（canvasId）、`addScript` / `updateScript` / `removeScript`（脚本由存档统一管理；服务端容器会被拒绝）、`setServerLogic`（规则定义）、`newAsset`（assetType）、`addTemplate`、`add`（parentId/kind/name）、`reparent`、`moveSibling`（direction=up/down）、`remove`、`set`（id/key/value）、`setControlGuid`（id/guid，改当前资产的客户端控件索引）、`acknowledgeControlGuidChanges`（changeIds，核验 Lua 同步后清理指定变更记录）、`replace`（project）。数据写操作必须带 `expectedRevision`。
 
-`set` 常用 key：变换类 `posX/posY/width/height`、`rotationZ`、`anchorType`、`anchorMinX/Y`、`anchorMaxX/Y`、`pivotX/Y`；业务类 `text`、`fontSize`、`imageId`、`enableMask`、`enableFill`、`fillType`、`fillAmount`(0–1)、按钮四状态 `unavailableChildId/hoverChildId/pressedChildId/selectedChildId`、`syncAllDevices`；颜色接受 `#AARRGGBB`。以上是常用子集，未列出的字段不要猜——`set` 对不认识的 key 会直接报错，以报错为准。
+`set` 常用 key：变换类 `posX/posY/width/height`、`rotationX/rotationY/rotationZ`（度）、`anchorType`、`anchorMinX/Y`、`anchorMaxX/Y`、`pivotX/Y`；业务类 `text`、`fontSize`、`imageId`、`enableMask`、`enableFill`、`fillType`、`fillAmount`(0–1)、按钮四状态 `unavailableChildId/hoverChildId/pressedChildId/selectedChildId`、`syncAllDevices`；颜色接受 `#AARRGGBB`。X/Y 支持正交压缩与背面镜像；混合轴及嵌套倾转为模拟器策略，范围见 `studio/docs/control-support.md`。以上是常用子集，未列出的字段不要猜——`set` 对不认识的 key 会直接报错，以报错为准。
 
 脚本 `require` 使用导入根：脚本映射路径去掉 `.lua` 后，前面加 `default_import_file/`。例如映射路径为 `workspace/flappy-fish/draws.lua` 时，写：`local ok, mod = pcall(require, "default_import_file/workspace/flappy-fish/draws")`。裸路径只为旧存档兼容，新脚本一律使用该前缀。
 

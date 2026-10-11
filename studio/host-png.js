@@ -459,6 +459,11 @@ export function renderPaintPng(paint, canvasWidth, canvasHeight, options = {}) {
 }
 
 function editorBoxStyle(item) {
+  if (item.renderMatrix) {
+    const center = applyMatrix(item.renderMatrix, item.centerX, item.centerY)
+    return { kind: item.kind, width: item.width, height: item.height,
+      matrix: { ...item.renderMatrix, tx: center.x, ty: center.y } }
+  }
   return {
     kind: item.kind,
     left: finite(item.renderLeft, item.left),
@@ -488,8 +493,7 @@ function drawEditorItem(ctx, item, canvasHeight, selectedId, assets) {
   const box = editorBoxStyle(item)
   if (box.width <= 0 || box.height <= 0) return
   ctx.save()
-  ctx.translate(box.left + box.width / 2, canvasHeight - box.bottom - box.height / 2)
-  ctx.rotate(-box.rotationZ * Math.PI / 180)
+  applyItemTransform(ctx, box, canvasHeight)
   const x = -box.width / 2
   const y = -box.height / 2
   if (item.kind === 'image') {
