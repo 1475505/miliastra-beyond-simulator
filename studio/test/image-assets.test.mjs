@@ -72,7 +72,7 @@ test('two stores share disk downloads, restart works offline, refresh and corrup
   assert.equal(requests.length, 4)
   await writeFile(join(store.directory, '101001.png'), 'broken')
   await store.get(101001)
-  assert.equal(requests.length, 6)
+  assert.equal(requests.length, 5, 'regenerating damaged PNG reuses cached border metadata')
   store.fetcher = async () => { throw new Error('offline') }
   await assert.rejects(store.refresh(101001), /offline/)
   assert.deepEqual((await store.get(101001)).data, assets[0].data, 'failed refresh preserves good cached bytes')

@@ -1,5 +1,6 @@
-import { loadBrowserImage, subscribeImageRefresh } from '../studio/assets/browser.js'
+import { loadBrowserImageAsset, loadBrowserImageMetadata, subscribeImageRefresh } from '../studio/assets/browser.js'
 import { tintedImage } from '../studio/assets/raster.js'
+import { rasterizeSlices, resolveImageType, supportsImageStretch } from '../studio/assets/image-stretch.js'
 import { imageFillRect } from '../studio/play/image-fill.js'
 import { imageAssetKey, imageSourceName } from '../studio/assets/catalog.js'
 
@@ -14,13 +15,13 @@ export function createImagePreview(React) {
   return function ImagePreview({ item }) {
     const key = imageAssetKey(item.imageId, item.imageSource)
     const ref = React.useRef(null)
-    const [state, setState] = React.useState({ image: null, error: '' })
+    const [state, setState] = React.useState({ image: null, meta: null, error: '' })
     const [revision, setRevision] = React.useState(0)
     React.useEffect(() => subscribeImageRefresh(changedKey => { if (changedKey === key) setRevision(v => v + 1) }), [key])
     React.useEffect(() => {
       let active = true
       setState({ image: null, error: '' })
-      loadBrowserImage(item.imageId, item.imageSource).then(image => { if (active) setState({ image, error: '' }) }, error => {
+      loadBrowserImageAsset(item.imageId, item.imageSource).then(({ image, meta, error }) => { if (active) setState({ image, meta, error }) }, error => {
         if (active) setState({ image: null, error: error.message })
       })
       return () => { active = false }
@@ -28,15 +29,42 @@ export function createImagePreview(React) {
     React.useEffect(() => {
       const el = ref.current
       if (!state.image || !el) return
-      const image = tintedImage(state.image, item.imageColor, canvas)
+      const raster = resolveImageType(state.meta, item.imageType) === 'Stretch'
+        ? rasterizeSlices(state.image, state.meta, item.width, item.height, canvas) : state.image
+      const image = tintedImage(raster, item.imageColor, canvas)
       el.width = image.width; el.height = image.height
       const ctx = el.getContext('2d')
       const fill = item.enableFill ? imageFillRect(item, el.width, el.height) : null
       if (fill) { ctx.beginPath(); ctx.rect(fill.x + el.width / 2, fill.y + el.height / 2, fill.width, fill.height); ctx.clip() }
       ctx.globalAlpha = ((Number(item.imageColor ?? 0xffffffff) >>> 24) & 255) / 255
       ctx.drawImage(image, 0, 0)
-    }, [state.image, item.imageColor, item.enableFill, item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillAmount])
+    }, [state.image, state.meta, item.imageType, item.width, item.height, item.imageColor, item.enableFill, item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillAmount])
     if (!state.image) return e('span', { className: 'qxsim-box-label', title: state.error, role: state.error ? 'status' : undefined }, state.error ? `图片 ${item.imageId} 加载失败` : `加载图片 ${item.imageId}…`)
-    return e('canvas', { ref, 'data-image-id': item.imageId, 'data-image-source': imageSourceName(item.imageSource), 'aria-label': `图片 ${item.imageId}`, style: { display: 'block', position: 'absolute', inset: 0, width: '100%', height: '100%' } })
+    return e('canvas', { ref, title: state.error, 'data-image-id': item.imageId, 'data-image-source': imageSourceName(item.imageSource), 'data-image-type': resolveImageType(state.meta, item.imageType), 'aria-label': `图片 ${item.imageId}`, style: { display: 'block', position: 'absolute', inset: 0, width: '100%', height: '100%' } })
+  }
+}
+
+export function createImageTypeField(React) {
+  const e = React.createElement
+  return function ImageTypeField({ imageId, imageSource, value, commit }) {
+    const key = imageAssetKey(imageId, imageSource)
+    const [state, setState] = React.useState({ key: '', meta: undefined, error: '' })
+    const [revision, setRevision] = React.useState(0)
+    React.useEffect(() => subscribeImageRefresh(changed => { if (changed === key) setRevision(v => v + 1) }), [key])
+    React.useEffect(() => {
+      let active = true
+      setState({ key, meta: undefined, error: '' })
+      loadBrowserImageMetadata(imageId, imageSource).then(meta => { if (active) setState({ key, meta, error: '' }) }, error => {
+        if (active) setState({ key, meta: undefined, error: error.message })
+      })
+      return () => { active = false }
+    }, [key, revision])
+    const ready = state.key === key && state.meta !== undefined
+    const stretch = ready && supportsImageStretch(state.meta)
+    return e('label', { className: 'qxsim-field' }, e('span', { className: 'qxsim-field-label' }, '图片类型'),
+      e('select', { 'aria-label': '图片类型', disabled: !stretch, value: ready ? resolveImageType(state.meta, value) : '', onChange: event => commit('imageType', event.target.value) },
+        !ready ? e('option', { value: '' }, state.error ? '元数据加载失败' : '读取素材边界…') : e('option', { value: 'Basic' }, '基础'),
+        stretch ? e('option', { value: 'Stretch' }, '拉伸') : null),
+      state.error ? e('small', { role: 'status' }, state.error) : null)
   }
 }

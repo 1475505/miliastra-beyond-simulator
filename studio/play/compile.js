@@ -86,6 +86,7 @@ export function compileControl(node, canvasId, scriptsByNode = null) {
   }
   if (node.kind === 'image') {
     spec.imageSource = node.imageSource
+    spec.imageType = node.imageType ?? null
     spec.imageId = node.imageId ?? 0
     spec.imageColor = node.imageColor
     spec.raycastTarget = node.raycastTarget === true

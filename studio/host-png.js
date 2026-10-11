@@ -3,6 +3,7 @@ import { imageFillRect } from './play/image-fill.js'
 import { imageMaskSpec, imageMaskCoverage, groupMaskedPaint } from './play/image-mask.js'
 import { applyMatrix, invertMatrix } from './ui/layout.js'
 import { tintedImage } from './assets/raster.js'
+import { rasterizeSlices, resolveImageType } from './assets/image-stretch.js'
 import { imageAssetKey } from './assets/catalog.js'
 import { scrollBarGeometry } from './play/scroll-geometry.js'
 
@@ -193,10 +194,13 @@ function drawPrimitive(ctx, item, width, height, assets) {
   const assetKey = imageAssetKey(item.imageId, item.imageSource)
   const image = assets?.images?.get(assetKey)
   if (item.primitive === 'sprite' && image) {
-    const key = `${assetKey}:${Number(item.imageColor ?? 0xffffffff) & 0xffffff}`
+    const meta = assets.imageMetadata?.get(assetKey)
+    const type = resolveImageType(meta, item.imageType)
+    const key = `${assetKey}:${Number(item.imageColor ?? 0xffffffff) & 0xffffff}:${type}:${type === 'Stretch' ? `${width}:${height}` : ''}`
     let tinted = assets.tints.get(key)
     if (!tinted) {
-      tinted = tintedImage(image, item.imageColor, loadCanvas().createCanvas)
+      const raster = type === 'Stretch' ? rasterizeSlices(image, meta, width, height, loadCanvas().createCanvas) : image
+      tinted = tintedImage(raster, item.imageColor, loadCanvas().createCanvas)
       assets.tints.set(key, tinted)
     }
     ctx.globalAlpha *= color.a
@@ -443,7 +447,7 @@ export function renderPaintPng(paint, canvasWidth, canvasHeight, options = {}) {
   ctx.scale(size.pixelRatio, size.pixelRatio)
   if (options.background !== 'transparent') drawStageBackground(ctx, size.width, size.height)
   const items = Array.isArray(paint) ? paint : []
-  const assets = { images: options.images, tints: new Map() }
+  const assets = { images: options.images, imageMetadata: options.imageMetadata, tints: new Map() }
   drawPaintGroups({ canvas, ctx, x: 0, y: 0 }, groupMaskedPaint(items), size, assets)
   return {
     data: toPng(canvas),
@@ -490,9 +494,12 @@ function drawEditorItem(ctx, item, canvasHeight, selectedId, assets) {
   const y = -box.height / 2
   if (item.kind === 'image') {
     ctx.save()
-    const fill = item.enableFill ? imageFillRect(item, box.width, box.height) : null
+    // Slice before parent/local scaling: borders are local UI units.
+    const width = Math.max(0, finite(item.width, box.width)), height = Math.max(0, finite(item.height, box.height))
+    ctx.scale(width ? box.width / width : 1, height ? box.height / height : 1)
+    const fill = item.enableFill ? imageFillRect(item, width, height) : null
     if (fill) { ctx.beginPath(); ctx.rect(fill.x, fill.y, fill.width, fill.height); ctx.clip() }
-    drawPrimitive(ctx, item, box.width, box.height, assets)
+    drawPrimitive(ctx, item, width, height, assets)
     ctx.restore()
   } else if (item.kind === 'textbox' || item.kind === 'textwindow') {
     drawTextItem(ctx, item, box.width, box.height)
@@ -548,7 +555,7 @@ export function renderEditorPng(snapshot, options = {}) {
   drawStageBackground(ctx, size.width, size.height, { checker: true })
   const boxes = Array.isArray(snapshot?.boxes) ? snapshot.boxes : []
   const selectedId = snapshot?.selectedId
-  const assets = { images: options.images, tints: new Map() }
+  const assets = { images: options.images, imageMetadata: options.imageMetadata, tints: new Map() }
   for (const item of boxes) {
     if (!item || item.kind === 'server-container' || item.visible === false) continue
     drawEditorItem(ctx, item, size.height, selectedId, assets)

@@ -1,6 +1,6 @@
 import { createScriptSyncPanel } from './script-sync.js'
 import { createPlayLauncher } from './play-launcher.js'
-import { createImagePreview } from './image-preview.js'
+import { createImagePreview, createImageTypeField } from './image-preview.js'
 import { createColorField } from './color-field.js'
 import { isRemoteImage, imageAssetKey } from '../studio/assets/catalog.js'
 import { refreshBrowserImage } from '../studio/assets/browser.js'
@@ -10,6 +10,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
     const ScriptSyncPanel = createScriptSyncPanel(React)
     const usePlayLauncher = createPlayLauncher(React)
     const ImagePreview = createImagePreview(React)
+    const ImageTypeField = createImageTypeField(React)
     const ColorField = createColorField(React)
 
     const STYLE_ID = 'qxqy-simulator-style'
@@ -203,7 +204,8 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
           renderField(f.reverseMaskArea),
         ]
         typeSections = e(React.Fragment, null,
-          e(Section, { title: '图片设置' }, renderField(f.imageSource), renderField(f.imageId), renderField(f.imageColor)),
+          e(Section, { title: '图片设置' }, renderField(f.imageSource), renderField(f.imageId),
+            e(ImageTypeField, { imageId: f.imageId?.value, imageSource: f.imageSource?.value, value: f.imageType?.value, commit }), renderField(f.imageColor)),
           e(Section, { title: '遮罩设置' }, maskFields))
       }
       const typeTitle = inspector.kind === 'textbox' ? '文本框设置' : inspector.kind === 'button' ? '按钮设置' : `${inspector.label}设置`

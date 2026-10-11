@@ -39,8 +39,7 @@ const KIND_RW = {
   container: ['isolateNavigation', 'disableKeyEventPassthrough', 'disableCursorEventPassthrough', 'showCursor'],
   textbox: ['text', 'fontSize', 'fontColor', 'bgColor', 'enableOutline', 'outlineColor', 'horizontalAlignment', 'verticalAlignment', 'adaptiveFontSize', 'minimumFontSize'],
   textwindow: ['interactable', 'showScrollBar', 'text', 'fontSize', 'fontColor', 'bgColor', 'enableOutline', 'outlineColor', 'horizontalAlignment', 'verticalAlignment', 'adaptiveFontSize', 'minimumFontSize'],
-  // Documented RW. Observed: assigning after Instantiate reports
-  // "cannot set imageType, no such field". Keep it off the Lua surface.
+  // imageType is admitted separately by the host's preview capability policy.
   image: ['imageColor', 'enableMask', 'enableSoftEdge', 'softEdgeMode', 'softEdgeWidthX', 'softEdgeWidthY', 'horizontalSoftRange', 'verticalSoftRange', 'reverseMaskArea', 'fillType', 'fillHorizontalType', 'fillVerticalType', 'fillRadial90Type', 'fillRadialType', 'fillAmount'],
   button: ['interactable', 'clickAudioId', 'raycastTarget'],
   cursor: ['raycastTarget'],
@@ -75,6 +74,7 @@ const KIND_METHODS = {
 }
 
 export function luaFieldAccess(control, key) {
+  if (control.kind === 'image' && key === 'imageType' && control.runtime.canSelectImageType(control.imageId, control.imageSource)) return 'rw'
   if (BASE_RO.includes(key) || (KIND_RO[control.kind] || []).includes(key)) return 'ro'
   if (BASE_RW.includes(key) || (KIND_RW[control.kind] || []).includes(key)) return 'rw'
   return null
@@ -398,6 +398,7 @@ export class Control {
 
   // The value a Lua read returns; rotation reads are normalised (see readbackEuler).
   luaFieldValue(key) {
+    if (key === 'imageType') return this.imageType ?? 'Stretch'
     const index = ROTATION_FIELDS.indexOf(key)
     if (index < 0) return this[key]
     return readbackEuler(this.localRotationX, this.localRotationY, this.localRotationZ)[index]
@@ -532,6 +533,9 @@ export class Control {
   }
 
   SetImage(source, id) {
+    const previous = this.imageSource?.Name || this.imageSource
+    const next = source?.Name || source
+    if (id !== this.imageId || previous !== next) this.imageType = null
     this.imageSource = source
     this.imageId = id
     this.markPlayDirty()

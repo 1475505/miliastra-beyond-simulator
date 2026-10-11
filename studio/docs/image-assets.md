@@ -46,13 +46,15 @@ Web、MCP、DSH 使用同一套 `ImageAssetStore`，同一系统用户默认共�
 
 静态 PNG 按元数据的 `m_Rect` 还原逻辑宽高，用 `m_RD.textureRectOffset` 恢复左下方向的透明留白。独立 PNG 不再按图集中 `textureRect.x/y` 二次裁切；浮点裁切边界按最近整数像素取整。已是完整逻辑尺寸的 PNG 保留原画布。尺寸不匹配、超大图和非 `None` 的 packingRotation 明确失败，避免静默画错。元件 PNG 校验清单尺寸后保留原图透明边界，不套用静态图片的裁切规则。
 
-这是素材提供方数据驱动的**模拟器预览策略**。支持控件尺寸/旋转、原图 alpha、`imageColor` RGB 乘色/alpha，以及已有水平和垂直填充。首版不使用 `m_Border` 实现九宫格拉伸，也未新增径向填充、羽化、材质或动效语义；不据此推断真机视觉一致。
+这是素材提供方数据驱动的**模拟器预览策略**。支持控件尺寸/旋转、原图 alpha、`imageColor` RGB 乘色/alpha，以及水平和垂直填充。基础／九切片拉伸见下节；矩形遮罩与软边见 [控件支持](control-support.md#基础矩形遮罩2026-10-11)。径向填充、材质及动效未在此处扩展，不据此推断真机视觉一致。
 
 网络和解码在宿主/显示层，Lua Worker 与存档不携带图片字节。Pixi 异步加载完成后主动重绘，静态或暂停场景也能更新；删除/换来源/换 ID 后丢弃过期结果，纹理按来源+ID 共用并在不再使用时释放。只有来源变化也会触发增量场景更新。编辑器图片使用 Canvas2D 乘色。Host 截图先冻结当前快照，再有界等待资源准备，不调用 step；失败项通过截图元数据 `assetWarnings` 返回来源、ID 与错误，并使用占位。
 
 底层 `renderPaintPng` / `renderScenePng` / `renderEditorPng` 仍是同步绘制函数，可通过 `options.images` 传已解码图片 Map，键由 `imageAssetKey(id, source)` 生成（例如 `Prefab:10003004`）；有网络准备职责的 `SimulatorController.uiScreenshot()` 与 DSH `requestUiScreenshot()` 为异步函数，调用方需 await。
 
 ## 验证与证据
+
+图片类型与边界缓存的新规则见文末；以下保留原始图元/元件接入的历史验证。
 
 - 环境：Windows、Node 22.23.2、Pixi 8.20.0、`@napi-rs/canvas` 0.1.100、Edge。
 - `studio/test/image-assets.test.mjs`：白名单、两 Store 并发文件锁、离线重启、失败退避/刷新保留、损坏缓存修复、独立几何像素预期、RGB/alpha/填充、共享纹理以及无浏览器 Host 截图。
@@ -63,3 +65,47 @@ Web、MCP、DSH 使用同一套 `ImageAssetStore`，同一系统用户默认共�
 - 元件扩展提交前已完成一次性验证：来源白名单、单 PNG 下载、并发去重/离线/刷新失败保留、透明边界、同 ID 不同来源乘色、真实 Lua 仅改来源的增量、JSON 保留/GIA 警告、编辑与试玩截图，以及 Web/DSH HTTP 与真实 Edge 画面和刷新检查；这些元件专用验证脚本及用例在验收后按要求删除。
 - 清理一次性测试前：`pnpm install --frozen-lockfile` 和 `pnpm test` 通过（315 通过、8 项环境可选跳过）；单独启用 Edge 的图片/元件与 DSH 素材测试 5/5 通过。
 - `evidence_source=observed`，运行端 `simulator`，`device_status=not_required`（验证新增预览/缓存功能，不宣称千星真机对齐）。DSH Desktop 自定义协议的 HTTP 缓存效果未据普通浏览器测试推定。
+
+## 图片类型：基础／拉伸（2.0.13）
+
+参考 `D:/Codes/Miliastra-image-editor-webui` 提交 `20659b3` 的 `frontend/src/imageStretch.ts`、`backend/app/image_stretch.py` 和 `docs/image-stretch.md`，按用户要求对齐：
+
+- **基础 `Basic`**：整张贴图随控件宽高缩放。
+- **拉伸 `Stretch`**：使用原始 `m_Border`（X 左、Y 下、Z 右、W 上）三切片／九切片。角保持本地 UI 尺寸，边单向伸长、中心双向伸长。边界不乘 2/3，也不除以 `m_PixelsToUnits`；父级缩放在切片之后应用。
+- 源边界超过源图尺寸时先归一化；控件小于左右／上下边界和时，分别按轴等比例压缩边界。零宽／零高源中心仍绘制目标区域，重复接缝的双线性样本，不留空洞。
+- 任一边界大于零时支持且默认拉伸；明确选择基础会保留。边界为零或缺失、基础图元、Prefab 图标都按基础绘制。换来源/ID 时清除旧类型选择，重新按素材确定默认。
+- Authoring `imageType` 为 `null | "Basic" | "Stretch"`，null 表示未指定、由素材边界选择。编辑器类型下拉在边界读取期间禁用，已知不支持时只显示基础。保存保留明确的选择；未知 GIA 类型值单独保存在 `giaRaw.imageSlotType`，显式编辑才替换。
+
+Lua 使用已声明的枚举字段：
+
+```lua
+image:SetImage(Enum.ImageSource.StaticReference, 106030)
+image.imageType = Enum.ImageType.Basic
+-- 或：
+image.imageType = Enum.ImageType.Stretch
+```
+
+**Lua 兼容边界：** Runtime 不联网，也不以异步加载结果决定脚本字段是否存在。Studio 对远程静态图片白名单接受 Basic/Stretch 选择请求，类型未指定时读回 Stretch；三种渲染端根据实际边界统一解析，不支持切片的图片即使收到 Stretch 仍按基础绘制。这一请求层策略不证明该 ID 的真机 `imageType` 可写。基础图元 100001–100006、Prefab 与其他未知来源仍保留此前的字段不可写行为。正式脚本对未实机确认的素材继续用 `pcall`；直接使用独立 Runtime 时需注入 `canSelectImageType` 策略。
+
+### 元数据缓存与旧版本兼容
+
+原始 border JSON 独立保存到同一 `QXQY_IMAGE_CACHE_DIR` 下的 `border-v1/<源哈希>/<id>.json`，复用文件锁、并发去重、失败退避和显式刷新机制。首次静态图片仍只需要 PNG+JSON 两次源请求；PNG 与元数据接口的并发请求共享同一次下载。
+
+旧缓存只有 PNG 时，保留旧文件，仅按需补下载一次元数据。已有 PNG 但补元数据失败时继续基础显示，属性面板/截图 `assetWarnings` 明确报告，不将错误当作“素材无边框”。元数据源 404 缓存为缺失，按基础处理；网络/JSON 错误保持失败并可重试。浏览器通过同源 `/qxqy-assets/sprite-v1/<id>.json` 取得归一化边界，同样有 12 小时 HTTP 缓存和 ETag。手动刷新素材同时刷新 PNG 和边界。
+
+PNG 截图和 DOM 编辑画布共用逐像素双线性九切片采样；单张目标栅格最长边限制为 4096 后缩放显示。Pixi 使用共享纹理加独立 UV 网格（最多九个四边形），支持零宽中心并在类型/尺寸改变时释放旧网格。尺寸、填充、透明度、父级变换和已有遮罩继续参与渲染。底层 Host 绘制可传 `options.imageMetadata` Map，键与图片相同。
+
+### GIA 类型槽与证据
+
+参考仓库报告了 7.1.0 客户端模板 `基础&拉伸图片gia.gia`（SHA256 `10f04eba8af9d18a3ada66e88f328e15bbccacf0567c4cf1070e76707fcaaf6b`）：`Details.imageSlot(84).field504` 省略/0 为基础、1 为拉伸。模拟器按此读写，没有采用其旧素材组 `image_settings.field5` 的猜测映射，也不改 `ImageConfig.field507=2`。本轮未取得该原始样本，仅以代码与说明交叉核对，映射证据为 `provided_unverified`；自包含独立 wire 测试只证明本实现的编码位置，真机回导状态为 `pending`。
+
+GIA 无“按素材自动”值：尚未明确选择类型时暂按基础导出并提示；需要拉伸可在属性面板明确选择，或在真机通过 Lua 设置。字段支持不改变元件图片来源仍未映射的边界。
+
+### 本轮验证
+
+Windows / Node 22.23.2 / Pixi 8.20.0 / Edge，`evidence_source=observed`、运行端 `simulator`、`device_status=not_required`（本轮预览扩展）。
+
+- 提交前已完成一次性验证：合成色块检查九切片/三切片边界、小尺寸压缩、零宽中心混合值、透明度/填充、父级缩放、网格释放、旧缓存补元数据、404 与网络失败区分、真实 Lua 类型切换及 JSON/GIA 往返。
+- 独立编码的客户端 slot84.field504 字节验证基础省略/拉伸=1和未知枚举保留；真实 DOM/Pixi 验证类型下拉、零中心像素、增量更新、GPU 几何释放、零边界素材和缓存请求数。这些图片类型专用测试文件及新增用例在验收后按要求删除。
+- 清理一次性测试前，`pnpm install --frozen-lockfile`、根 `pnpm test` 通过（333 通过，9 环境可选跳过）；单独启用 Edge 的图片类型/缓存/遮罩检查合计 4/4 通过。
+- 实际源抽查 106030：90×90、四边 45，按 407.5×265 绘制；再次以离线 Store 加载 PNG/边界无告警。素材中心本身透明，中心采样透明不等于切片漏绘。100001/105222 元数据边界全零。

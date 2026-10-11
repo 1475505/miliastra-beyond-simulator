@@ -28,6 +28,10 @@ export function imageSourceName(source) {
 
 export function imageAssetKey(id, source) { return `${imageSourceName(source)}:${id}` }
 
+export function canSelectImageType(id, source) {
+  return imageSourceName(source) === 'StaticReference' && isRemoteImage(id, source)
+}
+
 export function isRemoteImage(id, source) {
   const name = imageSourceName(source)
   if (name === 'Prefab') return prefabImageSize(id) !== null
@@ -39,4 +43,8 @@ export function imageAssetUrl(id, revision = 0, source) {
   if (!['StaticReference', 'Prefab'].includes(name)) throw new Error(`Unsupported image source: ${name}`)
   const version = name === 'Prefab' ? PREFAB_CACHE_VERSION : IMAGE_CACHE_VERSION
   return `${IMAGE_ASSET_PREFIX}${version}/${id}.png${revision ? `?refresh=${revision}` : ''}`
+}
+
+export function imageMetadataUrl(id, revision = 0, source) {
+  return imageAssetUrl(id, revision, source).replace('.png', '.json')
 }

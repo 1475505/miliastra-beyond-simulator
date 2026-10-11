@@ -36,7 +36,7 @@ export class DiskAssetStore {
 
   async download(path, limit, signal, refresh) {
     const response = await this.fetcher(new URL(path, this.source), { signal, redirect: 'error', cache: refresh ? 'no-cache' : 'default' })
-    if (!response.ok) throw new Error(`Asset source returned HTTP ${response.status}`)
+    if (!response.ok) throw Object.assign(new Error(`Asset source returned HTTP ${response.status}`), { status: response.status })
     if (Number(response.headers.get('content-length')) > limit) throw new Error('Asset response too large')
     const chunks = []
     let size = 0

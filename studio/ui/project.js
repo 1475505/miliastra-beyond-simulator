@@ -197,7 +197,7 @@ const DIRECT_FIELDS = new Set([
   'isolateNavigation', 'disableKeyEventPassthrough', 'disableCursorEventPassthrough', 'showCursor',
   'fontSize', 'adaptiveFontSize', 'minimumFontSize', 'fontColor', 'bgColor',
   'enableOutline', 'outlineColor', 'horizontalAlignment', 'verticalAlignment', 'text',
-  'imageSource', 'imageId', 'imageColor', 'enableMask', 'enableSoftEdge', 'softEdgeMode',
+  'imageSource', 'imageType', 'imageId', 'imageColor', 'enableMask', 'enableSoftEdge', 'softEdgeMode',
   'softEdgeWidthX', 'softEdgeWidthY', 'horizontalSoftRange', 'verticalSoftRange',
   'enableFill', 'fillType', 'fillHorizontalType', 'fillVerticalType',
   'fillRadial90Type', 'fillRadialType', 'fillAmount', 'reverseMaskArea',
@@ -263,6 +263,7 @@ const STATE_NODE_FIELDS = new Set([
 ])
 const ENUM_VALUES = {
   imageSource: ['StaticReference', 'Prefab'],
+  imageType: ['Basic', 'Stretch', null],
   scrollDirection: ['Horizontal', 'Vertical'],
   layoutConstraint: ['AutoWrap', 'Fixed'],
   softEdgeMode: ['Percentage', 'Pixel'],
@@ -438,7 +439,12 @@ function applyPatchMutating(project, op) {
           }
         }
       }
+      if (node.kind === 'image' && (key === 'imageSource' || key === 'imageId') && node[key] !== value) {
+        node.imageType = null
+        node.giaRaw.imageSlotType = 0
+      }
       node[key] = value
+      if (node.kind === 'image' && key === 'imageType') node.giaRaw.imageSlotType = value === 'Stretch' ? 1 : 0
       if (key === 'canControllerFocus') node.giaRaw.footerField505 = value ? 1 : 0
       if (node.kind === 'cursor' && key === 'raycastTarget') node.giaRaw.cursorField501 = value ? 1 : 0
       if ((node.kind === 'textbox' || node.kind === 'textwindow') && key === 'horizontalAlignment') {

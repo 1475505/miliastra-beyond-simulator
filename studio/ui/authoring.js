@@ -111,6 +111,7 @@ export function createNode(kind, extras = {}) {
   }
   if (kind === 'image') {
     node.imageSource = extras.imageSource || 'StaticReference'
+    node.imageType = ['Basic', 'Stretch'].includes(extras.imageType) ? extras.imageType : null
     node.imageId = extras.imageId ?? 100001
     node.imageColor = extras.imageColor ?? COLOR.image
     node.enableMask = extras.enableMask === true
@@ -400,6 +401,7 @@ export function sanitizeNode(node) {
   }
   if (node.kind === 'image') {
     extras.imageSource = node.imageSource
+    extras.imageType = node.imageType
     extras.imageId = node.imageId
     extras.imageColor = node.imageColor
     extras.enableMask = node.enableMask

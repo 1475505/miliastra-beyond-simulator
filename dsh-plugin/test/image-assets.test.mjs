@@ -17,7 +17,8 @@ const { createCanvas } = createRequire(new URL('../../studio/package.json', impo
 
 test('DSH registered asset route and headless screenshot reuse the same cache', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'qxqy-dsh-images-'))
-  const store = sharedImageAssets(), original = { directory: store.directory, fetcher: store.fetcher }
+  const store = sharedImageAssets(), original = { directory: store.directory, fetcher: store.fetcher, cacheDir: store.cacheDir, metadataStore: store.metadataStore }
+  store.cacheDir = directory; store.metadataStore = null
   const audioStore = sharedAudioAssets(), originalAudio = { directory: audioStore.directory, fetcher: audioStore.fetcher }
   audioStore.directory = join(directory, 'audio')
   let audioRequests = 0

@@ -100,7 +100,7 @@ message ButtonPresetConfig {
   int32 raycastTarget = 507;
 }
 message KeyHintConfig { int32 field501 = 501; int32 field502 = 502; }
-message ImageSlotConfig { uint32 field502 = 502; uint32 assetId = 503; }
+message ImageSlotConfig { uint32 field502 = 502; uint32 assetId = 503; int32 imageType = 504; }
 message ImageConfig {
   int32 enableMask = 501; int32 field502 = 502; int32 field504 = 504; int32 field505 = 505;
   int32 field507 = 507; int32 field508 = 508; int32 enableSoftEdge = 509; int32 softEdgePixel = 510;
@@ -340,6 +340,8 @@ function typeData(node, guid, guidById, warnings) {
     return [generic, ref(64, 84, 'empty74', 'textConfig', textConfig), footer]
   }
   if (node.kind === 'image') {
+    const imageSlotType = ![0, 1].includes(raw.imageSlotType ?? 0) ? raw.imageSlotType : node.imageType === 'Stretch' ? 1 : 0
+    if (node.imageType == null && node.imageSource === 'StaticReference' && node.imageId > 100006) warnings.push(`${node.name}: 图片类型随素材边界自动选择，GIA 按基础导出；需要拉伸请先明确选择或在 Lua 设置 imageType。`)
     if (node.imageSource && node.imageSource !== 'StaticReference') {
       warnings.push(`${node.name}: 图片来源 ${node.imageSource} 仅保存在 JSON，尚未映射到 GIA；请在 Lua 中用 SetImage(Enum.ImageSource.${node.imageSource}, ${node.imageId}) 设置。`)
     }
@@ -373,6 +375,7 @@ function typeData(node, guid, guidById, warnings) {
         // 默认白 0xFFFFFFFF 与官方未改色样本一致；非白色写入同一槽，对应检视器「填充色」。
         field502: Number.isFinite(node.imageColor) ? (node.imageColor >>> 0) : 0xffffffff,
         assetId: node.imageId >>> 0,
+        ...(imageSlotType ? { imageType: imageSlotType } : {}),
       }),
       ref(74, 97, 'empty84', 'image', image),
       footer,
@@ -971,6 +974,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
           keyHintField502: keyHint?.field502 ?? 1,
         } : {}),
         ...(kind === 'image' ? {
+          imageSlotType: imageSlot?.imageType ?? 0,
           imageField502: image?.field502 ?? 1,
           imageField504: image?.field504 ?? 1,
           imageField505: image?.field505 ?? 1,
@@ -999,6 +1003,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
       ...(kind === 'image' ? {
         imageSource: 'StaticReference',
         imageId: imageSlot?.assetId ?? 0,
+        imageType: imageSlot?.imageType === 1 ? 'Stretch' : 'Basic',
         imageColor: Number.isFinite(imageSlot?.field502) ? (imageSlot.field502 >>> 0) : 0xffffffff,
         enableMask: image?.enableMask === 1,
         enableSoftEdge: image?.enableSoftEdge === 1, enableFill: image?.enableFill === 1,

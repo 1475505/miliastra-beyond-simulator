@@ -63,6 +63,7 @@ const KIND_FIELDS = Object.freeze({
     { key: 'keyHintField502', label: '键鼠键位原始值', type: 'number', defaultValue: 1, wire: 'KeyHintConfig.field502' },
   ],
   image: [
+    { key: 'imageSlotType', label: '图片类型原始值', type: 'number', defaultValue: 0, wire: 'ImageSlotConfig.imageType' },
     { key: 'imageField502', label: '图片标记 field502', type: 'number', defaultValue: 1, wire: 'ImageConfig.field502' },
     { key: 'imageField504', label: '图片标记 field504', type: 'number', defaultValue: 1, wire: 'ImageConfig.field504' },
     { key: 'imageField505', label: '图片标记 field505', type: 'number', defaultValue: 1, wire: 'ImageConfig.field505' },

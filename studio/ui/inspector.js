@@ -66,6 +66,7 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       } : {}),
       ...(node.kind === 'image' ? {
         imageSource: node.imageSource,
+        imageType: node.imageType ?? null,
         imageId: node.imageId,
         imageColor: node.imageColor,
         enableMask: node.enableMask === true,
@@ -221,6 +222,9 @@ export function inspectorDto(node, canvasId, box, guidById) {
         { value: 'Prefab', label: '元件' },
       ] }),
       field('imageId', 'imageId', 'number', node.imageId ?? 0),
+      field('imageType', '图片类型', 'enum', node.imageType ?? null, { options: [
+        { value: 'Basic', label: '基础' }, { value: 'Stretch', label: '拉伸' },
+      ] }),
       field('imageColor', '填充色', 'color', node.imageColor),
       field('enableMask', '开启遮罩', 'bool', node.enableMask === true),
       field('enableSoftEdge', '边缘羽化', 'bool', node.enableSoftEdge === true, { gia: 'W' }),

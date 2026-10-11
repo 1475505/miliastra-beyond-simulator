@@ -16,6 +16,7 @@ const ENUM_FIELDS = {
   horizontalAlignment: 'TextHorizontalAlignment',
   verticalAlignment: 'TextVerticalAlignment',
   imageSource: 'ImageSource',
+  imageType: 'ImageType',
   fillType: 'ImageFillType',
   fillHorizontalType: 'ImageFillHorizontalType',
   fillVerticalType: 'ImageFillVerticalType',
@@ -60,6 +61,7 @@ export class LuaRuntime {
     this.language = options.language ?? 'LanguageChs'
     this.stageMode = options.stageMode ?? 'Classic'
     this.testPlay = options.testPlay !== false
+    this.canSelectImageType = options.canSelectImageType || (() => false)
     this.clock = { time: 0, levelTime: 0, paused: false, frame: 0 }
     this.logs = []
     this.mountErrors = []
@@ -1020,6 +1022,9 @@ export class LuaRuntime {
             throw new Error(`bad argument #2 to '${key}' (integer expected, got ${valueType})`)
           }
           const enumType = ENUM_FIELDS[key]
+          if (key === 'imageType' && (val?.EnumType !== 'ImageType' || !['Basic', 'Stretch'].includes(val.Name))) {
+            throw new Error('imageType requires Enum.ImageType.Basic or Stretch')
+          }
           obj[key] = enumType ? canonicalEnumItem(enumType, val) : val
           if (typeof obj.markPlayDirty === 'function') {
             obj.markPlayDirty(DEEP_DIRTY_FIELDS.has(key))

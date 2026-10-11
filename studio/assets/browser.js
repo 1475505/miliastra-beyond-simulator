@@ -1,7 +1,8 @@
-import { imageAssetUrl, imageAssetKey, isRemoteImage } from './catalog.js'
+import { imageAssetUrl, imageMetadataUrl, imageAssetKey, imageSourceName, isRemoteImage } from './catalog.js'
 
 const STORAGE_KEY = 'qxqy-image-refresh'
 const entries = new Map()
+const metadataEntries = new Map()
 const revisions = new Map()
 const listeners = new Set()
 const MAX_PIXELS = 16_777_216
@@ -10,6 +11,7 @@ let initialized = false
 function notify(key, revision) {
   revisions.set(key, revision)
   entries.delete(key)
+  metadataEntries.delete(key)
   for (const listener of listeners) listener(key)
 }
 
@@ -42,6 +44,28 @@ export function refreshBrowserImage(id, source) {
   initialize()
   notify(imageAssetKey(id, source), Date.now())
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(revisions))) } catch {}
+}
+
+export function loadBrowserImageMetadata(id, source) {
+  initialize()
+  if (imageSourceName(source) !== 'StaticReference' || !isRemoteImage(id, source)) return Promise.resolve(null)
+  const key = imageAssetKey(id, source)
+  const entry = metadataEntries.get(key)
+  if (entry) return entry
+  const promise = fetch(imageMetadataUrl(id, revisions.get(key), source), { signal: AbortSignal.timeout(30_000) }).then(async response => {
+    if (!response.ok) throw new Error(`图片 ${id} 元数据加载失败：HTTP ${response.status}`)
+    return response.json()
+  }).catch(error => { if (metadataEntries.get(key) === promise) metadataEntries.delete(key); throw error })
+  metadataEntries.set(key, promise)
+  return promise
+}
+
+export async function loadBrowserImageAsset(id, source) {
+  const [image, metadata] = await Promise.all([loadBrowserImage(id, source),
+    loadBrowserImageMetadata(id, source).then(meta => ({ meta, error: '' }), error => ({ meta: undefined, error: error.message }))])
+  // Old offline caches contain PNG only. Keep the image visible in Basic mode
+  // while explicitly reporting unresolved metadata, not "zero-border" support.
+  return { image, ...metadata }
 }
 
 export function loadBrowserImage(id, source) {

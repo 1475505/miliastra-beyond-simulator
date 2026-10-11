@@ -1,8 +1,9 @@
-import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Sprite, Text, TextStyle, Texture } from 'pixi.js'
+import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Mesh, MeshGeometry, Sprite, Text, TextStyle, Texture } from 'pixi.js'
 import { imageFillRect } from './image-fill.js'
 import { imageMaskSpec, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
 import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './scroll-geometry.js'
-import { loadBrowserImage, subscribeImageRefresh } from '../assets/browser.js'
+import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.js'
+import { sliceRegions, resolveImageType } from '../assets/image-stretch.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.
@@ -59,7 +60,7 @@ function pointsFor(item, width, height) {
 function visualKeyOf(item, width, height) {
   if (spriteCircle(item)) return [item.kind, item.primitive, item.imageId, imageSourceName(item.imageSource), 'sprite'].join('\t')
   return [
-    item.kind, item.primitive, width, height, item.imageColor, item.imageId, imageSourceName(item.imageSource),
+    item.kind, item.primitive, width, height, item.imageColor, item.imageId, imageSourceName(item.imageSource), item.imageType,
     item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillAmount,
     item.text, item.fontSize, item.fontColor, item.bgColor, item.enableOutline,
     item.outlineColor, item.horizontalAlignment, item.verticalAlignment, item.pressed,
@@ -152,7 +153,9 @@ export class PixiPlayRenderer {
     // Every Graphics in a visual owns its context. Passing only `children`
     // suppresses Pixi's default context disposal and leaves old geometry in
     // the timed GC pool after animated sizes/colors replace the visual.
+    const geometry = root.__visual.__sliceGeometry
     root.__visual.destroy({ children: true, context: true })
+    geometry?.destroy(true)
     root.__visual = null
     root.__visualKey = ''
   }
@@ -180,11 +183,13 @@ export class PixiPlayRenderer {
     this.imageTextures.set(key, entry)
     // Do not block scene polling or Lua time on network I/O. Completion
     // repaints even a paused/static scene, using each node's latest item.
-    entry.promise = loadBrowserImage(id, source).then(image => {
+    entry.promise = loadBrowserImageAsset(id, source).then(({ image, meta, error }) => {
       if (this.disposed || this.imageTextures.get(key) !== entry) return
       // Renderer-owned GPU source; never destroy another renderer's texture
       // through Pixi's global Texture.from(resource) cache.
       entry.texture = new Texture({ source: new ImageSource({ resource: image }) })
+      entry.meta = meta
+      entry.error = error
       for (const root of this.nodes.values()) {
         const item = root.__sceneItem
         if (item?.kind !== 'image' || imageAssetKey(item.imageId, item.imageSource) !== key) continue
@@ -267,10 +272,28 @@ export class PixiPlayRenderer {
       if (item.pressed) graphic.roundRect(-width / 2, -height / 2, width, height, 6).fill({ color: 0x000000, alpha: 0.28 })
       visual.addChild(graphic)
     } else if (item.kind === 'image' && item.primitive === 'sprite' && this.imageTexture(item.imageId, item.imageSource).texture) {
-      const sprite = new Sprite({ texture: this.imageTextures.get(imageAssetKey(item.imageId, item.imageSource)).texture, anchor: 0.5 })
+      const entry = this.imageTextures.get(imageAssetKey(item.imageId, item.imageSource))
+      let sprite
+      if (width > 0 && height > 0 && resolveImageType(entry.meta, item.imageType) === 'Stretch') {
+        const positions = [], uvs = [], indices = []
+        for (const { source: [sx, sy, sw, sh], target: [x, y, w, h] } of sliceRegions(entry.meta, width, height)) {
+          const start = positions.length / 2
+          const left = x - width / 2, top = y - height / 2
+          positions.push(left, top, left + w, top, left + w, top + h, left, top + h)
+          const u0 = sx / entry.meta.width, u1 = (sx + sw) / entry.meta.width
+          const v0 = sy / entry.meta.height, v1 = (sy + sh) / entry.meta.height
+          uvs.push(u0, v0, u1, v0, u1, v1, u0, v1)
+          indices.push(start, start + 1, start + 2, start, start + 2, start + 3)
+        }
+        const geometry = new MeshGeometry({ positions: new Float32Array(positions), uvs: new Float32Array(uvs), indices: new Uint32Array(indices) })
+        visual.__sliceGeometry = geometry
+        sprite = new Mesh({ geometry, texture: entry.texture })
+      } else {
+        sprite = new Sprite({ texture: entry.texture, anchor: 0.5 })
+        sprite.width = width
+        sprite.height = height
+      }
       const color = argb(item.imageColor, 0xffffffff)
-      sprite.width = width
-      sprite.height = height
       sprite.tint = color.color
       sprite.alpha = color.alpha
       const fill = imageFillRect(item, width, height)

@@ -16,7 +16,7 @@ import { recordEvent } from '../autotest/format.js'
 import { textWindowMetrics, clamp } from './scroll.js'
 import { scrollBarGeometry } from './scroll-geometry.js'
 import { audioDuration } from '../assets/audio-catalog.js'
-import { imageSourceName } from '../assets/catalog.js'
+import { imageSourceName, canSelectImageType } from '../assets/catalog.js'
 import { centerMaskMatrix, imageMaskSpec } from './image-mask.js'
 import { randomUUID } from 'node:crypto'
 
@@ -127,6 +127,7 @@ export function controlSnapshot(control, boxes) {
     outlineColor: control.kind === 'textbox' || control.kind === 'textwindow' ? control.outlineColor : null,
     imageId: control.kind === 'image' ? (control.imageId ?? 0) : null,
     imageSource: control.kind === 'image' ? imageSourceName(control.imageSource) : null,
+    imageType: control.kind === 'image' ? (control.imageType == null ? null : enumName(control.imageType)) : null,
     primitive: control.kind === 'image' ? imagePrimitive(control.imageId, control.imageSource) : null,
     imageColor: control.kind === 'image' ? control.imageColor : null,
     enableMask: control.kind === 'image' ? control.enableMask === true : null,
@@ -175,6 +176,7 @@ function createPlayerRuntime(compiled, templateBundle, scripts, language) {
     canvasHeight: compiled.canvasHeight,
     device: compiled.device,
     audioDuration,
+    canSelectImageType,
     ...(language ? { language } : {}),
   })
   for (const template of [...(compiled.templates || []), ...(templateBundle?.templates || [])]) {
@@ -326,6 +328,7 @@ function compactPaint(control, box, transform) {
   }
   if (control.kind === 'image') {
     item.imageSource = imageSourceName(control.imageSource)
+    item.imageType = control.imageType == null ? null : enumName(control.imageType)
     item.primitive = imagePrimitive(control.imageId, item.imageSource)
     item.imageColor = control.imageColor
     item.imageId = control.imageId
@@ -386,6 +389,7 @@ function visualFields(control, box) {
   }
   if (control.kind === 'image') {
     fields.imageSource = imageSourceName(control.imageSource)
+    fields.imageType = control.imageType == null ? null : enumName(control.imageType)
     fields.primitive = imagePrimitive(control.imageId, fields.imageSource)
     fields.imageColor = control.imageColor
     fields.imageId = control.imageId
@@ -429,7 +433,7 @@ function sceneFingerprint(node) {
     node.parent, node.z, node.group ? 1 : 0,
     m.a, m.b, m.c, m.d, m.tx, m.ty,
     node.kind, node.name, node.sourceWidth, node.sourceHeight, node.pressed,
-    node.primitive, node.imageColor, node.imageId, node.imageSource,
+    node.primitive, node.imageColor, node.imageId, node.imageSource, node.imageType,
     node.fillType, node.fillHorizontalType, node.fillVerticalType, node.fillAmount,
     node.enableMask, node.enableSoftEdge, node.softEdgeMode, node.softEdgeWidthX, node.softEdgeWidthY,
     node.text, node.fontSize, node.fontColor, node.bgColor,
