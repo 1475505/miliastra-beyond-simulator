@@ -17,7 +17,7 @@
 12. 控件 userdata 按类型封死：当前类型没有的字段读为 nil，写为 `cannot set <field>, no such field`。光标监听只挂在预设按钮 / 光标检测区。
 13. 显式层级数值大的在上；编辑器同级列表先出现的在上。Lua sibling 大索引置顶，First 置底、Last 置顶（官方原始快照 rev223；2026-09-06 用户真机反馈）。scene.js 将 API 数值反向映射到内部前到后 children 列表；绘制和命中共享该树。图片不把指针传给子级光标区。证据范围见根 knowledge/fact.md，不把模拟器回归当成真机通过。
 13a. 动态 `InstantiateClientUIControl` 的新实例根默认置于已有同父兄弟上方（最大 Lua sibling 索引）；模板内部的静态子列表保持原序。该规则于 2026-09-28 按用户要求采用，来源与回归见下节，不能把默认创建时间与编辑器列表位置混为一谈。
-14. `ClientUIImageControl.imageType`：创作者确认只有部分图片支持设置。已观察：基础图元模板赋值报 `cannot set imageType, no such field`。2.0.13 按用户指定的图片编辑器规则对 Studio 远程静态白名单接通 Basic/Stretch 选择请求，渲染按 m_Border 决定是否切片；基础图元/Prefab/未知来源仍拒绝。此为[模拟器预览策略](../../../studio/docs/image-assets.md#图片类型基础拉伸2013)，不能据白名单接受赋值推断真机字段能力；独立 Runtime 默认仍拒绝，宿主可注入策略。
+14. `ClientUIImageControl.imageType`：创作者确认只有部分图片支持设置。已观察：基础图元模板赋值报 `cannot set imageType, no such field`。2.1.0 按用户指定的图片编辑器规则对 Studio 远程静态白名单接通 Basic/Stretch 选择请求，渲染按 m_Border 决定是否切片；基础图元/Prefab/未知来源仍拒绝。此为[模拟器预览策略](../../../studio/docs/image-assets.md#图片类型基础拉伸210)，不能据白名单接受赋值推断真机字段能力；独立 Runtime 默认仍拒绝，宿主可注入策略。
 15. Lua 表面只开放官方 API 文档列出的字段/方法。文档未写的（`script.tickEnabled`、`EnumItem.__kind`、`enableFill`、按钮四态等）读为 nil，写报 `cannot set`。
 16. 控件标识字段：`Id`（客户端控件运行时ID，首字母大写）/ `prefabIndex`；Script 字段 `scriptMappingId`（GetScript 参数同名）；grid 的 `itemPrefabIndex`；reference 的 `referencedPrefabIndex`。InstantiateClientUIControl / GetClientUIControl 仅形参名变化。旧 probe 中的 `control.id` / `prefabId` 是旧版本接口，不作为兼容口径。
 17. math 沙箱：按正式服探针保留 modf、ult；额外提供 isnan、isinf。文档异常行提到的 `math.isnaf` 语义无处记载——按反编造政策不提供（读为 nil）。

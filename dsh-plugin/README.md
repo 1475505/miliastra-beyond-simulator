@@ -39,9 +39,9 @@ Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxq
 
 白名单静态素材经同源 `/qxqy-assets/` 路由按需显示，与 Web/MCP 共用磁盘缓存；浏览器复用 HTTP 缓存。图片属性面板可重新下载当前素材。`QXQY_IMAGE_CACHE_DIR` 可指定缓存目录，详情见 [素材缓存](../studio/docs/image-assets.md)。
 
-2.0.12 增加 `ImageSource.Prefab` 元件图标：图片源选择「元件」并填写 ID（如 `10003004`），或在 Lua 中调用 `SetImage(Enum.ImageSource.Prefab, id)`。2,720 个白名单图标按需缓存，来源与 ID 一起参与缓存/刷新/渲染；GIA 来源尚未映射，导出有提示。
+2.1.0 增加 `ImageSource.Prefab` 元件图标：图片源选择「元件」并填写 ID（如 `10003004`），或在 Lua 中调用 `SetImage(Enum.ImageSource.Prefab, id)`。2,720 个白名单图标按需缓存，来源与 ID 一起参与缓存/刷新/渲染；GIA 来源尚未映射，导出有提示。
 
-2.0.13 增加图片类型「基础／拉伸」：按 `m_Border` 三切片／九切片，编辑器、Pixi 试玩及 PNG 一致处理；边界 JSON 独立按需缓存，旧 PNG 无需重下。Lua 白名单选择规则、缺边界回退和客户端 GIA 类型槽见 [图片类型](../studio/docs/image-assets.md#图片类型基础拉伸2013)。
+2.1.0 增加图片类型「基础／拉伸」：按 `m_Border` 三切片／九切片，编辑器、Pixi 试玩及 PNG 一致处理；边界 JSON 独立按需缓存，旧 PNG 无需重下。Lua 白名单选择规则、缺边界回退和客户端 GIA 类型槽见 [图片类型](../studio/docs/image-assets.md#图片类型基础拉伸210)。
 
 2.0.10 接通 Lua 2D 音效（`PlayAudio2D` / `StopAudio` / `IsAudioAlive`）；试玩页经 `/qxqy-audio/` 按需加载并缓存 MP3，提供声音解锁/静音按钮。`QXQY_AUDIO_CACHE_DIR` 可指定音频缓存目录，接口与模拟策略见 [音频说明](../studio/docs/audio-assets.md)。
 

@@ -66,7 +66,7 @@ Web、MCP、DSH 使用同一套 `ImageAssetStore`，同一系统用户默认共�
 - 清理一次性测试前：`pnpm install --frozen-lockfile` 和 `pnpm test` 通过（315 通过、8 项环境可选跳过）；单独启用 Edge 的图片/元件与 DSH 素材测试 5/5 通过。
 - `evidence_source=observed`，运行端 `simulator`，`device_status=not_required`（验证新增预览/缓存功能，不宣称千星真机对齐）。DSH Desktop 自定义协议的 HTTP 缓存效果未据普通浏览器测试推定。
 
-## 图片类型：基础／拉伸（2.0.13）
+## 图片类型：基础／拉伸（2.1.0）
 
 参考 `D:/Codes/Miliastra-image-editor-webui` 提交 `20659b3` 的 `frontend/src/imageStretch.ts`、`backend/app/image_stretch.py` 和 `docs/image-stretch.md`，按用户要求对齐：
 
