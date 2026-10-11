@@ -1,9 +1,10 @@
 import protobuf from 'protobufjs'
-import { PLATFORMS, LAYOUT_SCHEMA_VERSION } from '../constants.js'
+import { PLATFORMS, LAYOUT_SCHEMA_VERSION, DEFAULT_GIA_GAME_VERSION } from '../constants.js'
 import { assertPlatformNode } from '../ui/transforms.js'
 import { toJson } from '../json.js'
 import { createNode, walk } from '../ui/authoring.js'
 import { GUID_BASE, collectUsedGuids, isValidGuid, nextFreeGuid } from './guid.js'
+import { ensureClientAssetIndices, isValidAssetIndex } from './asset-indices.js'
 
 export { GUID_BASE, collectUsedGuids, isValidGuid, nextFreeGuid }
 
@@ -118,9 +119,8 @@ const HEAD_TAG = 0x0326
 const TAIL_TAG = 0x0679
 
 const PRESET_INDEX = { image: 23, 'server-container': 24, container: 25, grid: 26, reference: 27, button: 28, animation: 29, fullscreen: 30, textbox: 31, textwindow: 32, cursor: 33, keyhint: 34 }
-// Info.index is a control-kind discriminator in the verified client-template
-// samples. It is not the traversal position of a GraphUnit in the file.
-const INFO_INDEX = { 'server-container': 1, container: 2, textbox: 3, cursor: 4, reference: 5, grid: 6, button: 7, textwindow: 8, keyhint: 9, image: 10, animation: 11, fullscreen: 12 }
+// Info.index is an asset registration number. Unlike PRESET_INDEX it must not
+// be inferred from a control kind. Imported template/instance aliases may share it.
 const PLATFORM_INDEX = { KEYBOARD: 0, TOUCHSCREEN: 1, CONTROLLER_CONSOLE: 2, CONTROLLER_MOBILE: 3 }
 const SERVER_CONTROL_ASSET = 'server-control-template'
 const CLIENT_CONTROL_ASSET = 'client-control-template'
@@ -450,9 +450,8 @@ function typeData(node, guid, guidById, warnings) {
 
 function infoIndex(node, isGroup) {
   if (isGroup) return 1
-  return Number.isSafeInteger(Number(node.giaInfoIndex)) && Number(node.giaInfoIndex) > 0
-    ? Number(node.giaInfoIndex)
-    : (INFO_INDEX[node.kind] || 2)
+  if (!isValidAssetIndex(node.giaInfoIndex)) throw new Error(`${node.name}: 缺少合法的客户端资产编号`)
+  return node.giaInfoIndex
 }
 
 function infoRelatedGuids(node, warnings, assetLabel) {
@@ -576,6 +575,11 @@ function rootModeFields(project) {
   return Number.isSafeInteger(modeFlag) && modeFlag >= 0 ? { modeFlag } : {}
 }
 
+function exportGameVersion(project) {
+  const version = project.meta?.gameVersion
+  return !version || version === '7.0.50' ? DEFAULT_GIA_GAME_VERSION : version
+}
+
 function buildClientTemplateRootObject(project, guidById, warnings, filePath, scripts = []) {
   const clientNodes = collectClientNodes(project)
   const templateEntries = clientNodes.filter(({ parent }) => parent?.kind === 'server-container')
@@ -591,7 +595,7 @@ function buildClientTemplateRootObject(project, guidById, warnings, filePath, sc
       node, parent, guidById, allClientGuids, warnings, false, false, true,
     )),
     filePath: filePath || canonicalFilePath(project, true),
-    gameVersion: project.meta?.gameVersion || '7.0.50',
+    gameVersion: exportGameVersion(project),
     ...rootModeFields(project),
   }))
 }
@@ -606,7 +610,7 @@ function buildServerGroupRootObject(project, guidById, extra, warnings, filePath
         node, parent, guidById, allClientGuids, warnings, false, false, false, true,
       )),
       filePath: filePath || canonicalFilePath(project, false),
-      gameVersion: project.meta?.gameVersion || '7.0.50',
+      gameVersion: exportGameVersion(project),
       ...rootModeFields(project),
     }))
 }
@@ -622,8 +626,9 @@ function encodeAndValidate(rootObject, validate) {
 
 export function exportGia(project, options = {}) {
   walk(project.root, assertPlatformNode)
-  const guidById = assignGuids(toJson(project))
   const warnings = []
+  ensureClientAssetIndices(project, { warnings })
+  const guidById = assignGuids(toJson(project))
   const isClientTemplates = project.meta?.assetType === 'client-control-template'
   let rootObject
   if (isClientTemplates) {
@@ -643,6 +648,7 @@ export function exportCombinedGia(serverProject, clientProject, options = {}) {
   const warnings = [
     '整合包把服务端 UIControlGroup 与客户端 UIControlTemplate 并排写入同一 GIA 的 Root.graph；导入时拆回两类资产，模板边界、脚本映射与控件挂载关系会保留。',
   ]
+  if (clientProject) ensureClientAssetIndices(clientProject, { warnings })
   const templates = clientProject?.root?.children || []
   if (!templates.length) warnings.push('客户端控件模板为空，整合包只包含服务端控件与脚本。')
   const used = new Set()
@@ -671,7 +677,7 @@ export function exportCombinedGia(serverProject, clientProject, options = {}) {
     graph: [...serverRoot.graph, ...clientRoot.graph],
     accessories: [...serverRoot.accessories, ...clientRoot.accessories],
     filePath,
-    gameVersion: serverProject.meta?.gameVersion || clientProject?.meta?.gameVersion || '7.0.50',
+    gameVersion: exportGameVersion({ meta: { gameVersion: serverProject.meta?.gameVersion || clientProject?.meta?.gameVersion } }),
     ...rootModeFields(serverProject),
   }
   const out = encodeAndValidate(rootObject, validateServerGiaCompatibility)
@@ -1155,6 +1161,7 @@ export function importGia(input) {
       script: { controlId: forest.rootCandidates[0].id, path: '', source: '' },
       root: holder,
     }
+    ensureClientAssetIndices(clientProject, { warnings })
     if (!project) project = clientProject
   }
   return {
@@ -1203,15 +1210,21 @@ export function validateGiaCompatibility(input) {
     const kind = detectKind(unit)
     const infos = unit.ui?.content?.info || []
     const actualIndex = infos.find((entry) => entry.field501 === 2 && entry.field502 === 6)?.index?.value
-    const expectedIndex = INFO_INDEX[kind]
     const relatedInfo = infos.find((entry) => entry.field501 === 4 && entry.field502 === 4)
     const relatedGuids = relatedInfo?.related?.value || []
-    if (!Number.isSafeInteger(actualIndex) || actualIndex <= 0) {
+    if (!isValidAssetIndex(actualIndex)) {
       errors.push(`${unit.name}: Info.index=${actualIndex ?? '<missing>'}，必须是正整数`)
     }
     if (!relatedInfo) errors.push(`${unit.name}: 顶层 UIControlTemplate 缺少 Info.related 记录`)
-    return { id: unit.id?.id || 0, name: unit.name || '', kind, actualIndex, expectedIndex, relatedPresent: Boolean(relatedInfo), relatedGuids }
+    return { id: unit.id?.id || 0, name: unit.name || '', kind, actualIndex, relatedPresent: Boolean(relatedInfo), relatedGuids }
   })
+  const templateByIndex = new Map()
+  for (const template of templates) {
+    if (!isValidAssetIndex(template.actualIndex)) continue
+    const previous = templateByIndex.get(template.actualIndex)
+    if (previous) errors.push(`${template.name}: 独立模板资产编号 ${template.actualIndex} 与 ${previous.name} 重复`)
+    else templateByIndex.set(template.actualIndex, template)
+  }
   if (!templates.length) errors.push('Root.graph 不含 UIControlTemplate(70)')
   let explicitField17 = 0
   let explicitRectField508 = 0
@@ -1234,7 +1247,7 @@ export function validateGiaCompatibility(input) {
     const selfInfo = infos.find((entry) => entry.field501 === 1 && entry.field502 === 5)
     const indexInfo = infos.find((entry) => entry.field501 === 2 && entry.field502 === 6)
     if (selfInfo?.guid?.value !== guid) errors.push(`${prefix}: Info.self GUID 缺失或与自身不一致`)
-    if (!Number.isSafeInteger(indexInfo?.index?.value) || indexInfo.index.value <= 0) {
+    if (!isValidAssetIndex(indexInfo?.index?.value)) {
       errors.push(`${prefix}: Info.index=${indexInfo?.index?.value ?? '<missing>'}，必须是正整数`)
     }
     const relatedInfo = infos.find((entry) => entry.field501 === 4 && entry.field502 === 4)
@@ -1350,7 +1363,7 @@ export function validateServerGiaCompatibility(input) {
     }
   }
 
-  const allUnits = [group, ...accessories]
+  const allUnits = [group, ...templateGraphs, ...accessories]
   const unitByGuid = new Map()
   for (const unit of allUnits) {
     const guid = unit.id?.id || 0
@@ -1480,6 +1493,17 @@ export function validateServerGiaCompatibility(input) {
       if (!child) errors.push(`${prefix}: child=${childGuid} 不存在`)
       else if (child.parent !== control.id) errors.push(`${prefix}: child=${childGuid} 的 parent 未指回自身`)
     }
+  }
+
+  if (templateGraphs.length) {
+    // A mixed archive must validate its client template forest too. The server
+    // relatedIds set identifies only its own accessories, not client children.
+    const clientValidation = validateGiaCompatibility(encodeGiaEnvelope({
+      ...decoded,
+      graph: templateGraphs,
+      accessories: accessories.filter(unit => !relatedSet.has(unit.id?.id || 0)),
+    }))
+    errors.push(...clientValidation.errors.map(error => `客户端模板: ${error}`))
   }
 
   return {

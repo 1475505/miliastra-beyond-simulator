@@ -1,6 +1,8 @@
 /** Canvas presets share GIA platform slots. Simulator-policy sizes (PC 1600×900 observed). */
 import { isRemoteImage, imageSourceName } from './assets/catalog.js'
 
+export const DEFAULT_GIA_GAME_VERSION = '7.1.0'
+
 export const PLATFORMS = Object.freeze([
   'KEYBOARD',
   'TOUCHSCREEN',

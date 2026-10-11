@@ -683,7 +683,7 @@ test('JSON and GIA export-import round-trip supported control kinds in-process',
   const gia = studio.exportData('gia')
   const bytes = Buffer.from(gia.data, 'base64')
   assert.deepEqual(inspectGia(bytes), {
-    gameVersion: '7.0.50', graphName: '客户端控件容器', accessories: 11,
+    gameVersion: '7.1.0', graphName: '客户端控件容器', accessories: 11,
     assetType: 'server-control-template', templateCount: 0,
   })
   const imported = studio.importData('gia', gia.data, 'round-trip.gia')
@@ -844,13 +844,13 @@ test('new client template project exports one instantiable template with child c
   assert.equal(compatibility.valid, true, compatibility.errors.join('\n'))
   assert.match(compatibility.filePath, /^114514-\d+-1073741829-\\客户端控件模板列表\.gia$/u)
   assert.deepEqual(compatibility.templates.map((item) => [item.kind, item.actualIndex]), [
-    ['container', 2], ['image', 10],
+    ['container', 2], ['image', 7],
   ])
   assert.deepEqual(compatibility.templates.map((item) => item.relatedPresent), [true, true])
   assert.deepEqual(compatibility.templates.map((item) => item.relatedGuids), [[], []])
   assert.deepEqual(compatibility.explicitEmpty, { field17: 12, rectField508: 24 })
   assert.deepEqual(inspectGia(Buffer.from(exported.data, 'base64')), {
-    gameVersion: '7.0.50', graphName: 'Lua实例化面板', accessories: 4,
+    gameVersion: '7.1.0', graphName: 'Lua实例化面板', accessories: 4,
     assetType: 'client-control-template', templateCount: 2,
   })
   const target = createStudio()
@@ -900,7 +900,7 @@ test('client template hierarchy can reparent controls, preserve nesting, and exp
   assert.equal(compatibility.templateCount, 2)
   assert.deepEqual(compatibility.templates.map((item) => [item.kind, item.actualIndex, item.relatedPresent, item.relatedGuids]), [
     ['container', 2, true, []],
-    ['image', 10, true, []],
+    ['image', 4, true, []],
   ])
   assert.equal(compatibility.accessoryCount, 3)
 

@@ -1,6 +1,7 @@
 import {
   COLOR,
   DEFAULT_CLICK_AUDIO_ID,
+  DEFAULT_GIA_GAME_VERSION,
   DEFAULT_SIZE,
   KIND_LABELS,
   LAYOUT_SCHEMA_VERSION,
@@ -10,6 +11,7 @@ import { createRectTransform, emptyPlatformMap } from './layout.js'
 import { assertPlatformNode, assertPlatformTransforms, getPlatformTransform } from './transforms.js'
 import { createGiaRaw } from '../gia/raw-fields.js'
 import { stampMissingGuids } from '../gia/guid.js'
+import { ensureClientAssetIndices, isValidAssetIndex } from '../gia/asset-indices.js'
 
 let _seq = 1
 export function nextId(prefix = 'n') {
@@ -60,8 +62,11 @@ export function createNode(kind, extras = {}) {
     giaRelatedGuids: Array.isArray(extras.giaRelatedGuids)
       ? extras.giaRelatedGuids.filter((guid) => Number.isSafeInteger(Number(guid)) && Number(guid) > 0).map(Number)
       : [],
-    ...(Number.isSafeInteger(Number(extras.giaInfoIndex)) && Number(extras.giaInfoIndex) > 0
-      ? { giaInfoIndex: Number(extras.giaInfoIndex) }
+    ...(isValidAssetIndex(Number(extras.giaInfoIndex))
+      ? {
+          giaInfoIndex: Number(extras.giaInfoIndex),
+          giaInfoIndexSource: extras.giaInfoIndexSource === 'authoring' ? 'authoring' : 'imported',
+        }
       : {}),
     active: extras.active !== false,
     visible: extras.visible !== false,
@@ -288,7 +293,7 @@ export function createDefaultClientTemplateProject() {
   root.children.push(title, icon, button)
   server.children.push(root)
   resetIdSeq(6)
-  return {
+  const project = {
     version: 1,
     layoutSchemaVersion: LAYOUT_SCHEMA_VERSION,
     meta: {
@@ -296,7 +301,7 @@ export function createDefaultClientTemplateProject() {
       assetType: 'client-control-template',
       sourceFormat: 'authoring',
       sourceFile: '',
-      gameVersion: '7.0.50',
+      gameVersion: DEFAULT_GIA_GAME_VERSION,
       giaOwnerUid: 114514,
       giaFileId: 1073741829,
       giaFileName: '客户端控件模板列表.gia',
@@ -305,6 +310,8 @@ export function createDefaultClientTemplateProject() {
     selectedId: 'n1',
     root: server,
   }
+  ensureClientAssetIndices(project)
+  return project
 }
 
 export function walk(node, fn, parent = null) {
@@ -360,6 +367,7 @@ export function sanitizeNode(node) {
     guid: node.guid,
     giaRelatedGuids: node.giaRelatedGuids,
     giaInfoIndex: node.giaInfoIndex,
+    giaInfoIndexSource: node.giaInfoIndexSource,
     scriptMappingIds: node.scriptMappingIds,
     giaRaw: node.giaRaw,
     active: node.active,

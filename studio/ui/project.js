@@ -27,6 +27,7 @@ import { rawFieldDefinition, sanitizeRawFieldValue } from '../gia/raw-fields.js'
 import { assignGuids } from '../gia/codec.js'
 import { collectUsedGuids, nextFreeGuid } from '../gia/guid.js'
 import { migrateLayout } from './migrate-layout.js'
+import { ensureClientAssetIndices } from '../gia/asset-indices.js'
 
 function parentBoxOf(project, nodeId, boxes, canvasId = project.canvasId) {
   const parent = findParent(project.root, nodeId)
@@ -58,6 +59,10 @@ export function createProject(seed, { warnings = [] } = {}) {
       ...(Number.isSafeInteger(Number(seed.meta?.giaTimestamp)) ? { giaTimestamp: Number(seed.meta.giaTimestamp) } : {}),
       ...(Number.isSafeInteger(Number(seed.meta?.giaFileId)) ? { giaFileId: Number(seed.meta.giaFileId) } : {}),
       ...(seed.meta?.giaFileName ? { giaFileName: String(seed.meta.giaFileName) } : {}),
+      ...(Number.isSafeInteger(seed.meta?.giaNextAssetIndex) && seed.meta.giaNextAssetIndex >= 2
+        ? { giaNextAssetIndex: seed.meta.giaNextAssetIndex } : {}),
+      ...(Number.isSafeInteger(seed.meta?.giaAssetIndexSchemaVersion) && seed.meta.giaAssetIndexSchemaVersion > 0
+        ? { giaAssetIndexSchemaVersion: seed.meta.giaAssetIndexSchemaVersion } : {}),
       ...(Number.isSafeInteger(Number(seed.meta?.giaModeFlag)) && Number(seed.meta.giaModeFlag) >= 0
         ? { giaModeFlag: Number(seed.meta.giaModeFlag) }
         : {}),
@@ -67,6 +72,7 @@ export function createProject(seed, { warnings = [] } = {}) {
     root: sanitizeNode(seed.root || base.root),
   }
   validateProjectReferences(project)
+  ensureClientAssetIndices(project, { warnings })
   return project
 }
 
@@ -515,6 +521,7 @@ export function applyPatch(project, op) {
   const next = JSON.parse(JSON.stringify(project))
   applyPatchMutating(next, op)
   validateProjectReferences(next)
+  ensureClientAssetIndices(next)
   next.version = previousVersion + 1
   Object.keys(project).forEach((key) => { delete project[key] })
   Object.assign(project, next)

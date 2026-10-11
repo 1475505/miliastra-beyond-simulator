@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createStudio, inspectGia, validateServerGiaCompatibility } from '../index.js'
 import { createNode } from '../ui/authoring.js'
+import { DEFAULT_GIA_GAME_VERSION } from '../constants.js'
 
 const CONTROL_TYPES = Object.freeze([
   ['container', '子容器节点'],
@@ -48,7 +49,7 @@ function makeProject({ includeAllControls, fileId, fileName, baseGuid }) {
       assetType: 'server-control-template',
       sourceFormat: 'authoring',
       sourceFile: '',
-      gameVersion: '7.0.50',
+      gameVersion: DEFAULT_GIA_GAME_VERSION,
       giaOwnerUid: 114514,
       giaTimestamp: timestamp,
       giaFileId: fileId,
