@@ -1,5 +1,6 @@
 import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Sprite, Text, TextStyle, Texture } from 'pixi.js'
 import { imageFillRect } from './image-fill.js'
+import { imageMaskSpec, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
 import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './scroll-geometry.js'
 import { loadBrowserImage, subscribeImageRefresh } from '../assets/browser.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
@@ -147,7 +148,7 @@ export class PixiPlayRenderer {
 
   clearVisual(root) {
     if (!root.__visual) return
-    root.removeChild(root.__visual)
+    root.__visual.parent?.removeChild(root.__visual)
     // Every Graphics in a visual owns its context. Passing only `children`
     // suppresses Pixi's default context disposal and leaves old geometry in
     // the timed GC pool after animated sizes/colors replace the visual.
@@ -224,7 +225,7 @@ export class PixiPlayRenderer {
     const visual = new Container()
     visual.eventMode = 'none'
     visual.label = `visual:${item.id}`
-    if (item.kind === 'grid') visual.zIndex = Number.MAX_SAFE_INTEGER
+    visual.zIndex = item.kind === 'grid' ? Number.MAX_SAFE_INTEGER : -Number.MAX_SAFE_INTEGER
     if (item.kind === 'textbox' || item.kind === 'textwindow') {
       const background = new Graphics()
       const bg = argb(item.bgColor, 0x00ffffff)
@@ -320,7 +321,8 @@ export class PixiPlayRenderer {
       visual.addChild(graphic)
     }
     visual.scale.set(item.pressed ? 0.98 : 1)
-    root.addChildAt(visual, 0)
+    const content = root.__imageContent || root
+    content.addChildAt(visual, 0)
     root.__visual = visual
   }
 
@@ -368,12 +370,63 @@ export class PixiPlayRenderer {
       circle.visible = width > 0 && height > 0
     }
     this.applyMatrix(root, item, nested)
+    this.updateImageMask(root, item, width, height)
+  }
+
+  updateImageMask(root, item, width, height) {
+    const spec = item.kind === 'image' ? imageMaskSpec({ ...item, sourceWidth: width, sourceHeight: height }, { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }) : null
+    const key = spec ? [spec.width, spec.height, spec.featherX, spec.featherY].join(':') : ''
+    if (root.__maskKey === key) return
+    root.__maskKey = key
+    if (!root.__imageContent && spec) {
+      const content = new Container()
+      content.sortableChildren = true
+      content.eventMode = 'none'
+      for (const child of [...root.children]) if (child !== root.__viewportClip) content.addChild(child)
+      root.addChildAt(content, 0)
+      root.__imageContent = content
+    }
+    const content = root.__imageContent
+    if (!content) return
+    content.visible = !spec || (width > 0 && height > 0)
+    const soft = spec && (spec.featherX > 0 || spec.featherY > 0)
+    const textureWidth = Math.min(2048, Math.max(1, Math.ceil(width)))
+    const textureHeight = Math.min(2048, Math.max(1, Math.ceil(height)))
+    const previous = root.__imageMask
+    // Width-only Tween updates reuse a bounded texture rather than creating a
+    // GPU resource every frame. Viewport clipping stays on the outer root.
+    if (soft && content.visible && previous instanceof Sprite
+        && previous.texture.source.resource.width === textureWidth && previous.texture.source.resource.height === textureHeight) {
+      paintMaskCanvas(previous.texture.source.resource, spec)
+      previous.texture.source.update()
+      previous.width = width
+      previous.height = height
+      return
+    }
+    content.mask = null
+    previous?.destroy({ context: true, texture: true, textureSource: true })
+    root.__imageMask = null
+    if (!spec || !content.visible) return
+    let clip
+    if (soft) {
+      const canvas = DOMAdapter.get().createCanvas(textureWidth, textureHeight)
+      paintMaskCanvas(canvas, spec)
+      clip = new Sprite({ texture: new Texture({ source: new CanvasSource({ resource: canvas }) }), anchor: 0.5 })
+      clip.width = width
+      clip.height = height
+    } else {
+      clip = new Graphics().rect(-width / 2, -height / 2, width, height).fill(0xffffff)
+    }
+    clip.eventMode = 'none'
+    content.addChild(clip)
+    content.setMask({ mask: clip, channel: 'alpha' })
+    root.__imageMask = clip
   }
 
   attachNode(root, item) {
     const parentId = item.parent
     const parent = parentId == null ? this.app.stage : this.nodes.get(parentId)
-    const host = parent || this.app.stage
+    const host = parent?.__imageContent || parent || this.app.stage
     if (root.parent !== host) host.addChild(root)
     host.sortableChildren = true
     root.zIndex = -finite(item.z)
@@ -425,13 +478,17 @@ export class PixiPlayRenderer {
   removeNode(id) {
     const root = this.nodes.get(id)
     if (!root) return
-    for (const child of [...root.children]) {
-      if (child.__runtimeId != null) root.removeChild(child)
+    for (const child of [...root.children, ...(root.__imageContent?.children || [])]) {
+      if (child.__runtimeId != null) child.parent?.removeChild(child)
     }
     root.parent?.removeChild(root)
     this.clearVisual(root)
     root.mask = null
+    if (root.__imageContent) root.__imageContent.mask = null
+    root.__imageMask?.destroy({ context: true, texture: true, textureSource: true })
+    root.__imageMask = null
     root.__viewportClip?.destroy({ context: true })
+    root.__imageContent?.destroy({ children: false })
     root.destroy({ children: false })
     this.nodes.delete(id)
   }
@@ -456,13 +513,20 @@ export class PixiPlayRenderer {
       if (!this.nodes.has(item.id)) this.createNode(item, { group: item.group === true })
     }
     for (let i = 0; i < (list || []).length; i += 1) this.upsertSceneNode(list[i])
-    for (const root of this.nodes.values()) if (root.__sceneItem?.clipToParent || root.__viewportClip) this.updateViewportClip(root)
+    for (const root of this.nodes.values()) {
+      if (root.__sceneItem?.clipToParent || root.__sceneItem?.clipPolygons?.length || root.__clipKey !== undefined) this.updateViewportClip(root)
+    }
     this.pruneImageTextures()
     this.app.render()
   }
 
   async render(items, width, height) {
+    if (items?.some(item => item?.masks?.length)) {
+      this.__maskedPaint = true
+      return this.applyScene(maskedPaintScene(items), width, height)
+    }
     await this.ready
+    if (this.__maskedPaint) { this.clearNodes(); this.__maskedPaint = false }
     this.resize(width, height)
     const visible = new Set()
     const list = Array.isArray(items) ? items : []

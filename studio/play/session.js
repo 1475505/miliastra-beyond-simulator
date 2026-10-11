@@ -17,6 +17,7 @@ import { textWindowMetrics, clamp } from './scroll.js'
 import { scrollBarGeometry } from './scroll-geometry.js'
 import { audioDuration } from '../assets/audio-catalog.js'
 import { imageSourceName } from '../assets/catalog.js'
+import { centerMaskMatrix, imageMaskSpec } from './image-mask.js'
 import { randomUUID } from 'node:crypto'
 
 function prepareScroll(session) {
@@ -346,20 +347,27 @@ function compactPaint(control, box, transform) {
 export function paintList(session, boxes = runtimeLayout(session)) {
   const out = []
   const transforms = runtimeTransforms(session, boxes)
-  function rec(control, clips = []) {
+  function rec(control, clips = [], masks = []) {
     const box = boxes.get(control.Id)
     if (!box || control.visible === false || !box.activeInHierarchy) return
     const matrix = transforms.get(control.Id)
     if (!matrix) return
     const transform = paintTransform(box, matrix)
-    const paint = () => out.push({ ...compactPaint(control, box, transform), ...(clips.length ? { clipPolygons: clips } : {}) })
+    const spec = control.kind === 'image' && control.enableMask === true
+      ? imageMaskSpec({ ...visualFields(control, box), id: control.Id }, centerMaskMatrix(matrix, box.centerX, box.centerY)) : null
+    const nextMasks = spec ? [...masks, spec] : masks
+    const paint = () => out.push({
+      ...compactPaint(control, box, transform),
+      ...(clips.length ? { clipPolygons: clips } : {}),
+      ...(nextMasks.length ? { masks: nextMasks } : {}),
+    })
     if (PAINT_KINDS.has(control.kind) && control.kind !== 'grid') paint()
     const children = control.children || []
     for (let i = children.length - 1; i >= 0; i -= 1) {
       const itemClips = control._gridItems?.includes(children[i])
         ? [...clips, [[box.left, box.bottom], [box.right, box.bottom], [box.right, box.top], [box.left, box.top]].map(([x, y]) => applyMatrix(matrix, x, y))]
         : clips
-      rec(children[i], itemClips)
+      rec(children[i], itemClips, nextMasks)
     }
     if (control.kind === 'grid') paint()
   }
@@ -381,7 +389,13 @@ function visualFields(control, box) {
     fields.primitive = imagePrimitive(control.imageId, fields.imageSource)
     fields.imageColor = control.imageColor
     fields.imageId = control.imageId
-    Object.assign(fields, imageFillFields(control))
+    Object.assign(fields, imageFillFields(control), {
+      enableMask: control.enableMask === true,
+      enableSoftEdge: control.enableSoftEdge === true,
+      softEdgeMode: enumName(control.softEdgeMode) || 'Percentage',
+      softEdgeWidthX: control.softEdgeWidthX,
+      softEdgeWidthY: control.softEdgeWidthY,
+    })
   }
   if (control.kind === 'textbox' || control.kind === 'textwindow') {
     fields.text = control.text ?? ''
@@ -417,6 +431,7 @@ function sceneFingerprint(node) {
     node.kind, node.name, node.sourceWidth, node.sourceHeight, node.pressed,
     node.primitive, node.imageColor, node.imageId, node.imageSource,
     node.fillType, node.fillHorizontalType, node.fillVerticalType, node.fillAmount,
+    node.enableMask, node.enableSoftEdge, node.softEdgeMode, node.softEdgeWidthX, node.softEdgeWidthY,
     node.text, node.fontSize, node.fontColor, node.bgColor,
     node.enableOutline, node.outlineColor, node.horizontalAlignment, node.verticalAlignment,
     JSON.stringify(node.scroll), node.clipToParent,

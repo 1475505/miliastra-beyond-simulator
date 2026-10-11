@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module'
 import { imageFillRect } from './play/image-fill.js'
+import { imageMaskSpec, imageMaskCoverage, groupMaskedPaint } from './play/image-mask.js'
+import { applyMatrix, invertMatrix } from './ui/layout.js'
 import { tintedImage } from './assets/raster.js'
 import { imageAssetKey } from './assets/catalog.js'
 import { scrollBarGeometry } from './play/scroll-geometry.js'
@@ -328,7 +330,7 @@ export function flattenScenePaint(scene) {
     list.sort((a, b) => finite(a.z) - finite(b.z))
   }
   const out = []
-  function emit(node, world, clips) {
+  function emit(node, world, clips, masks) {
     if (!SCENE_PAINT_KINDS.has(node.kind)) return
     const width = Math.abs(finite(node.sourceWidth) * Math.hypot(world.a, world.b))
     const height = Math.abs(finite(node.sourceHeight) * Math.hypot(world.c, world.d))
@@ -341,9 +343,10 @@ export function flattenScenePaint(scene) {
       rotationZ: Math.atan2(world.b, world.a) * 180 / Math.PI,
       matrix: { a: world.a, b: world.b, c: world.c, d: world.d, tx: world.tx, ty: world.ty },
       ...(clips.length ? { clipPolygons: clips } : {}),
+      ...(masks.length ? { masks } : {}),
     })
   }
-  function visit(parentKey, parentWorld, parentNode = null, clips = []) {
+  function visit(parentKey, parentWorld, parentNode = null, clips = [], masks = []) {
     const list = children.get(parentKey) || []
     for (let i = list.length - 1; i >= 0; i -= 1) {
       const node = list[i]
@@ -358,9 +361,11 @@ export function flattenScenePaint(scene) {
           y: parentWorld.b * x + parentWorld.d * y + parentWorld.ty,
         }))]
       }
-      if (node.kind !== 'grid') emit(node, world, itemClips)
-      visit(String(node.id), world, node, itemClips)
-      if (node.kind === 'grid') emit(node, world, itemClips)
+      const spec = imageMaskSpec(node, world)
+      const nextMasks = spec ? [...masks, spec] : masks
+      if (node.kind !== 'grid') emit(node, world, itemClips, nextMasks)
+      visit(String(node.id), world, node, itemClips, nextMasks)
+      if (node.kind === 'grid') emit(node, world, itemClips, nextMasks)
     }
   }
   visit('', null)
@@ -371,19 +376,75 @@ export function renderScenePng(scene, canvasWidth, canvasHeight, options = {}) {
   return renderPaintPng(flattenScenePaint(scene), canvasWidth, canvasHeight, options)
 }
 
+function maskPixelBounds(mask, target, size) {
+  if (!(mask.width > 0 && mask.height > 0) || !invertMatrix(mask.matrix)) return null
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => {
+    const p = applyMatrix(mask.matrix, x * mask.width / 2, y * mask.height / 2)
+    return { x: p.x * size.pixelRatio, y: (size.height - p.y) * size.pixelRatio }
+  })
+  const x = Math.max(target.x, Math.floor(Math.min(...corners.map(p => p.x))))
+  const y = Math.max(target.y, Math.floor(Math.min(...corners.map(p => p.y))))
+  const right = Math.min(target.x + target.canvas.width, Math.ceil(Math.max(...corners.map(p => p.x))))
+  const bottom = Math.min(target.y + target.canvas.height, Math.ceil(Math.max(...corners.map(p => p.y))))
+  return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null
+}
+
+function compositeMaskedGroup(target, layer, mask, size) {
+  const width = layer.canvas.width, height = layer.canvas.height
+  const src = layer.ctx.getImageData(0, 0, width, height).data
+  const dx = layer.x - target.x, dy = layer.y - target.y
+  const image = target.ctx.getImageData(dx, dy, width, height)
+  const dst = image.data
+  const inverse = invertMatrix(mask.matrix)
+  // One inverse per group and one bounded readback/composite, not per item/pixel.
+  for (let y = 0; y < height; y++) {
+    const worldY = size.height - (layer.y + y + 0.5) / size.pixelRatio
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+      if (!src[i + 3]) continue
+      const worldX = (layer.x + x + 0.5) / size.pixelRatio
+      const localX = inverse.a * worldX + inverse.c * worldY + inverse.tx
+      const localY = inverse.b * worldX + inverse.d * worldY + inverse.ty
+      const coverage = imageMaskCoverage(localX, localY, mask)
+      const sa = Math.round(src[i + 3] * coverage) / 255
+      if (!sa) continue
+      const da = dst[i + 3] / 255, outA = sa + da * (1 - sa)
+      for (let c = 0; c < 3; c++) dst[i + c] = Math.round((src[i + c] * sa + dst[i + c] * da * (1 - sa)) / outA)
+      dst[i + 3] = Math.round(outA * 255)
+    }
+  }
+  // Keep readback writes in backing pixels, independent of the cropped layer's
+  // draw transform (also avoids transformed putImageData quirks in native Canvas).
+  target.ctx.save()
+  target.ctx.setTransform(1, 0, 0, 1, 0, 0)
+  target.ctx.putImageData(image, dx, dy)
+  target.ctx.restore()
+}
+
+function drawPaintGroups(target, entries, size, assets) {
+  for (const entry of entries) {
+    if (entry.item) { drawPaintItem(target.ctx, entry.item, size.height, assets); continue }
+    const bounds = maskPixelBounds(entry.mask, target, size)
+    if (!bounds) continue // Enabled empty/singular mask means empty coverage.
+    const canvas = loadCanvas().createCanvas(bounds.width, bounds.height)
+    const ctx = canvas.getContext('2d')
+    ctx.setTransform(size.pixelRatio, 0, 0, size.pixelRatio, -bounds.x, -bounds.y)
+    const layer = { canvas, ctx, x: bounds.x, y: bounds.y }
+    drawPaintGroups(layer, entry.children, size, assets)
+    compositeMaskedGroup(target, layer, entry.mask, size)
+  }
+}
+
 export function renderPaintPng(paint, canvasWidth, canvasHeight, options = {}) {
   const { createCanvas } = loadCanvas()
   const size = canvasSize(canvasWidth, canvasHeight, options.scale)
   const canvas = createCanvas(size.pixelWidth, size.pixelHeight)
   const ctx = canvas.getContext('2d')
   ctx.scale(size.pixelRatio, size.pixelRatio)
-  drawStageBackground(ctx, size.width, size.height)
+  if (options.background !== 'transparent') drawStageBackground(ctx, size.width, size.height)
   const items = Array.isArray(paint) ? paint : []
   const assets = { images: options.images, tints: new Map() }
-  for (const item of items) {
-    if (!item || item.id === undefined || item.id === null) continue
-    drawPaintItem(ctx, item, size.height, assets)
-  }
+  drawPaintGroups({ canvas, ctx, x: 0, y: 0 }, groupMaskedPaint(items), size, assets)
   return {
     data: toPng(canvas),
     width: size.width,
