@@ -75,6 +75,8 @@ test('discovery keeps the latest 50 archives after scanning every candidate with
 })
 
 test('excluded and deep archives remain accessible by an explicit workspace path', (t) => {
+  for (const k of ['QXQY_SCAN_DIR_LIMIT','QXQY_SCAN_ENTRY_LIMIT','QXQY_SCAN_DEPTH_LIMIT']) delete process.env[k]
+
   const workspace = workspaceFor(t)
   const deepPath = `${Array.from({ length: 9 }, (_, i) => `level-${i}`).join('/')}/deep.save.json`
   const paths = ['.hidden/hidden.save.json', 'dist/generated.save.json', deepPath]

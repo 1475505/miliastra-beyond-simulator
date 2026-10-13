@@ -4,22 +4,32 @@ export const PLAY_POLL_INTERVAL_MS = 33
 export const PLAY_MOVE_THROTTLE_MS = 60
 
 // 官方 KeyboardCraftspersonKey 键号字母面板（Key11-22 = U Z Y G H I O P J K L V）
-const CRAFT_LETTER_KEYS = { KeyU: 11, KeyZ: 12, KeyY: 13, KeyG: 14, KeyH: 15, KeyI: 16, KeyO: 17, KeyP: 18, KeyJ: 19, KeyK: 20, KeyL: 21, KeyV: 22 }
+const CRAFT_LETTER_CODES = { KeyU: 11, KeyZ: 12, KeyY: 13, KeyG: 14, KeyH: 15, KeyI: 16, KeyO: 17, KeyP: 18, KeyJ: 19, KeyK: 20, KeyL: 21, KeyV: 22 }
+// 语义字母表（布局无关）：Colemak/Dvorak 用户按「打出来的字母」理解键位——如 j 在物理 Y 位、d 在物理 F 位
+const CRAFT_LETTER_KEYS = { u: 11, z: 12, y: 13, g: 14, h: 15, i: 16, o: 17, p: 18, j: 19, k: 20, l: 21, v: 22 }
 // 方向键（Key36-39 = ↑ ↓ ← →，奇匠键号系列）
-const ARROW_KEYS = { ArrowUp: 36, ArrowDown: 37, ArrowLeft: 38, ArrowRight: 39 }
-// WASD 具名移动键（Enum.KeyEventType 官方命名）
-const MOVE_KEYS = { KeyW: 'Forward', KeyS: 'Backward', KeyA: 'Left', KeyD: 'Right' }
+const ARROW_CODES = { ArrowUp: 36, ArrowDown: 37, ArrowLeft: 38, ArrowRight: 39 }
+// WASD 具名移动键（Enum.KeyEventType 官方命名）：语义字母 + 物理 code 双表
+const MOVE_LETTERS = { w: 'Forward', s: 'Backward', a: 'Left', d: 'Right' }
+const MOVE_CODES = { KeyW: 'Forward', KeyS: 'Backward', KeyA: 'Left', KeyD: 'Right' }
 
 export function keyEventName(event, phase) {
   const code = event.code || ''
+  const key = String(event.key || '').toLowerCase()
+  // ① 语义字母优先：按「打出什么字母」解释（IME 'Process'/非字母时自然跳过）
+  const craft = CRAFT_LETTER_KEYS[key]
+  if (craft) return `KeyboardCraftspersonKey${craft}${phase}`
+  const move = MOVE_LETTERS[key]
+  if (move) return `KeyboardMove${move}Key${phase}`
+  // ② 物理位回落：数字/方向键/无字母语义时按 code（QWERTY 与真机行为不变）
   const digit = code.startsWith('Digit') ? code.slice(5) : ''
   if (digit && Number(digit) >= 1 && Number(digit) <= 9) return `KeyboardCraftspersonKey${digit}${phase}`
-  const craft = CRAFT_LETTER_KEYS[code]
-  if (craft) return `KeyboardCraftspersonKey${craft}${phase}`
-  const arrow = ARROW_KEYS[code]
+  const craftCode = CRAFT_LETTER_CODES[code]
+  if (craftCode) return `KeyboardCraftspersonKey${craftCode}${phase}`
+  const arrow = ARROW_CODES[code]
   if (arrow) return `KeyboardCraftspersonKey${arrow}${phase}`
-  const move = MOVE_KEYS[code]
-  if (move) return `KeyboardMove${move}Key${phase}`
+  const moveCode = MOVE_CODES[code]
+  if (moveCode) return `KeyboardMove${moveCode}Key${phase}`
   return ''
 }
 

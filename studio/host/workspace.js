@@ -15,9 +15,12 @@ const envInt = (name, fallback) => {
   const n = Number(process.env[name])
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
 }
-const MAX_ENTRIES = envInt('QXQY_SCAN_ENTRY_LIMIT', 10000)
-const MAX_DIRECTORIES = envInt('QXQY_SCAN_DIR_LIMIT', 1000)
-const MAX_DEPTH = envInt('QXQY_SCAN_DEPTH_LIMIT', 8)
+// 调用时读取（非模块加载时定格）：进程中途变更/测试密闭性都友好
+const scanLimits = () => ({
+  entries: envInt('QXQY_SCAN_ENTRY_LIMIT', 10000),
+  directories: envInt('QXQY_SCAN_DIR_LIMIT', 1000),
+  depth: envInt('QXQY_SCAN_DEPTH_LIMIT', 8),
+})
 
 export function resolveWorkspaceRoot(value = '') {
   const candidate = resolve(String(value || process.cwd()))
@@ -77,11 +80,12 @@ function fileHead(path, size = HEAD_BYTES) {
 }
 
 function walk(dir, root, out, depth, discovery) {
-  if (depth > MAX_DEPTH) {
+  const L = scanLimits()
+  if (depth > L.depth) {
     discovery.depthLimitedDirectories += 1
     return
   }
-  if (discovery.scannedDirectories >= MAX_DIRECTORIES) {
+  if (discovery.scannedDirectories >= L.directories) {
     discovery.directoryLimitReached = true
     return
   }
@@ -98,7 +102,7 @@ function walk(dir, root, out, depth, discovery) {
   try {
     let entry
     while ((entry = entries.readSync())) {
-      if (discovery.scannedEntries >= MAX_ENTRIES) {
+      if (discovery.scannedEntries >= L.entries) {
         discovery.entryLimitReached = true
         return
       }
@@ -162,7 +166,7 @@ export function listWorkspaceArchives(workspaceRoot) {
     depthLimitedDirectories: 0,
     entryLimitReached: false,
     directoryLimitReached: false,
-    limits: { archives: MAX_FILES, entries: MAX_ENTRIES, directories: MAX_DIRECTORIES, depth: MAX_DEPTH, headBytes: HEAD_BYTES },
+    limits: { archives: MAX_FILES, headBytes: HEAD_BYTES, ...scanLimits() },
     policy: { excludedDirectories: [...SKIP_DIRS], hiddenEntries: false, symlinks: false, validatesJson: false },
   }
   walk(root, root, archives, 0, discovery)
@@ -171,8 +175,8 @@ export function listWorkspaceArchives(workspaceRoot) {
   archives.sort((a, b) => b.mtime - a.mtime || a.path.localeCompare(b.path))
   discovery.matchedArchives = archives.length
   if (archives.length > MAX_FILES) discovery.warnings.push(`发现 ${archives.length} 个存档，仅显示修改时间最新的 ${MAX_FILES} 个；其他存档可通过指定路径打开。`)
-  if (discovery.entryLimitReached || discovery.directoryLimitReached) discovery.warnings.push(`自动发现达到扫描上限（${MAX_ENTRIES} 项 / ${MAX_DIRECTORIES} 个目录），列表可能不完整；可通过指定路径打开存档。`)
-  if (discovery.depthLimitedDirectories) discovery.warnings.push(`自动发现跳过 ${discovery.depthLimitedDirectories} 个超过 ${MAX_DEPTH} 层的目录；可通过指定路径打开其中的存档。`)
+  if (discovery.entryLimitReached || discovery.directoryLimitReached) discovery.warnings.push(`自动发现达到扫描上限（${scanLimits().entries} 项 / ${scanLimits().directories} 个目录），列表可能不完整；可通过指定路径打开存档。`)
+  if (discovery.depthLimitedDirectories) discovery.warnings.push(`自动发现跳过 ${discovery.depthLimitedDirectories} 个超过 ${scanLimits().depth} 层的目录；可通过指定路径打开其中的存档。`)
   if (discovery.skippedEntries) discovery.warnings.push('自动发现跳过隐藏项及生成目录（如 node_modules、dist）；可通过指定路径打开其中的存档。')
   if (discovery.unreadableEntries) discovery.warnings.push(`自动发现无法读取 ${discovery.unreadableEntries} 个文件或目录；请检查访问权限，或通过指定路径查看具体错误。`)
   discovery.truncated = archives.length > MAX_FILES || discovery.entryLimitReached || discovery.directoryLimitReached || discovery.depthLimitedDirectories > 0
