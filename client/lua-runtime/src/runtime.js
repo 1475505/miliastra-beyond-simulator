@@ -185,6 +185,10 @@ export class LuaRuntime {
   normalizeRequirePath(path) {
     let p = String(path).replace(/\\/g, '/')
     if (p.endsWith('.lua')) p = p.slice(0, -4)
+    // After stripping .lua, convert any remaining dots to slashes so a Lua
+    // require like 'scripts.lib.PrimitiveShapes' resolves the same key as
+    // the registered path 'scripts/lib/PrimitiveShapes'.
+    p = p.replace(/\./g, '/')
     return p
   }
 
