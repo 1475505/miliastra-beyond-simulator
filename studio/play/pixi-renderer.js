@@ -243,7 +243,7 @@ export class PixiPlayRenderer {
       const text = new Text({
         text: slice ? slice.text : String(item.text || ''),
         style: new TextStyle({
-          fontFamily: 'Inter, "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
+          fontFamily: 'Inter, "HarmonyOS Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
           fontSize: font,
           fill: argb(item.fontColor, 0xffffffff),
           stroke: item.enableOutline ? { color: argb(item.outlineColor, 0xff000000).color, width: Math.max(2, font * 0.12), join: 'round' } : undefined,
