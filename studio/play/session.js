@@ -13,7 +13,7 @@ import {
   localRectMatrix,
 } from '../ui/layout.js'
 import { recordEvent } from '../autotest/format.js'
-import { textWindowMetrics, clamp } from './scroll.js'
+import { textWindowMetrics, clamp, adaptiveFontSize } from './scroll.js'
 import { scrollBarGeometry } from './scroll-geometry.js'
 import { audioDuration } from '../assets/audio-catalog.js'
 import { imageSourceName, canSelectImageType } from '../assets/catalog.js'
@@ -308,6 +308,12 @@ function imageFillFields(control) {
   }
 }
 
+// 文本框「字号自适应」：按当前框尺寸收缩字号后再交给渲染端（PNG / 浏览器共用这一份）。
+// 文本视窗是可滚动内容，其尺寸与内容无关，不做收缩（保持字号原样）。
+function paintFontSize(control, box) {
+  return control.kind === 'textbox' ? adaptiveFontSize(control, box.width, box.height) : control.fontSize
+}
+
 function compactPaint(control, box, transform) {
   const width = Math.abs(box.width * transform.scaleX)
   const height = Math.abs(box.height * transform.scaleY)
@@ -336,7 +342,7 @@ function compactPaint(control, box, transform) {
   }
   if (control.kind === 'textbox' || control.kind === 'textwindow') {
     item.text = control.text ?? ''
-    item.fontSize = control.fontSize
+    item.fontSize = paintFontSize(control, box)
     item.fontColor = control.fontColor
     item.bgColor = control.bgColor
     item.enableOutline = control.enableOutline === true
@@ -403,7 +409,7 @@ function visualFields(control, box) {
   }
   if (control.kind === 'textbox' || control.kind === 'textwindow') {
     fields.text = control.text ?? ''
-    fields.fontSize = control.fontSize
+    fields.fontSize = paintFontSize(control, box)
     fields.fontColor = control.fontColor
     fields.bgColor = control.bgColor
     fields.enableOutline = control.enableOutline === true
