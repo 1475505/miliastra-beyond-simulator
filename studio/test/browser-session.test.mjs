@@ -97,6 +97,13 @@ test('shared play loop polls compact scene views and sends light input', async (
   assert.equal(keyEventName({ code: 'ArrowUp' }, 'Down'), 'KeyboardCraftspersonKey36Down')
   assert.equal(keyEventName({ code: 'ArrowLeft' }, 'Up'), 'KeyboardCraftspersonKey38Up')
   assert.equal(keyEventName({ code: 'KeyF' }, 'Down'), '') // 面板外字母仍不转发
+  // 语义字母优先（Colemak：j 在物理 Y 位、d 在物理 F 位、s 在物理 D 位）——按打出字母解释
+  assert.equal(keyEventName({ code: 'KeyY', key: 'j' }, 'Down'), 'KeyboardCraftspersonKey19Down')
+  assert.equal(keyEventName({ code: 'KeyF', key: 'd' }, 'Down'), 'KeyboardMoveRightKeyDown')
+  assert.equal(keyEventName({ code: 'KeyD', key: 's' }, 'Down'), 'KeyboardMoveBackwardKeyDown')
+  assert.equal(keyEventName({ code: 'KeyA', key: 'a' }, 'Down'), 'KeyboardMoveLeftKeyDown')
+  assert.equal(keyEventName({ code: 'KeyN', key: 'k' }, 'Up'), 'KeyboardCraftspersonKey20Up')
+  assert.equal(keyEventName({ code: 'KeyJ', key: 'Process' }, 'Down'), 'KeyboardCraftspersonKey19Down') // IME 中回落物理位
 })
 
 const CURSOR_EVENTS = ['CursorDown', 'CursorUp', 'CursorClick', 'CursorBeginDrag', 'CursorDrag', 'CursorEndDrag']
