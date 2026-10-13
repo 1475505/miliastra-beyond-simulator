@@ -140,7 +140,7 @@ function drawTextItem(ctx, item, width, height) {
   ctx.beginPath()
   ctx.rect(-width / 2, -height / 2, width, height)
   ctx.clip()
-  ctx.font = `${font}px "Microsoft YaHei UI","Microsoft YaHei",sans-serif`
+  ctx.font = `${font}px "Microsoft YaHei UI","Microsoft YaHei","HarmonyOS Sans SC","Noto Sans CJK SC",sans-serif`
   ctx.fillStyle = cssColor(color)
   ctx.textAlign = horizontal === 1 ? 'right' : horizontal === 0.5 ? 'center' : 'left'
   const scroll = item.kind === 'textwindow' ? item.scroll : null
@@ -477,7 +477,7 @@ function editorBoxStyle(item) {
 function drawEditorLabel(ctx, text, width) {
   const label = String(text || '')
   if (!label) return
-  ctx.font = '10px "Microsoft YaHei UI","Microsoft YaHei",sans-serif'
+  ctx.font = '10px "Microsoft YaHei UI","Microsoft YaHei","HarmonyOS Sans SC","Noto Sans CJK SC",sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   const metrics = ctx.measureText(label)

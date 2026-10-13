@@ -1,7 +1,7 @@
 import { createCanvas } from '@napi-rs/canvas'
 
 const context = createCanvas(1, 1).getContext('2d')
-const FONT = '"Microsoft YaHei UI","Microsoft YaHei",sans-serif'
+const FONT = '"Microsoft YaHei UI","Microsoft YaHei","HarmonyOS Sans SC","Noto Sans CJK SC",sans-serif'
 export const clamp = (value, max) => Math.max(0, Math.min(max, Number.isFinite(value) ? value : 0))
 
 // Host-side measurement is authoritative for both PNG and browser wrapping.
