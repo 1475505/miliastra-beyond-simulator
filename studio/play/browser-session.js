@@ -3,9 +3,23 @@ import { BrowserAudioPlayer } from './audio-player.js'
 export const PLAY_POLL_INTERVAL_MS = 33
 export const PLAY_MOVE_THROTTLE_MS = 60
 
+// 官方 KeyboardCraftspersonKey 键号字母面板（Key11-22 = U Z Y G H I O P J K L V）
+const CRAFT_LETTER_KEYS = { KeyU: 11, KeyZ: 12, KeyY: 13, KeyG: 14, KeyH: 15, KeyI: 16, KeyO: 17, KeyP: 18, KeyJ: 19, KeyK: 20, KeyL: 21, KeyV: 22 }
+// 方向键（Key36-39 = ↑ ↓ ← →，奇匠键号系列）
+const ARROW_KEYS = { ArrowUp: 36, ArrowDown: 37, ArrowLeft: 38, ArrowRight: 39 }
+// WASD 具名移动键（Enum.KeyEventType 官方命名）
+const MOVE_KEYS = { KeyW: 'Forward', KeyS: 'Backward', KeyA: 'Left', KeyD: 'Right' }
+
 export function keyEventName(event, phase) {
-  const digit = event.code && String(event.code).startsWith('Digit') ? String(event.code).slice(5) : ''
+  const code = event.code || ''
+  const digit = code.startsWith('Digit') ? code.slice(5) : ''
   if (digit && Number(digit) >= 1 && Number(digit) <= 9) return `KeyboardCraftspersonKey${digit}${phase}`
+  const craft = CRAFT_LETTER_KEYS[code]
+  if (craft) return `KeyboardCraftspersonKey${craft}${phase}`
+  const arrow = ARROW_KEYS[code]
+  if (arrow) return `KeyboardCraftspersonKey${arrow}${phase}`
+  const move = MOVE_KEYS[code]
+  if (move) return `KeyboardMove${move}Key${phase}`
   return ''
 }
 
