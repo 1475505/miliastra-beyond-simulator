@@ -89,8 +89,11 @@ export function parseHeader(buf) {
 // ===== 主解码 =====
 export function decodeGilV2(buf) {
   const header = parseHeader(buf)
+  // 严格校验总长度: header + payload + tail (LUA 段在 payload 和 tail 之间, 长度任意)
+  if (buf.length < HEADER_BYTES + header.payloadLen + TAIL_BYTES) {
+    throw new Error(`文件过短: ${buf.length} 字节 < 最小 ${HEADER_BYTES + header.payloadLen + TAIL_BYTES}`)
+  }
   const payload = buf.subarray(HEADER_BYTES, HEADER_BYTES + header.payloadLen)
-  const tail = buf.subarray(HEADER_BYTES + header.payloadLen, HEADER_BYTES + header.payloadLen + TAIL_BYTES)
 
   const result = {
     header,
@@ -173,14 +176,19 @@ export function decodeGilV2(buf) {
   result.controls = deduped
 
   // 3. LUA 段: regex 'local PREFAB = {' 定位, 到 4B tail 前
+  //    关键: tail 在文件最后 4B, 不是 payload 末尾 4B (payload 和 tail 之间还有 LUA 段)
+  const tailOffset = buf.length - TAIL_BYTES
+  const tailTag = buf.readUInt32BE(tailOffset)
+  if (tailTag !== TAIL_TAG) {
+    throw new Error(`TAIL_TAG 不匹配: 0x${tailTag.toString(16)} (期望 0x${TAIL_TAG.toString(16)})`)
+  }
   const luaStart = buf.indexOf('local PREFAB = {')
-  if (luaStart >= 0) {
-    const luaEnd = buf.length - TAIL_BYTES
-    const luaBytes = buf.subarray(luaStart, luaEnd)
+  if (luaStart >= 0 && luaStart < tailOffset) {
+    const luaBytes = buf.subarray(luaStart, tailOffset)
     const luaText = luaBytes.toString('utf-8')
     const funcMatches = luaText.matchAll(/local\s+function\s+(\w+)/g)
     result.luaSegment = luaText
-    result.luaSizeBytes = luaEnd - luaStart
+    result.luaSizeBytes = tailOffset - luaStart
     result.luaTextOffset = luaStart
     result.luaFuncNames = [...funcMatches].map(m => m[1])
   }

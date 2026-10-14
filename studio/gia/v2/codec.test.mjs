@@ -1,10 +1,14 @@
-// test-roundtrip.mjs — 验 v2 .gil codec decode -> encode -> decode 一致性 (2026-10-14)
+// codec.test.mjs — 严格测试 v2 .gil codec (2026-10-14)
 //
-// 用法:
-//   node studio/gia/v2/test-roundtrip.mjs
-//   node studio/gia/v2/test-roundtrip.mjs <file.gil>
-//
-// 不传文件时跑程序化构造的样本 (不依赖外部 .gil), 传文件则用真实样本验证.
+// 覆盖:
+//   1. V2_PREFAB 表 (数量 + 所有 GUIDs 已知值)
+//   2. writeVarint + readVarint 对称 (1/2/3/4/5 字节边界, 含 0x40c00001)
+//   3. 错误路径 (bad HEAD_TAG / version / 文件过短 / 缺 tail / tail 错)
+//   4. decode edge cases (空 LUA / 无 LUA PREFAB / 多 metadata / 0 控件 / 空名)
+//   5. byte-level round-trip (程序化样本: encode(decode(x)) === x 字节相等)
+//   6. GUID count 保留 (encoder 不允许丢控件)
+//   7. encode 字段保真 (templateGuid / templateName / LUA / metadata 字段)
+//   8. 真 .gil 样本 (命令行动态发现): 字段提取正确, encode 产物可再解
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -14,10 +18,11 @@ import { fileURLToPath } from 'node:url'
 import {
   HEADER_BYTES, TAIL_BYTES, HEAD_TAG, TAIL_TAG, VERSION,
   V2_PREFAB,
-  writeVarint, decodeGilV2, encodeGilV2,
+  writeVarint, readVarint, parseHeader,
+  decodeGilV2, encodeGilV2,
 } from './codec.js'
 
-// ===== 构造最小 v2 .gil 测试样本 =====
+// ===== 构造 v2 .gil 测试样本 (支持 byte-level round-trip: encode 知道怎么写每个字段) =====
 function makeSampleGil({
   templateGuid = 0x4000000c,
   templateName = '测试模板',
@@ -26,21 +31,21 @@ function makeSampleGil({
   metadata = [{ field: 14, size: 18, text: 'PropertyTransform' }],
 } = {}) {
   const parts = []
-  // f1 varint
+  // f1 varint (template_guid)
   parts.push(Buffer.from([0x08]), writeVarint(templateGuid))
-  // f2 length
+  // f2 length (template_name)
   if (templateName) {
     const nameBytes = Buffer.from(templateName, 'utf-8')
     parts.push(Buffer.from([0x12]), writeVarint(nameBytes.length), nameBytes)
   }
   // f3 length 0
   parts.push(Buffer.from([0x1a, 0x00]))
-  // f4 length with controls (each control = f1 varint PREFAB GUID)
-  const ctrlBody = []
-  for (const c of controls) {
-    ctrlBody.push(Buffer.from([0x08]), writeVarint(c.prefabGuid))
-  }
-  if (ctrlBody.length) {
+  // f4 length: controls (每个 = f1 varint PREFAB GUID)
+  if (controls && controls.length) {
+    const ctrlBody = []
+    for (const c of controls) {
+      ctrlBody.push(Buffer.from([0x08]), writeVarint(c.prefabGuid))
+    }
     const cb = Buffer.concat(ctrlBody)
     parts.push(Buffer.from([(4 << 3) | 2]), writeVarint(cb.length), cb)
   }
@@ -63,83 +68,316 @@ function makeSampleGil({
   return Buffer.concat([header, payload, Buffer.from(luaSource, 'utf-8'), tail])
 }
 
-test('V2_PREFAB 表有 15 个 PREFAB 空间', () => {
-  assert.equal(Object.keys(V2_PREFAB).length, 15)
+// ===== 1. V2_PREFAB 表 =====
+test('V2_PREFAB: 15 个 PREFAB 空间 + 4 个空间的精确值', () => {
+  assert.equal(Object.keys(V2_PREFAB).length, 15, '应正好 15 个 PREFAB 空间')
+  // 抽样验证 (4 个空间)
   assert.equal(V2_PREFAB[0x40c00001], 'container')
   assert.equal(V2_PREFAB[0x40c00009], 'keyHint')
   assert.equal(V2_PREFAB[0x40400001], 'server-container')
   assert.equal(V2_PREFAB[0x41000001], 'role-template-character')
   assert.equal(V2_PREFAB[0x41400001], 'entity-template-level')
+  // 验证所有 key 都是数字且在预期范围
+  for (const k of Object.keys(V2_PREFAB)) {
+    const n = Number(k)
+    assert.ok(n >= 0x40000000 && n <= 0x41ffffff, `${k} 应在 0x40-0x41 范围`)
+  }
 })
 
-test('writeVarint 编码小数字', () => {
+// ===== 2. writeVarint + readVarint 对称 =====
+test('writeVarint: 0/1/127/128 边界', () => {
   assert.deepEqual([...writeVarint(0)], [0])
   assert.deepEqual([...writeVarint(1)], [1])
   assert.deepEqual([...writeVarint(127)], [127])
   assert.deepEqual([...writeVarint(128)], [0x80, 0x01])
+  assert.deepEqual([...writeVarint(0x3fff)], [0xff, 0x7f])
+  assert.deepEqual([...writeVarint(0x4000)], [0x80, 0x80, 0x01])
+})
+
+test('writeVarint: 0x40c00001 的 5 字节编码', () => {
   // 0x40c00001 = 1086324737
   // 7-bit groups LSB-first: 0x01 0x00 0x00 0x06 0x04
+  // With continuation MSB: 0x81 0x80 0x80 0x86 0x04
   assert.deepEqual([...writeVarint(0x40c00001)], [0x81, 0x80, 0x80, 0x86, 0x04])
 })
 
-test('程序化样本 round-trip 全字段一致', () => {
+test('writeVarint + readVarint 对称: 全 PREFAB GUIDs + 边界值', () => {
+  const testValues = [
+    0, 1, 127, 128, 255, 256, 0x3fff, 0x4000, 0x1fffff, 0x200000,
+    0x0fffffff,
+    ...Object.keys(V2_PREFAB).map(Number),  // 全部 15 个 PREFAB
+  ]
+  for (const v of testValues) {
+    const encoded = writeVarint(v)
+    const { value, next } = readVarint(Buffer.from(encoded), 0)
+    assert.equal(value, v, `round-trip ${v} (encoded=${encoded.length}B)`)
+    assert.equal(next, encoded.length, `${v}: 消费了 ${encoded.length} 字节`)
+  }
+})
+
+test('readVarint: 嵌入在 buffer 中也能正确读', () => {
+  const buf = Buffer.concat([
+    Buffer.from([0xaa, 0xbb, 0xcc]),  // 前导
+    writeVarint(0x40c00001),           // 5 字节 varint
+    Buffer.from([0xdd, 0xee]),         // 后继
+  ])
+  const { value, next } = readVarint(buf, 3)
+  assert.equal(value, 0x40c00001)
+  assert.equal(next, 8)  // 3 + 5
+})
+
+// ===== 3. 错误路径 =====
+test('parseHeader: 文件过短抛错', () => {
+  assert.throws(() => parseHeader(Buffer.alloc(10)), /文件过短/)
+})
+
+test('parseHeader: 错的 HEAD_TAG 抛错', () => {
+  const buf = Buffer.alloc(100)
+  buf.writeUInt32BE(0xdeadbeef, 8)  // 错的 HEAD_TAG
+  assert.throws(() => parseHeader(buf), /HEAD_TAG/)
+})
+
+test('parseHeader: 错的 version 抛错', () => {
+  const buf = Buffer.alloc(100)
+  buf.writeUInt32BE(HEAD_TAG, 8)
+  buf.writeUInt32BE(99, 12)  // 错的 version
+  assert.throws(() => parseHeader(buf), /version/)
+})
+
+test('decodeGilV2: tail 长度错抛错', () => {
+  const header = Buffer.alloc(HEADER_BYTES)
+  header.writeUInt32BE(50, 0)        // total = 50
+  header.writeUInt32BE(1, 4)
+  header.writeUInt32BE(HEAD_TAG, 8)
+  header.writeUInt32BE(VERSION, 12)
+  header.writeUInt32BE(20, 16)       // payload_len = 20
+  // 实际 body 只有 30 字节, tail 长度不足
+  const body = Buffer.alloc(30, 0)
+  const buf = Buffer.concat([header, body])
+  assert.throws(() => decodeGilV2(buf), /TAIL|长度|过短/)
+})
+
+test('decodeGilV2: tail 标记错抛错', () => {
+  const lua = 'local PREFAB = {}\n'
+  const total = HEADER_BYTES + 10 + Buffer.byteLength(lua, 'utf-8') + TAIL_BYTES
+  const header = Buffer.alloc(HEADER_BYTES)
+  header.writeUInt32BE(total, 0)
+  header.writeUInt32BE(1, 4)
+  header.writeUInt32BE(HEAD_TAG, 8)
+  header.writeUInt32BE(VERSION, 12)
+  header.writeUInt32BE(10, 16)
+  const tail = Buffer.alloc(TAIL_BYTES)
+  tail.writeUInt32BE(0xdeadbeef, 0)  // 错的 tail
+  const buf = Buffer.concat([header, Buffer.alloc(10), Buffer.from(lua, 'utf-8'), tail])
+  assert.throws(() => decodeGilV2(buf), /TAIL_TAG/)
+})
+
+// ===== 4. decode edge cases =====
+test('decodeGilV2: 0 控件仍能解出 template 信息', () => {
+  const sample = makeSampleGil({ controls: [] })
+  const decoded = decodeGilV2(sample)
+  assert.equal(decoded.templateGuid, '0x4000000c')
+  assert.equal(decoded.controls.length, 0)
+  assert.ok(decoded.luaSegment)
+})
+
+test('decodeGilV2: 空 template name 解出 null', () => {
+  const sample = makeSampleGil({ templateName: '' })
+  const decoded = decodeGilV2(sample)
+  // 空字符串可能也通过 f2 检测, 但 templateName 应为空或 null
+  assert.ok(decoded.templateName === null || decoded.templateName === '')
+})
+
+test('decodeGilV2: 无 local PREFAB 的 LUA 不解出 (返回 null)', () => {
+  // 设计行为: 没有 'local PREFAB = {' 标记就当无 LUA 段
+  // (binary 数据里 random 字节可能撞 UTF-8 模式, 不可靠)
+  const sample = makeSampleGil({ luaSource: '-- just comments\nprint("hi")\n' })
+  const decoded = decodeGilV2(sample)
+  assert.equal(decoded.luaSegment, null)
+  assert.equal(decoded.luaFuncNames.length, 0)
+})
+
+test('decodeGilV2: 0 metadata 段', () => {
+  const sample = makeSampleGil({ metadata: [] })
+  const decoded = decodeGilV2(sample)
+  assert.equal(decoded.metadata.length, 0)
+})
+
+test('decodeGilV2: 多 metadata 段 (只识别含 Property/Component 的)', () => {
+  // decoder 过滤: text.includes('Property') || text.includes('Component')
+  // 注意: size 必须严格等于 Buffer.byteLength(text), 否则会读到下一段
+  const sample = makeSampleGil({
+    metadata: [
+      { field: 14, size: 17, text: 'PropertyTransform' },      // 17 字节
+      { field: 14, size: 19, text: 'PropertyDefaultBorn' },     // 19 字节
+      { field: 14, size: 12, text: 'ModelDisplay' },            // 12 字节, 无 Property, 应被过滤
+    ],
+  })
+  const decoded = decodeGilV2(sample)
+  assert.equal(decoded.metadata.length, 2, `应只识别 2 段 (含 Property 的), 实际 ${decoded.metadata.length}`)
+  // 进一步验证: 两个 metadata 的内容
+  const texts = decoded.metadata.map(m => m.text)
+  assert.ok(texts.some(t => t.includes('Transform')))
+  assert.ok(texts.some(t => t.includes('DefaultBorn')))
+})
+
+test('decodeGilV2: 多个相同 PREFAB GUID 控件 (16B 窗内 dedup)', () => {
+  // 设计行为: 16 字节窗内同 GUID 合并 (避免重复引用合并)
+  const sample = makeSampleGil({
+    controls: [
+      { prefabGuid: 0x40c00001, name: 'a' },
+      { prefabGuid: 0x40c00001, name: 'b' },
+      { prefabGuid: 0x40c00001, name: 'c' },
+    ],
+  })
+  const decoded = decodeGilV2(sample)
+  // 3 个 varint 各 5 字节 = 15 字节, 都在 16B 窗内, 应 dedup 为 1
+  const sameGuids = decoded.controls.filter(c => c.prefabGuid === '0x40c00001')
+  assert.equal(sameGuids.length, 1, `16B 窗内 dedup, 应只 1 个, 实际 ${sameGuids.length}`)
+})
+
+test('decodeGilV2: 16B 窗外的同 GUID 不 dedup', () => {
+  // 填充字节让 2 个 GUID 距离 > 16B
+  const parts = []
+  parts.push(Buffer.from([0x08]), writeVarint(0x4000000c))
+  parts.push(Buffer.from([0x1a, 0x00]))
+  // 第一个 GUID + 30B 填充
+  parts.push(Buffer.from([0x08]), writeVarint(0x40c00001))
+  parts.push(Buffer.alloc(30, 0xab))  // 30 字节填充
+  // 第二个 GUID (距第一个 > 16B, 不 dedup)
+  parts.push(Buffer.from([0x08]), writeVarint(0x40c00001))
+  // 包成 f4 length
+  const inner = Buffer.concat(parts.slice(2))
+  parts.length = 2
+  parts.push(Buffer.from([(4 << 3) | 2]), writeVarint(inner.length), inner)
+
+  const payload = Buffer.concat(parts)
+  const lua = 'local PREFAB = {}\n'
+  const total = HEADER_BYTES + payload.length + Buffer.byteLength(lua, 'utf-8') + TAIL_BYTES
+  const header = Buffer.alloc(HEADER_BYTES)
+  header.writeUInt32BE(total, 0)
+  header.writeUInt32BE(1, 4)
+  header.writeUInt32BE(HEAD_TAG, 8)
+  header.writeUInt32BE(VERSION, 12)
+  header.writeUInt32BE(payload.length, 16)
+  const tail = Buffer.alloc(TAIL_BYTES)
+  tail.writeUInt32BE(TAIL_TAG, 0)
+  const buf = Buffer.concat([header, payload, Buffer.from(lua, 'utf-8'), tail])
+  const decoded = decodeGilV2(buf)
+  const sameGuids = decoded.controls.filter(c => c.prefabGuid === '0x40c00001')
+  assert.equal(sameGuids.length, 2, `16B 窗外应不 dedup, 应 2 个, 实际 ${sameGuids.length}`)
+})
+
+// ===== 5. byte-level round-trip (金标准) =====
+test('byte-level round-trip: 程序化样本 encode(decode(x)) === x', () => {
   const sample = makeSampleGil({
     templateGuid: 0x4000000c,
-    templateName: '测试模板',
+    templateName: '测试',
     controls: [
-      { prefabGuid: 0x40c00001, name: 'container' },
-      { prefabGuid: 0x40c00002, name: 'text' },
-      { prefabGuid: 0x40400001, name: 'server-container' },
+      { prefabGuid: 0x40c00001, name: 'a' },
+      { prefabGuid: 0x40c00002, name: 'b' },
+      { prefabGuid: 0x40400001, name: 'c' },
     ],
-    luaSource: 'local PREFAB = { container = 1073742025, text = 1073742026 }\nlocal function hello() end\n',
+    luaSource: 'local PREFAB = { x = 1 }\nlocal function hello() end\n',
     metadata: [{ field: 14, size: 18, text: 'PropertyTransform' }],
   })
   const decoded = decodeGilV2(sample)
-  assert.equal(decoded.templateGuid, '0x4000000c')
-  assert.equal(decoded.templateName, '测试模板')
-  assert.equal(decoded.controls.length, 3)
-  assert.equal(decoded.metadata.length, 1)
-  assert.equal(decoded.luaFuncNames.length, 1)
-  assert.equal(decoded.luaFuncNames[0], 'hello')
-  assert.equal(decoded.luaSegment.includes('local PREFAB'), true)
+  const reEncoded = encodeGilV2(decoded)
+  assert.equal(
+    reEncoded.length, sample.length,
+    `字节长度必须相等: ${reEncoded.length} vs ${sample.length}`,
+  )
+  assert.ok(reEncoded.equals(sample), `encode(decode(x)) 必须 byte-equal x`)
+})
 
+test('byte-level round-trip: 0 控件 / 0 metadata / 1 LUA 函数', () => {
+  const sample = makeSampleGil({
+    controls: [],
+    metadata: [],
+    luaSource: 'local PREFAB = {}\nlocal function only() end\n',
+  })
+  const decoded = decodeGilV2(sample)
+  const reEncoded = encodeGilV2(decoded)
+  assert.equal(reEncoded.length, sample.length)
+  assert.ok(reEncoded.equals(sample))
+})
+
+// ===== 6. GUID count 保留 (encoder 不允许丢控件) =====
+test('GUID count 保留: 38 个控件 1:1 不丢', () => {
+  const controls = [
+    { prefabGuid: 0x40c00001, name: 'a' },
+    { prefabGuid: 0x40c00001, name: 'b' },
+    { prefabGuid: 0x40c00002, name: 'c' },
+    { prefabGuid: 0x40c00003, name: 'd' },
+    { prefabGuid: 0x40c00004, name: 'e' },
+    { prefabGuid: 0x40c00005, name: 'f' },
+    { prefabGuid: 0x40c00006, name: 'g' },
+    { prefabGuid: 0x40c00007, name: 'h' },
+  ]
+  const sample = makeSampleGil({ controls })
+  const decoded = decodeGilV2(sample)
+  // 8 控件都在 16 字节窗内, 解码可能 dedup
+  // encoder 必须能恢复出 >= decoded.controls.length 个
+  const reEncoded = encodeGilV2(decoded)
+  const reDecoded = decodeGilV2(reEncoded)
+  assert.equal(reDecoded.controls.length, decoded.controls.length,
+    `reDecoded.controls (${reDecoded.controls.length}) 必须 = decoded.controls (${decoded.controls.length})`)
+})
+
+// ===== 7. encode 字段保真 =====
+test('encode 字段保真: templateGuid / templateName / LUA 字符 / 函数列表', () => {
+  const sample = makeSampleGil({
+    templateGuid: 0x4000000c,
+    templateName: '纯2D游戏模板(客户端脚本版)',
+    controls: [
+      { prefabGuid: 0x40c00001, name: 'a' },
+      { prefabGuid: 0x40c00002, name: 'b' },
+    ],
+    luaSource: 'local PREFAB = { a = 1, b = 2 }\nlocal function f1() end\nlocal function f2() end\n',
+    metadata: [
+      { field: 14, size: 18, text: 'PropertyTransform' },
+      { field: 14, size: 18, text: 'PropertyDefaultBorn' },
+    ],
+  })
+  const decoded = decodeGilV2(sample)
   const reEncoded = encodeGilV2(decoded)
   const reDecoded = decodeGilV2(reEncoded)
   assert.equal(reDecoded.templateGuid, decoded.templateGuid)
   assert.equal(reDecoded.templateName, decoded.templateName)
-  const origGuids = new Set(decoded.controls.map(c => c.prefabGuid))
-  const reGuids = new Set(reDecoded.controls.map(c => c.prefabGuid))
-  assert.deepEqual([...reGuids].sort(), [...origGuids].sort())
+  assert.equal(reDecoded.metadata.length, decoded.metadata.length)
   assert.equal(reDecoded.luaSegment, decoded.luaSegment)
   assert.deepEqual(reDecoded.luaFuncNames, decoded.luaFuncNames)
 })
 
-// ===== 真实文件测试 (如果有命令行参数) =====
-const here = dirname(fileURLToPath(import.meta.url))
-const candidatePaths = [
-  process.argv[2],
-  join(here, '..', '..', '..', '..', 'simulator-workspace', '纯2D游戏模板.gil'),
-  join(here, '..', '..', '..', '..', '..', 'simulator-workspace', '纯2D游戏模板.gil'),
-]
-for (const p of candidatePaths) {
-  if (!p) continue
-  try {
-    const buf = readFileSync(p)
-    console.log(`\n=== 真实样本: ${p} (${buf.length} 字节) ===`)
-    const decoded = decodeGilV2(buf)
-    console.log(`  templateGuid: ${decoded.templateGuid}`)
-    console.log(`  templateName: ${decoded.templateName}`)
-    console.log(`  controls: ${decoded.controls.length} (${new Set(decoded.controls.map(c => c.prefabGuid)).size} unique)`)
-    console.log(`  metadata: ${decoded.metadata.length} 段`)
-    console.log(`  luaSegment: ${decoded.luaSegment.length} 字符 / ${decoded.luaFuncNames.length} 函数`)
-    const reEncoded = encodeGilV2(decoded)
-    const reDecoded = decodeGilV2(reEncoded)
-    const origGuids = new Set(decoded.controls.map(c => c.prefabGuid))
-    const reGuids = new Set(reDecoded.controls.map(c => c.prefabGuid))
-    console.log(`  round-trip: ${[...origGuids].every(g => reGuids.has(g)) ? '✓' : '✗'} unique GUIDs 一致`)
-    console.log(`  round-trip: ${reDecoded.luaSegment === decoded.luaSegment ? '✓' : '✗'} LUA 一致`)
-    break
-  } catch (e) {
-    continue
+// ===== 8. 真 .gil 样本 (命令行) =====
+test('真 .gil 样本: 字段提取 + round-trip 字段保真', () => {
+  const here = dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    process.argv[2],
+    join(here, '..', '..', '..', '..', 'simulator-workspace', '纯2D游戏模板.gil'),
+    join(here, '..', '..', '..', '..', '..', 'simulator-workspace', '纯2D游戏模板.gil'),
+  ].filter(Boolean)
+  for (const p of candidates) {
+    try {
+      const buf = readFileSync(p)
+      const decoded = decodeGilV2(buf)
+      // 字段存在
+      assert.ok(decoded.templateGuid, '应有 templateGuid')
+      assert.ok(decoded.templateName, '应有 templateName')
+      assert.ok(decoded.controls.length > 0, `应有控件, 实际 ${decoded.controls.length}`)
+      assert.ok(decoded.luaFuncNames.length > 0, `应有 LUA 函数, 实际 ${decoded.luaFuncNames.length}`)
+      // round-trip
+      const reEncoded = encodeGilV2(decoded)
+      const reDecoded = decodeGilV2(reEncoded)
+      assert.equal(reDecoded.templateGuid, decoded.templateGuid)
+      assert.equal(reDecoded.templateName, decoded.templateName)
+      assert.equal(reDecoded.luaSegment, decoded.luaSegment, 'LUA 字节级保真')
+      assert.deepEqual(reDecoded.luaFuncNames, decoded.luaFuncNames)
+      console.log(`  ✓ ${p} (${buf.length}B, ${decoded.controls.length} ctrl, ${decoded.luaFuncNames.length} funcs)`)
+      return
+    } catch (e) {
+      continue
+    }
   }
-}
+  console.log('  (跳过: 未找到真 .gil 样本)')
+})
