@@ -1,7 +1,7 @@
 import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Mesh, MeshGeometry, Sprite, Text, TextStyle, Texture } from 'pixi.js'
 import { imageFillRect } from './image-fill.js'
 import { imageMaskSpec, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
-import { scrollBarGeometry, visibleTextLines, intersectClipPolygons, textBoxTooShortToDraw, TEXT_MIN_FONT_SIZE } from './scroll-geometry.js'
+import { scrollBarGeometry, visibleTextLines, intersectClipPolygons, textBoxTooShortToDraw, TEXT_MIN_FONT_SIZE, textLineHeight, visibleTextLineCount } from './scroll-geometry.js'
 import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.js'
 import { sliceRegions, resolveImageType } from '../assets/image-stretch.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
@@ -237,14 +237,18 @@ export class PixiPlayRenderer {
       background.rect(-width / 2, -height / 2, width, height).fill(bg)
       visual.addChild(background)
       const font = Math.max(TEXT_MIN_FONT_SIZE, finite(item.fontSize, 12))
-      // 真机口径：判定用的是夹取后的字号，高度不足 1.5×字号+4 时不建 Text、只留底色，
+      // 真机口径：判定用的是夹取后的字号；一行都放不下时不建 Text、只留底色，
       // 见 scroll-geometry.textBoxTooShortToDraw。
       if (!textBoxTooShortToDraw(font, height)) {
         const anchor = textAnchor(item)
         const scroll = item.kind === 'textwindow' ? item.scroll : null
         const slice = scroll ? visibleTextLines(scroll, height) : null
+        // 真机口径：放不下的行直接不画（第 i 行需整行放进框里）。自动换行的行数在排版前算不出来，
+        // 这里只裁显式 \n 分出的行，换行产生的溢出行仍由下面的遮罩裁掉。
+        const shownText = scroll ? slice.text
+          : String(item.text || '').split('\n').slice(0, visibleTextLineCount(font, height)).join('\n')
         const text = new Text({
-          text: slice ? slice.text : String(item.text || ''),
+          text: shownText,
           style: new TextStyle({
             fontFamily: 'Inter, "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
             fontSize: font,
@@ -254,7 +258,7 @@ export class PixiPlayRenderer {
             wordWrapWidth: Math.max(4, width - 4),
             breakWords: true,
             align: anchor.x === 1 ? 'right' : anchor.x === 0.5 ? 'center' : 'left',
-            lineHeight: font * 1.2,
+            lineHeight: textLineHeight(font),
           }),
         })
         text.anchor.set(anchor.x, anchor.y)

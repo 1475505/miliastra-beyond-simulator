@@ -17,31 +17,66 @@ export function scrollBarGeometry(scroll, width, height) {
   return { track, thumb, travel }
 }
 
+// 文本视窗（滚动文本）的可见行：只取「整行都放得下」的行。
+// 「字号测试」第 7 页实测（offset=0）：16px 高 45 → 2 行、46 → 2 行、69 → 3 行、90 → 3/4 行；
+// 20px 高 57/58 → 2 行；10px 高 30/35 → 2 行 —— 即 floor(框高 / 行距)，
+// 且第 3 行是整行不画（不是露出半截），和文本框一样「放不下就不画」。
 export function visibleTextLines(scroll, height) {
-  const first = Math.max(0, Math.floor(scroll.offset / scroll.lineHeight) - 1)
-  const last = Math.min(scroll.lines.length, Math.ceil((scroll.offset + height) / scroll.lineHeight) + 1)
-  return { text: scroll.lines.slice(first, last).join('\n'), y: first * scroll.lineHeight }
+  const line = scroll.lineHeight
+  const first = Math.max(0, Math.ceil((scroll.offset - 0.01) / line))
+  const last = Math.min(scroll.lines.length, Math.floor((scroll.offset + height + 0.01) / line))
+  return { text: scroll.lines.slice(first, Math.max(first, last)).join('\n'), y: first * line }
 }
 
-// 真机实测：文本框高度不足时整段文字都不绘制 —— 底色照画，控件尺寸、对齐、text 字段回读都正常，
-// 就是没有字形。数据来自真机「字号测试」工程 41 张卡片（字号/高度 → 是否绘制）：
-//   16/16 16/20 16/24 16/26 → 不绘制      16/28 16/30 16/32 16/36 16/48 → 绘制
-//   20/30 24/36 → 不绘制                  24/48 → 绘制         10/20 8/24 → 绘制
-//   40/40 40/45 40/50 60/70 → 不绘制      40/64 40/66 40/68 40/70 → 绘制   24/41 60/96 → 绘制
-// 于是阈值被夹在「1.63×字号」与「1.75×字号」之间；这里拟合 1.5×字号 + 4px
-// （在 16px 上为 28，正好落在实测边界 26→28 之间；40px 上为 64，与实测 40/50 不绘制、40/64 绘制一致）。
-// 注意判定用的是「夹取后的字号」：真机把 fontSize 夹到最小字号（默认 10），回读也是 10，
-// 所以 8/16 不绘制（按 10 算 ⇒ 19 > 16）；模拟器的绘制路径同样先 Math.max(10, fontSize) 再判。
-export const TEXT_MIN_HEIGHT_FACTOR = 1.5
-export const TEXT_MIN_HEIGHT_PADDING = 4
+// 文本框「放得下就画」的真机口径 —— 三十多个实测点被同一条式子全中：
+//
+//   可画行数 = floor( (框高 − (0.25×字号 + 4)) / (1.2×字号) )，行距（绘制）= 1.2×字号
+//
+// 0 行 ⇔ 整段文字不绘制（底色照画，控件尺寸/对齐/text 回读都正常）。也就是说
+// 「高度不足整段不画」不是独立规则，而是这条式子 n=0 时的自然结果。
+//
+// 拟合用到的点（字号/高度 → 真机行数），全部来自真机「字号测试」工程的截图逐像素测量：
+//   16：16 20 24 26 → 0 ｜ 28 30 32 36 38 40 43 45 46 → 1 ｜ 47 48 57 58 60 → 2 ｜ 68 69 90 → 3
+//   20：30 → 0 ｜ 55 56 → 1 ｜ 57 58 59 → 2
+//   24：36 → 0 ｜ 41 48 → 1        40：40 45 50 → 0 ｜ 64 66 68 70 → 1
+//   60：70 → 0 ｜ 96 → 1           10：16 → 0 ｜ 20 24 30 → 1 ｜ 33 35 → 2
+// 行距由「字号测试」第 6 页直接量像素得出（真机 UI 缩放 1.2，用框宽 456 = 380×1.2 校准）：
+// 16px 三行文本行带起点在框内 22/45/68 px，间距 23px ⇒ ÷1.2 = 19.2 = 1.2×16；两行文本 33/56 同理。
+// 行块居中（第 6 页 9 张卡逐张量过：块距框顶 = (框高 − 块高)/2，Middle 生效）。
+// 判定前字号先被夹到最小字号（实测下限 10、回读也是 10），所以 8/16 是 0 行。
+export const TEXT_LINE_HEIGHT_FACTOR = 1.2
+export const TEXT_BLOCK_INSET_FACTOR = 0.25
+export const TEXT_BLOCK_INSET = 4
 // 真机 fontSize 下限（受控件 minimumFontSize 影响，实测默认夹到 10）
 export const TEXT_MIN_FONT_SIZE = 10
 
+export function textLineHeight(fontSize) {
+  const font = Number(fontSize)
+  if (!Number.isFinite(font) || font <= 0) return 0
+  return font * TEXT_LINE_HEIGHT_FACTOR
+}
+
+// 文本框整块额外占位：0.25×字号 + 4px（拟合出来的首行上下留白）
+export function textBlockInset(fontSize) {
+  const font = Number(fontSize)
+  if (!Number.isFinite(font) || font <= 0) return 0
+  return font * TEXT_BLOCK_INSET_FACTOR + TEXT_BLOCK_INSET
+}
+
+// 能画出几行；0 表示整段不画。
+export function visibleTextLineCount(fontSize, height) {
+  const line = textLineHeight(fontSize)
+  const box = Number(height)
+  if (line <= 0 || !Number.isFinite(box) || box <= 0) return 0
+  return Math.max(0, Math.floor((box - textBlockInset(fontSize)) / line))
+}
+
+// 整段不绘制 ⇔ 一行都放不下
 export function textBoxTooShortToDraw(fontSize, height) {
   const font = Number(fontSize)
   const box = Number(height)
   if (!Number.isFinite(font) || !Number.isFinite(box) || font <= 0 || box <= 0) return false
-  return box < font * TEXT_MIN_HEIGHT_FACTOR + TEXT_MIN_HEIGHT_PADDING
+  return visibleTextLineCount(font, box) === 0
 }
 
 // Convex viewport intersections for the legacy flattened Pixi paint path.

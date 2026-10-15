@@ -5,7 +5,7 @@ import { applyMatrix, invertMatrix } from './ui/layout.js'
 import { tintedImage } from './assets/raster.js'
 import { rasterizeSlices, resolveImageType } from './assets/image-stretch.js'
 import { imageAssetKey } from './assets/catalog.js'
-import { scrollBarGeometry, textBoxTooShortToDraw, TEXT_MIN_FONT_SIZE } from './play/scroll-geometry.js'
+import { scrollBarGeometry, textBoxTooShortToDraw, TEXT_MIN_FONT_SIZE, textLineHeight, visibleTextLineCount } from './play/scroll-geometry.js'
 
 const require = createRequire(import.meta.url)
 
@@ -133,7 +133,7 @@ function drawTextItem(ctx, item, width, height) {
   ctx.fillStyle = cssColor(bg)
   ctx.fillRect(-width / 2, -height / 2, width, height)
   const font = Math.max(TEXT_MIN_FONT_SIZE, finite(item.fontSize, 12))
-  // 真机口径：判定用的是夹取后的字号，高度不足 1.5×字号+4 时整段文字不绘制（底色照画）。
+  // 真机口径：判定用的是夹取后的字号；一行都放不下时整段文字不绘制（底色照画）。
   if (textBoxTooShortToDraw(font, height)) return
   const color = argb(item.fontColor, 0xffffffff)
   const horizontal = item.horizontalAlignment === 'Right' ? 1 : item.horizontalAlignment === 'Middle' ? 0.5 : 0
@@ -155,13 +155,15 @@ function drawTextItem(ctx, item, width, height) {
   }
   const x = scroll ? -width / 2 + 2 + horizontal * scroll.textWidth : horizontal === 0 ? -width / 2 + 2 : horizontal === 1 ? width / 2 - 2 : 0
   const y = vertical === 0 ? -height / 2 : vertical === 1 ? height / 2 : 0
-  const lines = scroll?.lines || String(item.text || '').split('\n')
-  const lineHeight = scroll?.lineHeight || font * 1.2
+  // 真机口径：放不下的行直接不画（可画行数见 visibleTextLineCount）
+  const lines = scroll?.lines || String(item.text || '').split('\n').slice(0, visibleTextLineCount(font, height))
+  const lineHeight = scroll?.lineHeight || textLineHeight(font)
   const startY = scroll ? -height / 2 - scroll.offset + (scroll.max > 0 ? 0 : vertical * (height - scroll.contentLength))
     : vertical === 0.5 ? y - (lines.length - 1) * lineHeight / 2 : vertical === 1 ? y - (lines.length - 1) * lineHeight : y
   for (let i = 0; i < lines.length; i += 1) {
     const lineY = startY + i * lineHeight
-    if (scroll && (lineY + lineHeight < -height / 2 || lineY > height / 2)) continue
+    // 文本视窗：整行放得下才画（真机「字号测试」第 7 页实测，45 高 / 16px 只画 2 行）
+    if (scroll && (lineY < -height / 2 - 0.01 || lineY + lineHeight > height / 2 + 0.01)) continue
     if (item.enableOutline) ctx.strokeText(lines[i], x, lineY)
     ctx.fillText(lines[i], x, lineY)
   }
