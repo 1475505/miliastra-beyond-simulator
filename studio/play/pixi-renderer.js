@@ -1,7 +1,7 @@
 import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Mesh, MeshGeometry, Sprite, Text, TextStyle, Texture } from 'pixi.js'
 import { imageFillRect } from './image-fill.js'
 import { imageMaskSpec, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
-import { scrollBarGeometry, visibleTextLines, intersectClipPolygons, textBoxTooShortToDraw } from './scroll-geometry.js'
+import { scrollBarGeometry, visibleTextLines, intersectClipPolygons, textBoxTooShortToDraw, TEXT_MIN_FONT_SIZE } from './scroll-geometry.js'
 import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.js'
 import { sliceRegions, resolveImageType } from '../assets/image-stretch.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
@@ -236,8 +236,9 @@ export class PixiPlayRenderer {
       const bg = argb(item.bgColor, 0x00ffffff)
       background.rect(-width / 2, -height / 2, width, height).fill(bg)
       visual.addChild(background)
-      const font = Math.max(8, finite(item.fontSize, 12))
-      // 真机口径：高度不足 2×字号时整段文字不绘制（底色照画），见 scroll.textBoxTooShortToDraw。
+      const font = Math.max(TEXT_MIN_FONT_SIZE, finite(item.fontSize, 12))
+      // 真机口径：判定用的是夹取后的字号，高度不足 1.5×字号+4 时不建 Text、只留底色，
+      // 见 scroll-geometry.textBoxTooShortToDraw。
       if (!textBoxTooShortToDraw(font, height)) {
         const anchor = textAnchor(item)
         const scroll = item.kind === 'textwindow' ? item.scroll : null

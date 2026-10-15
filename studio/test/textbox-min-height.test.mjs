@@ -1,7 +1,8 @@
 // 文本框「高度不足 ⇒ 整段文字不绘制」的真机口径。
 // 数据来自真机「字号测试」工程 41 张卡片（详见 scroll-geometry.js 的注释）：
-//   16/16 16/20 16/24 16/26 20/30 24/36 40/50 60/70 → 不绘制
-//   16/28 16/30 16/48 24/48 40/80 10/20 8/16 8/24 → 绘制
+//   16/16 16/20 16/24 16/26 20/30 24/36 40/40 40/45 40/50 60/70 → 不绘制
+//   16/28 16/30 16/48 24/48 40/64 40/70 24/41 60/96 10/20 8/24 → 绘制
+//   8/16 → 不绘制（真机把 fontSize 夹到 10，判定按夹取后的 10 算）
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
@@ -10,16 +11,17 @@ import { createRuntime } from '../../client/lua-runtime/src/index.js'
 import { paintList, playSnapshot } from '../play/session.js'
 import { renderScenePng } from '../host-png.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
-import { textBoxTooShortToDraw, TEXT_MIN_HEIGHT_FACTOR, TEXT_MIN_HEIGHT_PADDING } from '../play/scroll-geometry.js'
+import { textBoxTooShortToDraw, TEXT_MIN_HEIGHT_FACTOR, TEXT_MIN_HEIGHT_PADDING, TEXT_MIN_FONT_SIZE } from '../play/scroll-geometry.js'
 
 test('阈值常量：1.5×字号 + 4px（真机边界夹在 1.63×~1.75× 之间）', () => {
   assert.equal(TEXT_MIN_HEIGHT_FACTOR, 1.5)
   assert.equal(TEXT_MIN_HEIGHT_PADDING, 4)
+  assert.equal(TEXT_MIN_FONT_SIZE, 10)
 })
 
-test('textBoxTooShortToDraw：真机「字号测试」项目实测的 16 个点', () => {
-  const culled = [[16, 16], [16, 20], [16, 24], [16, 26], [20, 30], [24, 36], [40, 50], [60, 70]]
-  const drawn = [[16, 28], [16, 30], [16, 48], [24, 48], [40, 80], [10, 20], [8, 16], [8, 24]]
+test('textBoxTooShortToDraw：真机「字号测试」项目实测的 20 个点', () => {
+  const culled = [[16, 16], [16, 20], [16, 24], [16, 26], [20, 30], [24, 36], [40, 40], [40, 45], [40, 50], [60, 70]]
+  const drawn = [[16, 28], [16, 30], [16, 48], [24, 48], [40, 64], [40, 66], [40, 68], [40, 70], [24, 41], [60, 96], [10, 20], [8, 24]]
   for (const [font, height] of culled) {
     assert.equal(textBoxTooShortToDraw(font, height), true, `${font}/${height} 真机不绘制`)
   }
@@ -32,8 +34,8 @@ test('textBoxTooShortToDraw：边界附近逐像素判定（字号 16）', () =>
   assert.equal(textBoxTooShortToDraw(16, 26), true, '真机实测：26 不绘制')
   assert.equal(textBoxTooShortToDraw(16, 27.9), true)
   assert.equal(textBoxTooShortToDraw(16, 28), false, '真机实测：28 绘制')
-  assert.equal(textBoxTooShortToDraw(8, 15.9), true)
-  assert.equal(textBoxTooShortToDraw(8, 16), false, '真机实测：8/16 绘制（恰在边界）')
+  assert.equal(textBoxTooShortToDraw(10, 16), true, '真机实测：字号 8 被夹到 10，8/16 不绘制')
+  assert.equal(textBoxTooShortToDraw(10, 19), false, '夹取后 19 = 1.5×10+4，恰在边界')
 })
 
 test('textBoxTooShortToDraw：非法输入不误判为「不绘制」', () => {
@@ -83,7 +85,7 @@ test('host-png：高 30 / 字号 20 ⇒ 一个文字像素都不画', async t =>
   assert.equal(paint.fontSize, 20, '裁掉的是绘制，字号本身不变')
   const scene = playSnapshot(session, { view: true }).scene
   const pixels = await whitePixels(renderScenePng(scene, 240, 160), 240, 160)
-  assert.equal(pixels, 0, '高不足 2×字号时应无字形')
+  assert.equal(pixels, 0, '高不足 1.5×字号+4 时应无字形')
 })
 
 test('host-png：高 40 / 字号 20 ⇒ 文字正常绘制', async t => {
@@ -93,7 +95,18 @@ test('host-png：高 40 / 字号 20 ⇒ 文字正常绘制', async t => {
   assert.ok(pixels > 10, `高 40 时应画得出字，实际白像素 ${pixels}`)
 })
 
-test('pixi：高不足 2×字号时只留底色，不建 Text 节点', t => {
+test('host-png：字号 8（真机夹到 10）/ 高 16 ⇒ 一个文字像素都不画', async t => {
+  const { session } = fixture(t, 16, { fontSize: 8 })
+  const bare = fixture(t, 400, { fontSize: 8 })
+  const scene = playSnapshot(session, { view: true }).scene
+  assert.equal(await whitePixels(renderScenePng(scene, 240, 160), 240, 160), 0,
+    '真机实测 8/16 不绘制：字号被夹到 10 ⇒ 阈值 19 > 16')
+  const control = playSnapshot(bare.session, { view: true }).scene
+  assert.ok(await whitePixels(renderScenePng(control, 240, 160), 240, 160) > 10,
+    '同样的字号 8 在高 400 下应当画得出字')
+})
+
+test('pixi：高不足 1.5×字号+4 时只留底色，不建 Text 节点', t => {
   const renderer = Object.create(PixiPlayRenderer.prototype)
   renderer.scratch = new Matrix()
   renderer.canvasHeight = 720
