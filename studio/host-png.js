@@ -6,6 +6,7 @@ import { tintedImage } from './assets/raster.js'
 import { rasterizeSlices, resolveImageType } from './assets/image-stretch.js'
 import { imageAssetKey } from './assets/catalog.js'
 import { scrollBarGeometry } from './play/scroll-geometry.js'
+import { localFontStack } from './host/local-font.js'
 
 const require = createRequire(import.meta.url)
 
@@ -140,7 +141,7 @@ function drawTextItem(ctx, item, width, height) {
   ctx.beginPath()
   ctx.rect(-width / 2, -height / 2, width, height)
   ctx.clip()
-  ctx.font = `${font}px "Microsoft YaHei UI","Microsoft YaHei",sans-serif`
+  ctx.font = `${font}px ${localFontStack()}`
   ctx.fillStyle = cssColor(color)
   ctx.textAlign = horizontal === 1 ? 'right' : horizontal === 0.5 ? 'center' : 'left'
   const scroll = item.kind === 'textwindow' ? item.scroll : null

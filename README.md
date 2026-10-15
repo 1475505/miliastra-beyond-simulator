@@ -224,3 +224,7 @@ pnpm test:packages
 ## 开源协议
 
 本项目采用 [GNU GPL v3.0（GPL-3.0-only）](LICENSE)。源码仓库：[1475505/miliastra-beyond-simulator](https://github.com/1475505/miliastra-beyond-simulator)。
+
+## 本地自定义字体
+
+可通过宿主环境变量 QXQY_FONT_PATH 指定自有授权的本地 TTF/OTF，统一编辑画布、试玩、PNG 和换行测量。默认不附带字体，仅支持本机访问，不写入项目存档。配置、许可及分发边界见 [本地字体说明](studio/docs/local-fonts.md)。

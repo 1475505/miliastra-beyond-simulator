@@ -1,7 +1,7 @@
 import { createCanvas } from '@napi-rs/canvas'
+import { localFontStack } from '../host/local-font.js'
 
 const context = createCanvas(1, 1).getContext('2d')
-const FONT = '"Microsoft YaHei UI","Microsoft YaHei",sans-serif'
 export const clamp = (value, max) => Math.max(0, Math.min(max, Number.isFinite(value) ? value : 0))
 
 // Host-side measurement is authoritative for both PNG and browser wrapping.
@@ -9,10 +9,11 @@ export const clamp = (value, max) => Math.max(0, Math.min(max, Number.isFinite(v
 export function textWindowMetrics(control, width, height) {
   const font = Math.max(8, Number(control.fontSize) || 12)
   const text = String(control.text ?? '').replace(/\r\n?/g, '\n')
-  const key = JSON.stringify([text, width, height, font, control.showScrollBar])
+  const family = localFontStack()
+  const key = JSON.stringify([text, width, height, font, family, control.showScrollBar])
   let cache = control._textWindowLayout
   if (cache?.key !== key) {
-    context.font = `${font}px ${FONT}`
+    context.font = `${font}px ${family}`
     const wrap = (available) => {
       const lines = []
       for (const paragraph of text.split('\n')) {

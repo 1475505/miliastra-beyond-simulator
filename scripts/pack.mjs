@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { root, products, cleanGenerated } from './paths.mjs'
 import { buildProduct } from './build.mjs'
 import { npm } from './npm.mjs'
+import { distributable } from './distribution-filter.mjs'
 
 export async function packProducts({ build = true } = {}) {
   const output = join(root, 'release')
@@ -17,7 +18,7 @@ export async function packProducts({ build = true } = {}) {
     const stage = join(output, 'staging', product)
     await cleanGenerated(stage, output)
     await mkdir(stage, { recursive: true })
-    for (const entry of manifest.files) await cp(join(source, entry), join(stage, entry), { recursive: true })
+    for (const entry of manifest.files) await cp(join(source, entry), join(stage, entry), { recursive: true, filter: distributable })
     await cp(join(root, 'LICENSE'), join(stage, 'LICENSE'))
     manifest.files = [...new Set([...manifest.files, 'LICENSE'])]
     delete manifest.devDependencies

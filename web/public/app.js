@@ -1,4 +1,4 @@
-import { PixiPlayRenderer, createPlaySession } from './play-renderer.js'
+import { PixiPlayRenderer, createPlaySession, loadBrowserFont } from './play-renderer.js'
 
 const byId = (id) => document.getElementById(id)
 
@@ -68,7 +68,7 @@ let toastTimer = null
 let editorImageRefreshing = false
 let editorImageRefreshPending = false
 
-const playRenderer = new PixiPlayRenderer(elements.stageCanvas)
+const playRenderer = new PixiPlayRenderer(elements.stageCanvas, { fontReady: loadBrowserFont() })
 
 function applyTheme(theme) {
   const next = theme === 'light' ? 'light' : 'dark'
