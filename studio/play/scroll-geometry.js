@@ -23,6 +23,19 @@ export function visibleTextLines(scroll, height) {
   return { text: scroll.lines.slice(first, last).join('\n'), y: first * scroll.lineHeight }
 }
 
+// 真机实测：文本框的高度小于 2 倍字号时，整段文字都不绘制 —— 底色照画，控件的尺寸、
+// 对齐、text 字段回读都正常，就是没有字形。实测（客户端脚本回读 text/字号/宽高 + 真机截图）：
+//   字号 20 / 控件高 30（1.5×）⇒ 无字；字号 20 / 高 40（2.0×）⇒ 有字；字号 10 / 高 30（3×）⇒ 有字。
+// 精确阈值落在 1.5~2 之间，这里取 2：宁可复现"无字"，也不要画出真机不会出现的字。
+export const TEXT_MIN_HEIGHT_RATIO = 2
+
+export function textBoxTooShortToDraw(fontSize, height) {
+  const font = Number(fontSize)
+  const box = Number(height)
+  if (!Number.isFinite(font) || !Number.isFinite(box) || font <= 0 || box <= 0) return false
+  return box < font * TEXT_MIN_HEIGHT_RATIO
+}
+
 // Convex viewport intersections for the legacy flattened Pixi paint path.
 export function intersectClipPolygons(polygons) {
   let output = polygons[0] || []

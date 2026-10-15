@@ -5,7 +5,7 @@ import { applyMatrix, invertMatrix } from './ui/layout.js'
 import { tintedImage } from './assets/raster.js'
 import { rasterizeSlices, resolveImageType } from './assets/image-stretch.js'
 import { imageAssetKey } from './assets/catalog.js'
-import { scrollBarGeometry } from './play/scroll-geometry.js'
+import { scrollBarGeometry, textBoxTooShortToDraw } from './play/scroll-geometry.js'
 
 const require = createRequire(import.meta.url)
 
@@ -133,6 +133,8 @@ function drawTextItem(ctx, item, width, height) {
   ctx.fillStyle = cssColor(bg)
   ctx.fillRect(-width / 2, -height / 2, width, height)
   const font = Math.max(8, finite(item.fontSize, 12))
+  // 真机口径：高度不足 2×字号时整段文字不绘制（底色照画）。
+  if (textBoxTooShortToDraw(font, height)) return
   const color = argb(item.fontColor, 0xffffffff)
   const horizontal = item.horizontalAlignment === 'Right' ? 1 : item.horizontalAlignment === 'Middle' ? 0.5 : 0
   const vertical = item.verticalAlignment === 'Bottom' ? 1 : item.verticalAlignment === 'Middle' ? 0.5 : 0
