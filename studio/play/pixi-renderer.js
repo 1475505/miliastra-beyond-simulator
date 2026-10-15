@@ -249,7 +249,7 @@ export class PixiPlayRenderer {
           fontFamily: this.fontFamily || DEFAULT_BROWSER_FONT,
           fontSize: font,
           fill: argb(item.fontColor, 0xffffffff),
-          stroke: item.enableOutline ? { color: argb(item.outlineColor, 0xff000000).color, width: Math.max(2, font * 0.12), join: 'round' } : undefined,
+          stroke: item.enableOutline ? { ...argb(item.outlineColor, 0xff000000), width: Math.max(2, font * 0.12), join: 'round' } : undefined,
           wordWrap: !scroll,
           wordWrapWidth: Math.max(4, width - 4),
           breakWords: true,
