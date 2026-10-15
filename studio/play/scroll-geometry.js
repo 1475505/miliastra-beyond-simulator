@@ -23,17 +23,23 @@ export function visibleTextLines(scroll, height) {
   return { text: scroll.lines.slice(first, last).join('\n'), y: first * scroll.lineHeight }
 }
 
-// 真机实测：文本框的高度小于 2 倍字号时，整段文字都不绘制 —— 底色照画，控件的尺寸、
-// 对齐、text 字段回读都正常，就是没有字形。实测（客户端脚本回读 text/字号/宽高 + 真机截图）：
-//   字号 20 / 控件高 30（1.5×）⇒ 无字；字号 20 / 高 40（2.0×）⇒ 有字；字号 10 / 高 30（3×）⇒ 有字。
-// 精确阈值落在 1.5~2 之间，这里取 2：宁可复现"无字"，也不要画出真机不会出现的字。
-export const TEXT_MIN_HEIGHT_RATIO = 2
+// 真机实测：文本框高度不足时整段文字都不绘制 —— 底色照画，控件尺寸、对齐、text 字段回读都正常，
+// 就是没有字形。数据来自真机「字号测试」工程 41 张卡片（字号/高度 → 是否绘制）：
+//   16/16 16/20 16/24 16/26 → 不绘制      16/28 16/30 16/32 16/36 16/48 → 绘制
+//   20/30 24/36 → 不绘制                  24/48 → 绘制
+//   40/50 60/70 → 不绘制                  40/80 → 绘制
+//   10/20 8/16 8/24 → 绘制（8 会被最小字号夹到 10，但判定仍按请求的字号 8 算）
+// 于是阈值被夹在「1.63×字号」与「1.75×字号」之间；这里拟合 1.5×字号 + 4px
+// （在 16px 上同为 28，正好落在实测边界 26→28 之间，且 8/16 那组恰好压在边界上）。
+// 另有 40/40（非自适应）在真机上被绘制、与本规则冲突，列为待复测项。
+export const TEXT_MIN_HEIGHT_FACTOR = 1.5
+export const TEXT_MIN_HEIGHT_PADDING = 4
 
 export function textBoxTooShortToDraw(fontSize, height) {
   const font = Number(fontSize)
   const box = Number(height)
   if (!Number.isFinite(font) || !Number.isFinite(box) || font <= 0 || box <= 0) return false
-  return box < font * TEXT_MIN_HEIGHT_RATIO
+  return box < font * TEXT_MIN_HEIGHT_FACTOR + TEXT_MIN_HEIGHT_PADDING
 }
 
 // Convex viewport intersections for the legacy flattened Pixi paint path.

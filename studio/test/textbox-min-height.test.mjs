@@ -1,7 +1,7 @@
-// 文本框「高度不足 2×字号 ⇒ 整段文字不绘制」的真机口径。
-// 真机实测（客户端脚本回读 text/字号/宽高 + 截图确认）：
-//   字号 20 / 控件高 30（1.5×）⇒ 无字；字号 20 / 高 40（2.0×）⇒ 有字；字号 10 / 高 30（3×）⇒ 有字。
-// 这里覆盖三处：纯函数边界、host-png 出图（像素）、pixi 视觉树（节点数）。
+// 文本框「高度不足 ⇒ 整段文字不绘制」的真机口径。
+// 数据来自真机「字号测试」工程 41 张卡片（详见 scroll-geometry.js 的注释）：
+//   16/16 16/20 16/24 16/26 20/30 24/36 40/50 60/70 → 不绘制
+//   16/28 16/30 16/48 24/48 40/80 10/20 8/16 8/24 → 绘制
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
@@ -10,21 +10,30 @@ import { createRuntime } from '../../client/lua-runtime/src/index.js'
 import { paintList, playSnapshot } from '../play/session.js'
 import { renderScenePng } from '../host-png.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
-import { textBoxTooShortToDraw, TEXT_MIN_HEIGHT_RATIO } from '../play/scroll-geometry.js'
+import { textBoxTooShortToDraw, TEXT_MIN_HEIGHT_FACTOR, TEXT_MIN_HEIGHT_PADDING } from '../play/scroll-geometry.js'
 
-test('阈值常量为 2（真机边界落在 1.5~2 之间，取 2 复习实测现象）', () => {
-  assert.equal(TEXT_MIN_HEIGHT_RATIO, 2)
+test('阈值常量：1.5×字号 + 4px（真机边界夹在 1.63×~1.75× 之间）', () => {
+  assert.equal(TEXT_MIN_HEIGHT_FACTOR, 1.5)
+  assert.equal(TEXT_MIN_HEIGHT_PADDING, 4)
 })
 
-test('textBoxTooShortToDraw：真机三组实测值', () => {
-  assert.equal(textBoxTooShortToDraw(20, 30), true, '字号 20 / 高 30（1.5×）无字')
-  assert.equal(textBoxTooShortToDraw(20, 40), false, '字号 20 / 高 40（2.0×）有字')
-  assert.equal(textBoxTooShortToDraw(10, 30), false, '字号 10 / 高 30（3.0×）有字')
+test('textBoxTooShortToDraw：真机「字号测试」项目实测的 16 个点', () => {
+  const culled = [[16, 16], [16, 20], [16, 24], [16, 26], [20, 30], [24, 36], [40, 50], [60, 70]]
+  const drawn = [[16, 28], [16, 30], [16, 48], [24, 48], [40, 80], [10, 20], [8, 16], [8, 24]]
+  for (const [font, height] of culled) {
+    assert.equal(textBoxTooShortToDraw(font, height), true, `${font}/${height} 真机不绘制`)
+  }
+  for (const [font, height] of drawn) {
+    assert.equal(textBoxTooShortToDraw(font, height), false, `${font}/${height} 真机绘制`)
+  }
 })
 
-test('textBoxTooShortToDraw：正好 2 倍仍绘制，稍微不足即不绘制', () => {
-  assert.equal(textBoxTooShortToDraw(16, 32), false)
-  assert.equal(textBoxTooShortToDraw(16, 31.9), true)
+test('textBoxTooShortToDraw：边界附近逐像素判定（字号 16）', () => {
+  assert.equal(textBoxTooShortToDraw(16, 26), true, '真机实测：26 不绘制')
+  assert.equal(textBoxTooShortToDraw(16, 27.9), true)
+  assert.equal(textBoxTooShortToDraw(16, 28), false, '真机实测：28 绘制')
+  assert.equal(textBoxTooShortToDraw(8, 15.9), true)
+  assert.equal(textBoxTooShortToDraw(8, 16), false, '真机实测：8/16 绘制（恰在边界）')
 })
 
 test('textBoxTooShortToDraw：非法输入不误判为「不绘制」', () => {
