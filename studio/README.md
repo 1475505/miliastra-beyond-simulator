@@ -76,6 +76,19 @@ Runtime 控件内部保留 Lua `EnumItem` 身份；[`play/session.js`](play/sess
 
 ## 浏览器图形缓存
 
+### 2026-10-18 高频文字更新与缓存残留（#16）
+
+[#16](https://github.com/1475505/miliastra-beyond-simulator/issues/16) 报告 macOS 长时间试玩后卡顿、内存增长，重开游戏无效而刷新页面恢复。当前源码基线 `9022a14` / Pixi 8.20.0，Windows / Node.js 22.23.2 / Edge headless + SwiftShader 的合成 HUD 复现了每次改字重建 Text、背景和裁切几何，以及 Pixi 两张文字表中失效键累积：三轮各400次更新并清场，`_managedTexts.items` / `canvasText._activeTextures` 的键数分别到400/800/1200，轮内视觉重建399次。
+
+当前锁定 Pixi 版本的 `ViewContainer.destroy → unload → CanvasTextPipe.onTextUnload` 会释放文字的GPU引用，`AbstractTextSystem` 将纹理归还共享池；测试中清场后的存活文字/纹理引用为0，因此本轮**未复现报告描述的同一种 TextureSource 不释放路径**。其 `AbstractText.destroy` 的旧源码描述与本地8.20实现不同。不能直接销毁 Text 的池化纹理，也不能向全部图片递归传入 `texture:true`。
+
+- 修复：`play/pixi-renderer.js` 在文本框尺寸/底色/裁切与滚动条几何不变时原位更新 Text，文字内容、对齐、字号、颜色、描边变化不再重建背景与遮罩；样式变化只替换自有 TextStyle，普通 HUD 改字保留样式。
+- 清理：销毁自有文字时释放 TextStyle；沿Pixi正常引用计数回收纹理，只删除已释放的文字记录和旧字符串纹理键。隐藏控件延期上传或另一文字仍引用旧键时保留到实际释放。图片及圆形共享纹理的生命周期保持独立。
+- 验证：`studio/test/pixi-cache.test.mjs` 扩充一项覆盖复用、字号/描边/滚动位置和重建释放；既有图片共享纹理测试继续通过。`web/test/text-churn-browser.test.mjs` 在真实生产浏览器渲染包中检查1,200次更新、重复清场、隐藏恢复及删除一个文字不破坏另一个文字。修复后各轮重建0次，文字/纹理键各1、清场归零，GPU纹理源保持5（测试预热与池化高水位），最新字符串确实上传GPU。
+- 完整检查：冻结锁文件安装、`pnpm test` 363 pass / 11 环境相关 skip / 0 fail，Web/DSH构建通过；文字资源与字体/字号浏览器验证3/3。`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。macOS原始工程、具体能耗/CPU降幅及长时间原生Chrome表现未在本机核验。
+
+缓存清理接触锁定 Pixi 8.20 的内部管理表，升级依赖须运行上述浏览器回归。修复进入安装包后需重启宿主并刷新试玩页一次，以替换旧浏览器模块和已积累缓存；仅重开Lua游戏不会替换页面中的渲染器代码。
+
 2026-09-08，Windows / Pixi 8.20.0 的 Web 试玩回传：拓扑五子棋回廊第二条教学落下两颗棋子后，棋子向棋盘中心拉出黑色三角形。直接观察当前浏览器存在该图形；同一运行会话的完整 scene 在 PNG 中正常，浏览器收到完整 scene 重建后异常消失，棋盘和教学进度未改变。结论为 `evidence_source=observed`、运行端 `simulator`、`device_status=not_required`；不据此推断千星客户端图片能力。
 
 检查 [`play/pixi-renderer.js`](play/pixi-renderer.js) 发现明确的缓存顺序错误：`updateNode` 先登记新 visual key，`replaceVisual → clearVisual` 随后又将它清空，尺寸/颜色变更后的后续位置更新因此反复销毁并重建同一 Graphics。现将 key 提交移至替换完成后。独立回归 [`test/pixi-cache.test.mjs`](test/pixi-cache.test.mjs) 以“外观不变的移动应保留同一几何对象，外观改变应正确更新”为依据，修复前两例均失败，修复后均通过。另增浏览器 `attach`，刷新页面时只读取完整场景接回已有 Worker，不调用 start、切换玩家或解除暂停；见 [`test/browser-session.test.mjs`](test/browser-session.test.mjs)。
