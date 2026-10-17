@@ -29,3 +29,11 @@ frontend/
 .vscode/
 .idea/
 Thumbs.db
+
+# User-supplied fonts are local-only, never repository assets.
+.local-fonts/
+*.[tT][tT][fF]
+*.[oO][tT][fF]
+*.[tT][tT][cC]
+*.[wW][oO][fF][fF]
+*.[wW][oO][fF][fF]2

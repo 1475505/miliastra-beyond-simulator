@@ -4,8 +4,10 @@ import { createPlayLauncher } from './play-launcher.js'
 import { createImagePreview, createImageTypeField } from './image-preview.js'
 import { createColorField } from './color-field.js'
 import { controlTransformStyle } from './control-transform.js'
+import { textPreviewStyle } from './text-preview.js'
 import { isRemoteImage, imageAssetKey } from '../studio/assets/catalog.js'
 import { refreshBrowserImage } from '../studio/assets/browser.js'
+import { loadBrowserFont } from '../studio/play/browser-font.js'
 
 export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
     const e = React.createElement
@@ -501,7 +503,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       if (selected && selected.kind !== 'server-container') return selected.id
       return parentContainer(root, selectedId)
     }
-    function renderControl(item, snap, canvasWidth, canvasHeight) {
+    function renderControl(item, snap, canvasWidth, canvasHeight, zoom, fontFamily) {
       const box = item; const kind = item.kind
       const textKind = kind === 'textbox' || kind === 'textwindow'
       const left = box.renderLeft ?? box.left; const bottom = box.renderBottom ?? box.bottom
@@ -509,11 +511,12 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       const rotationZ = box.renderRotationZ ?? item.rotationZ ?? 0
       const style = { left: `${left / canvasWidth * 100}%`, bottom: `${bottom / canvasHeight * 100}%`, width: `${width / canvasWidth * 100}%`, height: `${height / canvasHeight * 100}%`, '--rotation': `${-Number(rotationZ)}deg`, fontSize: Math.max(8, Math.min(40, Number(item.fontSize || 12))), color: textKind ? argb(item.fontColor, 0xffffffff) : '#fff' }
       Object.assign(style, controlTransformStyle(box, canvasWidth, canvasHeight))
+      if (textKind && fontFamily) style.fontFamily = fontFamily
       if (kind === 'image') Object.assign(style, shape(item.primitive, argb(item.imageColor, 0xffffffff)))
       else if (textKind) { style.background = argb(item.bgColor, 0x00ffffff); style.justifyContent = item.horizontalAlignment === 'Right' ? 'flex-end' : item.horizontalAlignment === 'Middle' ? 'center' : 'flex-start'; style.alignItems = item.verticalAlignment === 'Bottom' ? 'flex-end' : item.verticalAlignment === 'Middle' ? 'center' : 'flex-start'; style.textShadow = item.enableOutline === false ? 'none' : `0 0 2px ${argb(item.outlineColor, 0xff000000)}` }
       else if (kind === 'container') style.background = 'transparent'
       const selected = item.id === snap.selectedId
-      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: imageAssetKey(item.imageId, item.imageSource), item }) : textKind ? (item.text || '') : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, `缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || KIND_META[kind]?.[1] || kind) : null
+      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: imageAssetKey(item.imageId, item.imageSource), item }) : textKind ? e('span', { style: textPreviewStyle(item, zoom, fontFamily) }, item.textLayout?.lines.join('\n') ?? item.text ?? '') : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, `缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || KIND_META[kind]?.[1] || kind) : null
       return e('div', { key: item.id, className: `qxsim-box ${kind}${selected ? ' selected' : ''}${item.instantiated ? ' dynamic' : ''}${item.pressed ? ' pressed' : ''}`, style }, content, selected && kind !== 'container' ? ['tl', 'tr', 'bl', 'br'].map((pos) => e('i', { key: pos, className: `qxsim-handle ${pos}` })) : null)
     }
 
@@ -521,6 +524,14 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       const theme = useHostTheme()
       const [snap, setSnap] = React.useState(null); const snapRef = React.useRef(null); const queueRef = React.useRef(Promise.resolve())
       const [error, setError] = React.useState('')
+      const [fontFamily, setFontFamily] = React.useState(null)
+      React.useEffect(() => {
+        let active = true
+        loadBrowserFont().then(family => { if (active) setFontFamily(family) }, reason => {
+          if (active) setError(reason?.message || '本地字体加载失败')
+        })
+        return () => { active = false }
+      }, [])
       const playLauncher = usePlayLauncher({ sessionId, api: callApi, playUrl, onError: setError })
       const [savePath, setSavePath] = React.useState(null)
       const [saving, setSaving] = React.useState(false)
@@ -861,7 +872,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
               clientTemplates && selectedRow ? e('div', { className: 'qxsim-hierarchy' }, e('div', { className: 'qxsim-hierarchy-head' }, e('strong', null, '层级与模板边界'), e('span', null, selectedRow.name)), e('div', { className: 'qxsim-parent-row' }, e('select', { 'aria-label': '父级控件', value: selectedParentId, onChange: (event) => void patch({ op: 'reparent', id: selectedRow.id, parentId: event.target.value }).then(() => setNotice(event.target.value === snap.root.id ? '已提升为可实例化顶层模板' : '已调整控件父级')).catch(() => {}) }, e('option', { value: snap.root.id }, '顶层模板（可实例化）'), parentCandidates.map((row) => e('option', { key: row.id, value: row.id }, `${'　'.repeat(row.depth)}${row.name}`))), e('button', { title: '在同级中上移', disabled: selectedRow.siblingIndex <= 0, onClick: () => void patch({ op: 'moveSibling', id: selectedRow.id, direction: 'up' }).catch(() => {}) }, '↑'), e('button', { title: '在同级中下移', disabled: selectedRow.siblingIndex >= selectedRow.siblingCount - 1, onClick: () => void patch({ op: 'moveSibling', id: selectedRow.id, direction: 'down' }).catch(() => {}) }, '↓')), e('div', { className: 'qxsim-hierarchy-note' }, selectedRow.depth === 0 ? '该节点会写入独立 UIControlTemplate，可直接作为 prefabId。' : `当前为第 ${selectedRow.depth} 层子控件，不会单独成为 prefabId。`)) : null,
               e('div', { className: 'qxsim-palette-head' }, e('span', { title: clientTemplates && addMode === 'template' ? '新增独立可实例化模板' : `添加到${selectedRow ? selectedRow.name : '当前控件'}` }, clientTemplates && addMode === 'template' ? '新增顶层模板' : `添加到${selectedRow ? `“${selectedRow.name}”` : '当前控件'}`), clientTemplates ? e('span', { className: 'qxsim-add-mode' }, e('button', { className: addMode === 'template' ? 'active' : '', onClick: () => setAddMode('template') }, '顶层'), e('button', { className: addMode === 'child' ? 'active' : '', onClick: () => setAddMode('child') }, '子控件')) : null),
               e('div', { className: 'qxsim-add' }, CONTROL_TYPES.filter(([kind]) => clientTemplates || kind !== 'container').map(([kind, label]) => e('button', { key: kind, title: `${clientTemplates && addMode === 'template' ? '新增' : '添加'}${label}`, onClick: () => addControl(kind, label) }, `＋ ${label}`))))),
-          e('main', { className: 'qxsim-center' }, e('div', { className: 'qxsim-workspace', ref: workspaceRef }, e('div', { className: 'qxsim-stage-shell', style: { width: `${Math.max(40, Math.round(canvasWidth * effectiveZoom))}px` } }, e('div', { className: 'qxsim-stage-label' }, e('b', null, clientTemplates ? 'Lua 模板预览' : '界面控件组'), e('span', { className: 'qxsim-platform-tag' }, snap.canvas.platform), e('span', null, `${activeRatio} · ${canvasWidth}×${canvasHeight} · 左下原点`)), e('div', { className: 'qxsim-stage', style: { width: '100%', aspectRatio: `${canvasWidth} / ${canvasHeight}` }, onClick: (event) => { const rect = event.currentTarget.getBoundingClientRect(); void patch({ op: 'pick', x: (event.clientX - rect.left) * canvasWidth / rect.width, y: (rect.bottom - event.clientY) * canvasHeight / rect.height }).catch(() => {}) } }, renderBoxes.map((item) => renderControl(item, snap, canvasWidth, canvasHeight))))), error ? e('div', { className: 'qxsim-status error' }, '⚠ ', error) : e('div', { className: 'qxsim-status' }, e('span', null, `● ${snap.asset?.label || '控件'}编辑`), e('span', null, notice || (selectedRow ? `当前：${selectedRow.name}` : '')), e('span', { className: 'spacer' }), e('span', null, clientTemplates ? 'GIA 导出后可在 Lua 中按 prefabId 实例化' : '字段在失焦或 Enter 时提交'), e('a', { className: 'qxsim-community', href: 'https://space.bilibili.com/23358791', target: '_blank', rel: 'noreferrer', title: '作者 B站主页' }, '作者B站'), e('a', { className: 'qxsim-community', href: 'https://qm.qq.com/q/DpuMvxAfhm', target: '_blank', rel: 'noreferrer', title: '加入 QQ 群 1007538100' }, 'QQ群 1007538100'))),
+          e('main', { className: 'qxsim-center' }, e('div', { className: 'qxsim-workspace', ref: workspaceRef }, e('div', { className: 'qxsim-stage-shell', style: { width: `${Math.max(40, Math.round(canvasWidth * effectiveZoom))}px` } }, e('div', { className: 'qxsim-stage-label' }, e('b', null, clientTemplates ? 'Lua 模板预览' : '界面控件组'), e('span', { className: 'qxsim-platform-tag' }, snap.canvas.platform), e('span', null, `${activeRatio} · ${canvasWidth}×${canvasHeight} · 左下原点`)), e('div', { className: 'qxsim-stage', style: { width: '100%', aspectRatio: `${canvasWidth} / ${canvasHeight}` }, onClick: (event) => { const rect = event.currentTarget.getBoundingClientRect(); void patch({ op: 'pick', x: (event.clientX - rect.left) * canvasWidth / rect.width, y: (rect.bottom - event.clientY) * canvasHeight / rect.height }).catch(() => {}) } }, renderBoxes.map((item) => renderControl(item, snap, canvasWidth, canvasHeight, effectiveZoom, fontFamily))))), error ? e('div', { className: 'qxsim-status error' }, '⚠ ', error) : e('div', { className: 'qxsim-status' }, e('span', null, `● ${snap.asset?.label || '控件'}编辑`), e('span', null, notice || (selectedRow ? `当前：${selectedRow.name}` : '')), e('span', { className: 'spacer' }), e('span', null, clientTemplates ? 'GIA 导出后可在 Lua 中按 prefabId 实例化' : '字段在失焦或 Enter 时提交'), e('a', { className: 'qxsim-community', href: 'https://space.bilibili.com/23358791', target: '_blank', rel: 'noreferrer', title: '作者 B站主页' }, '作者B站'), e('a', { className: 'qxsim-community', href: 'https://qm.qq.com/q/DpuMvxAfhm', target: '_blank', rel: 'noreferrer', title: '加入 QQ 群 1007538100' }, 'QQ群 1007538100'))),
           e('aside', { className: 'qxsim-inspector' }, snap.inspector ? e(React.Fragment, null,
             e('div', { className: 'qxsim-inspector-head' }, e('div', { className: 'qxsim-inspector-line' }, e('span', { className: 'qxsim-kind' }, (KIND_META[snap.inspector.kind] || ['◇'])[0]), e('strong', null, snap.inspector.label), clientTemplates && selectedRow?.depth === 0 ? e('span', { className: 'qxsim-template-tag' }, '可实例化') : null), e('div', { className: 'qxsim-node-id' }, clientTemplates && selectedRow?.depth === 0 ? '模板索引 ' : '控件 GUID ', e('code', null, snap.inspector.guid ?? snap.inspector.id), ' · ', selectedRow?.name || '节点'), snap.inspector.kind !== 'server-container' ? e(ControlGuidEditor, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, autofill: snap.clientGuidAutofill, onSave: (id, guid, automatic) => changeControlGuid(id, guid, snap.asset.type, automatic) }) : null),
             e('div', { className: 'qxsim-tabs', style: canInspectorScript ? undefined : { gridTemplateColumns: '1fr' } },

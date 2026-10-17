@@ -12,6 +12,8 @@
 
 层序回归见 `test/sibling-order.test.mjs`：编辑器静态列表第一项在上；Lua 动态实例根默认后建在上，显式 sibling 排序另行生效。2026-09-28 修复位于 Runtime 实例化边界；PNG/Pixi/命中继续消费同一棵树。来源与生命周期边界见 [默认动态实例层序](../client/lua-runtime/docs/observed-contract.md#默认动态实例层序2026-09-28)。
 
+浏览器试玩的官方键鼠映射、响应开关与按键释放策略见 [键位响应](docs/browser-input.md)。
+
 客户端 GIA 的 wire 层序与编辑器列表相反。2026-10-12 已修复独立/整合导出和客户端导入，并保留旧资产编号迁移的原GUID→index对应；证据、自包含方向回归及与 `7d20283` 的关系见 [客户端模板层序](docs/client-template-order.md)。
 
 ```sh

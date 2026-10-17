@@ -1,4 +1,4 @@
-import { PixiPlayRenderer, createPlaySession } from './play-renderer.js'
+import { PixiPlayRenderer, createPlaySession, loadBrowserFont } from './play-renderer.js'
 
 const byId = (id) => document.getElementById(id)
 
@@ -16,6 +16,7 @@ const elements = {
   device: byId('device-select'),
   playControls: byId('play-controls'),
   playStart: byId('play-start'),
+  playKeys: byId('play-keys'),
   playAudio: byId('play-audio'),
   playPause: byId('play-pause'),
   playResume: byId('play-resume'),
@@ -68,7 +69,7 @@ let toastTimer = null
 let editorImageRefreshing = false
 let editorImageRefreshPending = false
 
-const playRenderer = new PixiPlayRenderer(elements.stageCanvas)
+const playRenderer = new PixiPlayRenderer(elements.stageCanvas, { fontReady: loadBrowserFont() })
 
 function applyTheme(theme) {
   const next = theme === 'light' ? 'light' : 'dark'
@@ -298,7 +299,7 @@ function updatePlayChrome() {
 
 function syncPlayPolling() {
   if (mode === 'play' && play.running) play.startPolling()
-  else play.stopPolling()
+  else { void play.releaseKeys(); play.stopPolling() }
 }
 
 async function onPlaySnapshot(next) {
@@ -392,6 +393,12 @@ const play = createPlaySession({
   isActive: () => mode === 'play',
 })
 play.bindInput(elements.stageCanvas, { keysOn: elements.stageShell })
+elements.playKeys.addEventListener('click', () => {
+  play.setKeyInputEnabled(!play.keyInputEnabled)
+  elements.playKeys.setAttribute('aria-pressed', String(play.keyInputEnabled))
+  elements.playKeys.textContent = play.keyInputEnabled ? '键位响应：开' : '键位响应：关'
+  if (play.keyInputEnabled) elements.stageShell.focus()
+})
 elements.playAudio.addEventListener('click', () => play.audio?.toggle())
 
 elements.archive.addEventListener('change', () => run(async () => {

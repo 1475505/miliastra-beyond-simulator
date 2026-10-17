@@ -118,4 +118,11 @@ test('Pixi visuals consume the same normalized Lua scene and update anchors with
   text = root.__visual.children.find(child => child instanceof Text)
   assert.deepEqual([text.anchor.x, text.anchor.y, text.x, text.y], [1, 1, 78, 40])
   assert.equal(text.style.align, 'right')
+  // A faint outline must not become opaque at the PNG → Pixi boundary.
+  for (const [outlineColor, alpha] of [[0x33333333, 0.2], [0x00333333, 0], [0xff333333, 1]]) {
+    renderer.replaceVisual(root, { ...changed, enableOutline: true, outlineColor }, changed.sourceWidth, changed.sourceHeight)
+    text = root.__visual.children.find(child => child instanceof Text)
+    assert.equal(text.style.stroke.color, 0x333333)
+    assert.equal(text.style.stroke.alpha, alpha)
+  }
 })

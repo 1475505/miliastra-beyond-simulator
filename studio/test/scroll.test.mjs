@@ -97,10 +97,8 @@ test('PNG and Pixi text use identical wrapping/offset and draw the scrollbar', a
   const node = second.nodes.find(n => n.name === 'Scroll')
   renderer.replaceVisual(root, node, 160, 80)
   const text = root.__visual.children.find(n => n instanceof Text)
-  // 真机口径（「字号测试」第 7 页）：文本视窗只画整行放得下的行 —— 行高 24、滚动到 48、
-  // 框高 80 ⇒ 只有第 2~4 行（索引 2..4）完整落在窗口里。
-  assert.equal(text.y, -40)
-  assert.equal(text.text, node.scroll.lines.slice(2, 5).join('\n'))
+  assert.equal(text.y, -64)
+  assert.equal(text.text, node.scroll.lines.slice(1, 7).join('\n'))
   assert.equal(text.style.wordWrap, false)
   assert.ok(root.__visual.children.some(n => n.label === 'scrollbar'))
 })

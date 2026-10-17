@@ -362,6 +362,8 @@ export function createStudio(seed, options = {}) {
         imageSource: node.imageSource ?? null,
         imageType: node.imageType ?? null,
         fontSize: node.fontSize ?? null,
+        adaptiveFontSize: node.adaptiveFontSize ?? null,
+        minimumFontSize: node.minimumFontSize ?? null,
         fontColor: node.fontColor ?? null,
         bgColor: node.bgColor ?? null,
         imageColor: node.imageColor ?? null,

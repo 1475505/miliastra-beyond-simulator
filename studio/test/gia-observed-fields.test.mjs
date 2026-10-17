@@ -124,6 +124,33 @@ test('semantic vertical alignment edits replace an imported unknown enum', () =>
   assert.equal(node.giaRaw.textVerticalAlign, undefined)
 })
 
+test('client TextConfig autosize uses 502, independently of visibility and outline', () => {
+  // TextConfig(75) has a different schema from legacy TextBox(19):
+  // 7.0.51 gia_toggles/gia_test observed 502=1/on, omitted/off.
+  for (const adaptive of [false, true]) for (const hidden of [false, true]) {
+    const value = cat(num(501, 20), num(503, 12), num(512, 32), num(513, 10),
+      ...(adaptive ? [hex('b01f01')] : []))
+    const content = cat(num(501, 1073744900),
+      slot(13, msg(12, msg(501, msg(502, msg(508, Buffer.alloc(0)))))),
+      slot(14, cat(msg(17, hex(hidden ? 'b81f01' : '')), num(501, 7))), slot(75, value))
+    const source = envelope(msg(1, cat(msg(1, num(4, 1073744900)), str(3, 'Text'), num(5, 70), msg(19, msg(1, content)))))
+    const { project } = importGia(source)
+    const node = project.root.children[0]
+    assert.equal(node.adaptiveFontSize, adaptive)
+    assert.equal(node.visible, !hidden)
+    assert.equal(node.enableOutline, true)
+    assert.equal(node.minimumFontSize, 10)
+    node.adaptiveFontSize = !adaptive
+    const output = all(exportGia(project).buffer.subarray(20, -4), 1)[0]
+    const config = details(output).flatMap(d => all(d, 75))[0]
+    assert.equal(all(config, 502)[0] ?? 0, adaptive ? 0 : 1)
+    assert.equal(all(config, 503)[0], 12)
+    assert.equal(all(config, 506)[0] ?? 0, 0, '506 is outlineOff in this schema')
+    assert.equal(all(config, 512)[0], 32)
+    assert.equal(all(config, 513)[0], 10)
+  }
+})
+
 // Official second tmp.gia (7.1.0), SHA256
 // 8f5ec41e9a27fd5350c5f7180a0a968e9518ea8c186f6c0b7c87fa390f774193.
 const flagCases = [

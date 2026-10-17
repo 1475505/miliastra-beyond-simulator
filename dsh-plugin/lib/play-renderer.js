@@ -2,6 +2,7 @@
 // shared with the standalone local Web preview.
 export {
   PixiPlayRenderer,
+  loadBrowserFont,
   createPlaySession,
   PLAY_POLL_INTERVAL_MS,
 } from 'qxqy-studio/play/renderer'

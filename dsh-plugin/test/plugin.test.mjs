@@ -401,7 +401,7 @@ test('plugin registers screenshot capture, API and standalone Pixi play routes, 
   })
   assert.match(rendererHeaders['content-type'], /text\/javascript/)
   assert.match(rendererBody, /WebGL/)
-  assert.equal(effects.length, 6)
+  assert.equal(effects.length, 7)
 })
 
 test('client bundle loads through Harness ModuleLoader and exposes the slot plugin', () => {

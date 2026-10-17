@@ -1,10 +1,12 @@
 import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Mesh, MeshGeometry, Sprite, Text, TextStyle, Texture } from 'pixi.js'
 import { imageFillRect } from './image-fill.js'
 import { imageMaskSpec, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
-import { scrollBarGeometry, visibleTextLines, intersectClipPolygons, textBoxTooShortToDraw, TEXT_MIN_FONT_SIZE, textLineHeight, visibleTextLineCount } from './scroll-geometry.js'
+import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './scroll-geometry.js'
 import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.js'
 import { sliceRegions, resolveImageType } from '../assets/image-stretch.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
+export { loadBrowserFont } from './browser-font.js'
+import { DEFAULT_FONT } from '../fonts.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.
 import 'pixi.js/unsafe-eval'
@@ -63,6 +65,7 @@ function visualKeyOf(item, width, height) {
     item.kind, item.primitive, width, height, item.imageColor, item.imageId, imageSourceName(item.imageSource), item.imageType,
     item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillAmount,
     item.text, item.fontSize, item.fontColor, item.bgColor, item.enableOutline,
+    item.adaptiveFontSize, item.minimumFontSize, JSON.stringify(item.textLayout),
     item.outlineColor, item.horizontalAlignment, item.verticalAlignment, item.pressed,
     JSON.stringify(item.scroll),
   ].join('\t')
@@ -89,7 +92,7 @@ export function createCircleTexture(size) {
  * the flattened paint list remains for tests and fallbacks.
  */
 export class PixiPlayRenderer {
-  constructor(canvas) {
+  constructor(canvas, { fontReady = null } = {}) {
     this.canvas = canvas
     this.app = null
     this.nodes = new Map()
@@ -100,10 +103,11 @@ export class PixiPlayRenderer {
     this.canvasWidth = 0
     this.canvasHeight = 0
     this.scratch = new Matrix()
-    this.ready = this.initialize()
+    this.ready = this.initialize(fontReady)
   }
 
-  async initialize() {
+  async initialize(fontReady) {
+    this.fontFamily = await fontReady
     const app = new Application()
     await app.init({
       canvas: this.canvas,
@@ -236,43 +240,36 @@ export class PixiPlayRenderer {
       const bg = argb(item.bgColor, 0x00ffffff)
       background.rect(-width / 2, -height / 2, width, height).fill(bg)
       visual.addChild(background)
-      const font = Math.max(TEXT_MIN_FONT_SIZE, finite(item.fontSize, 12))
-      // 真机口径：判定用的是夹取后的字号；一行都放不下时不建 Text、只留底色，
-      // 见 scroll-geometry.textBoxTooShortToDraw。
-      if (!textBoxTooShortToDraw(font, height)) {
-        const anchor = textAnchor(item)
-        const scroll = item.kind === 'textwindow' ? item.scroll : null
-        const slice = scroll ? visibleTextLines(scroll, height) : null
-        // 真机口径：放不下的行直接不画（第 i 行需整行放进框里）。自动换行的行数在排版前算不出来，
-        // 这里只裁显式 \n 分出的行，换行产生的溢出行仍由下面的遮罩裁掉。
-        const shownText = scroll ? slice.text
-          : String(item.text || '').split('\n').slice(0, visibleTextLineCount(font, height)).join('\n')
-        const text = new Text({
-          text: shownText,
-          style: new TextStyle({
-            fontFamily: 'Inter, "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
-            fontSize: font,
-            fill: argb(item.fontColor, 0xffffffff),
-            stroke: item.enableOutline ? { color: argb(item.outlineColor, 0xff000000).color, width: Math.max(2, font * 0.12), join: 'round' } : undefined,
-            wordWrap: !scroll,
-            wordWrapWidth: Math.max(4, width - 4),
-            breakWords: true,
-            align: anchor.x === 1 ? 'right' : anchor.x === 0.5 ? 'center' : 'left',
-            lineHeight: textLineHeight(font),
-          }),
-        })
-        text.anchor.set(anchor.x, anchor.y)
-        text.x = anchor.x === 0 ? -width / 2 + 2 : anchor.x === 1 ? width / 2 - 2 : 0
-        text.y = anchor.y === 0 ? -height / 2 : anchor.y === 1 ? height / 2 : 0
-        if (scroll) {
-          text.anchor.set(anchor.x, 0)
-          text.x = -width / 2 + 2 + anchor.x * scroll.textWidth
-          text.y = -height / 2 - scroll.offset + slice.y + (scroll.max > 0 ? 0 : anchor.y * (height - scroll.contentLength))
-        }
-        const clip = new Graphics().rect(-width / 2, -height / 2, width, height).fill({ color: 0xffffff, alpha: 1 })
-        text.mask = clip
-        visual.addChild(clip, text)
+      const layout = item.textLayout
+      const font = layout?.fontSize ?? Math.max(1, finite(item.fontSize, 12))
+      const anchor = textAnchor(item)
+      const scroll = item.kind === 'textwindow' ? item.scroll : null
+      const slice = scroll ? visibleTextLines(scroll, height) : null
+      const text = new Text({
+        text: slice ? slice.text : layout ? layout.lines.join('\n') : String(item.text || ''),
+        style: new TextStyle({
+          fontFamily: this.fontFamily || DEFAULT_FONT,
+          fontSize: font,
+          fill: argb(item.fontColor, 0xffffffff),
+          stroke: item.enableOutline ? { ...argb(item.outlineColor, 0xff000000), width: Math.max(2, font * 0.12), join: 'round' } : undefined,
+          wordWrap: !scroll && !layout,
+          wordWrapWidth: Math.max(4, width - 4),
+          breakWords: true,
+          align: anchor.x === 1 ? 'right' : anchor.x === 0.5 ? 'center' : 'left',
+          lineHeight: layout?.lineHeight ?? font * 1.2,
+        }),
+      })
+      text.anchor.set(anchor.x, anchor.y)
+      text.x = anchor.x === 0 ? -width / 2 + 2 : anchor.x === 1 ? width / 2 - 2 : 0
+      text.y = anchor.y === 0 ? -height / 2 : anchor.y === 1 ? height / 2 : 0
+      if (scroll) {
+        text.anchor.set(anchor.x, 0)
+        text.x = -width / 2 + 2 + anchor.x * scroll.textWidth
+        text.y = -height / 2 - scroll.offset + slice.y + (scroll.max > 0 ? 0 : anchor.y * (height - scroll.contentLength))
       }
+      const clip = new Graphics().rect(-width / 2, -height / 2, width, height).fill({ color: 0xffffff, alpha: 1 })
+      text.mask = clip
+      visual.addChild(clip, text)
     } else if (item.kind === 'button') {
       const graphic = new Graphics()
       graphic.roundRect(-width / 2, -height / 2, width, height, 6).fill({ color: 0x3268cf, alpha: 1 })
