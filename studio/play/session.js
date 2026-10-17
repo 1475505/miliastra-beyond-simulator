@@ -14,6 +14,7 @@ import {
 } from '../ui/layout.js'
 import { recordEvent } from '../autotest/format.js'
 import { textWindowMetrics, clamp } from './scroll.js'
+import { textLayout } from './text-layout.js'
 import { scrollBarGeometry } from './scroll-geometry.js'
 import { audioDuration } from '../assets/audio-catalog.js'
 import { imageSourceName, canSelectImageType } from '../assets/catalog.js'
@@ -26,7 +27,8 @@ function prepareScroll(session) {
     const metrics = control.kind === 'grid' ? layoutGrid(control) : textWindowMetrics(control, width, height)
     const scroll = { offset: metrics.offset, max: metrics.max, horizontal: metrics.horizontal,
       showBar: control.showScrollBar !== false, textWidth: metrics.textWidth ?? 0,
-      lines: metrics.lines || [], lineHeight: metrics.lineHeight || 0, contentLength: metrics.length }
+      lines: metrics.lines || [], lineHeight: metrics.lineHeight || 0, contentLength: metrics.length,
+      ...(control.kind === 'textwindow' ? { fontSize: metrics.fontSize } : {}) }
     const key = JSON.stringify(scroll)
     if (control._scrollKey !== key) {
       control._scrollKey = key
@@ -121,6 +123,8 @@ export function controlSnapshot(control, boxes) {
     localRotationZ: control.localRotationZ,
     text: control.kind === 'textbox' || control.kind === 'textwindow' ? (control.text ?? '') : null,
     fontSize: control.kind === 'textbox' || control.kind === 'textwindow' ? control.fontSize : null,
+    adaptiveFontSize: control.kind === 'textbox' || control.kind === 'textwindow' ? control.adaptiveFontSize === true : null,
+    minimumFontSize: control.kind === 'textbox' || control.kind === 'textwindow' ? control.minimumFontSize : null,
     fontColor: control.kind === 'textbox' || control.kind === 'textwindow' ? control.fontColor : null,
     bgColor: control.kind === 'textbox' || control.kind === 'textwindow' ? control.bgColor : null,
     enableOutline: control.kind === 'textbox' || control.kind === 'textwindow' ? control.enableOutline === true : null,
@@ -337,6 +341,9 @@ function compactPaint(control, box, transform) {
   if (control.kind === 'textbox' || control.kind === 'textwindow') {
     item.text = control.text ?? ''
     item.fontSize = control.fontSize
+    item.adaptiveFontSize = control.adaptiveFontSize === true
+    item.minimumFontSize = control.minimumFontSize
+    item.textLayout = textLayout(control, box.width, box.height)
     item.fontColor = control.fontColor
     item.bgColor = control.bgColor
     item.enableOutline = control.enableOutline === true
@@ -404,6 +411,9 @@ function visualFields(control, box) {
   if (control.kind === 'textbox' || control.kind === 'textwindow') {
     fields.text = control.text ?? ''
     fields.fontSize = control.fontSize
+    fields.adaptiveFontSize = control.adaptiveFontSize === true
+    fields.minimumFontSize = control.minimumFontSize
+    fields.textLayout = textLayout(control, box.width, box.height)
     fields.fontColor = control.fontColor
     fields.bgColor = control.bgColor
     fields.enableOutline = control.enableOutline === true
@@ -437,6 +447,7 @@ function sceneFingerprint(node) {
     node.fillType, node.fillHorizontalType, node.fillVerticalType, node.fillAmount,
     node.enableMask, node.enableSoftEdge, node.softEdgeMode, node.softEdgeWidthX, node.softEdgeWidthY,
     node.text, node.fontSize, node.fontColor, node.bgColor,
+    node.adaptiveFontSize, node.minimumFontSize, JSON.stringify(node.textLayout),
     node.enableOutline, node.outlineColor, node.horizontalAlignment, node.verticalAlignment,
     JSON.stringify(node.scroll), node.clipToParent,
   ].join('\t')

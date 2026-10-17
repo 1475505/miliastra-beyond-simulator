@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Worker } from 'node:worker_threads'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { readLocalFont, localFont, localFontStack, serveLocalFont } from '../host/local-font.js'
+import { SimulatorController } from '../host/controller.js'
 import { textWindowMetrics } from '../play/scroll.js'
 import { renderScenePng } from '../host-png.js'
 import { geometryFont } from './fixtures/geometry-font.mjs'
@@ -48,30 +48,31 @@ test('local font validates input, stays out of serializable state and drives PNG
 
   // The worker must not read the replaced disk file or inherit a different font.
   writeFileSync(path, 'no longer a font')
-  const worker = new Worker(`import {parentPort} from 'node:worker_threads';
-    import {localFontStack} from ${JSON.stringify(new URL('../host/local-font.js', import.meta.url).href)};
-    parentPort.postMessage(localFontStack());`, { eval: true, workerData: { localFont: font.data } })
-  t.after(() => worker.terminate())
-  const family = await new Promise((resolve, reject) => { worker.once('message', resolve); worker.once('error', reject) })
-  assert.equal(family, localFontStack())
-  assert.equal(localFont(), font)
+  const controller = new SimulatorController(directory, { clockMode: 'manual' })
+  try {
+    for (const [key, value] of Object.entries({ text: 'AB', fontSize: 40, minimumFontSize: 10,
+      adaptiveFontSize: true, width: 32, height: 34 })) controller.patch({ op: 'set', id: 'n2', key, value })
+    const editor = controller.get().boxes.find(node => node.id === 'n2').textLayout
+    assert.equal(editor.fontSize, 20, '28px available width fits the synthetic AB advances at 20px')
+    assert.deepEqual(editor.lines, ['AB'])
+    assert.equal(editor.requiredHeight, 33, '24px line box plus 9px textbox occupancy')
+    await controller.play('start')
+    const snapshot = await controller.play('get', { view: true })
+    const node = snapshot.scene.nodes.find(node => node.text === 'AB')
+    assert.deepEqual(node.textLayout, editor, 'the real play Worker must use the startup font bytes, not the replaced file')
+  } finally {
+    await controller.dispose()
+  }
 
   const request = { url: '/qxqy-font/manifest', method: 'GET', headers: { host: '127.0.0.1:1234' }, socket: { remoteAddress: '127.0.0.1' } }
   const call = overrides => {
     const result = {}; serveLocalFont({ ...request, ...overrides }, { writeHead(status, headers) { Object.assign(result, { status, headers }) }, end(body) { result.body = body } }); return result
   }
-  const manifest = call({})
-  assert.equal(manifest.status, 200)
-  assert.deepEqual(JSON.parse(manifest.body), { id: font.id })
-  assert.equal(manifest.headers['cache-control'], 'no-store')
-  assert.deepEqual(call({ url: `/qxqy-font/file/${font.id}` }).body, bytes)
+  // Real HTTP delivery/authentication is covered in web/test/local-font.test.mjs.
+  // Keep only connection properties that an in-process HTTP client cannot fake.
   assert.equal(call({ socket: { remoteAddress: '192.0.2.10' } }).status, 403)
-  for (const headers of [{ host: 'evil.test' }, { host: request.headers.host, origin: 'https://evil.test' },
+  for (const headers of [{ host: 'evil.test' },
     { host: request.headers.host, 'x-forwarded-for': '127.0.0.1' }]) assert.equal(call({ headers }).status, 403)
-  assert.equal(call({ url: '/qxqy-font/file/..%2f..%2fprivate.ttf' }).status, 404)
-  assert.equal(call({ url: '/qxqy-font/file/not-a-font' }).status, 404)
-  assert.equal(call({ method: 'POST' }).status, 405)
-  assert.equal(call({ method: 'HEAD' }).body, undefined)
 })
 
 test('distribution excludes font containers and the local-only directory', () => {
