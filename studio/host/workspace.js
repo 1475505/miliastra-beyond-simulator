@@ -7,9 +7,17 @@ const SAVE_MARK = 'qxqy-simulator-save'
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.dsh', 'coverage'])
 const MAX_FILES = 50
 const HEAD_BYTES = 4096
-const MAX_ENTRIES = 10000
-const MAX_DIRECTORIES = 1000
-const MAX_DEPTH = 8
+// Scan budgets are env-overridable so large monorepo workspaces (thousands of
+// decompiled-source dirs) can still surface their saves in the archive picker;
+// defaults stay conservative. 2026-10-13: genshin-ts repo hit both limits and
+// workspace/hmlt-qixia/hmlt-qixia.save.json never appeared in the GUI list.
+const envInt = (name, fallback) => {
+  const n = Number(process.env[name])
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+}
+const MAX_ENTRIES = envInt('QXQY_SCAN_ENTRY_LIMIT', 10000)
+const MAX_DIRECTORIES = envInt('QXQY_SCAN_DIR_LIMIT', 1000)
+const MAX_DEPTH = envInt('QXQY_SCAN_DEPTH_LIMIT', 8)
 
 export function resolveWorkspaceRoot(value = '') {
   const candidate = resolve(String(value || process.cwd()))

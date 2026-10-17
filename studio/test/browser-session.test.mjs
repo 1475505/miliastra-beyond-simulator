@@ -86,7 +86,17 @@ test('shared play loop polls compact scene views and sends light input', async (
   assert.equal(renderer.destroyed, true)
   assert.equal(PLAY_POLL_INTERVAL_MS, 33)
   assert.equal(keyEventName({ code: 'Digit1' }, 'Down'), 'KeyboardCraftspersonKey1Down')
-  assert.equal(keyEventName({ code: 'KeyA' }, 'Down'), '')
+  // 2026-10-13 全键面转发：真实浏览器键盘可达官方 58 键面板（此前只转发 Digit1-9，
+  // 导致依赖 WASD/J/K/方向键的游戏在网页试玩页完全不可玩——hmlt-qixia 交付事故）
+  assert.equal(keyEventName({ code: 'KeyA' }, 'Down'), 'KeyboardMoveLeftKeyDown')
+  assert.equal(keyEventName({ code: 'KeyD' }, 'Up'), 'KeyboardMoveRightKeyUp')
+  assert.equal(keyEventName({ code: 'KeyW' }, 'Down'), 'KeyboardMoveForwardKeyDown')
+  assert.equal(keyEventName({ code: 'KeyS' }, 'Up'), 'KeyboardMoveBackwardKeyUp')
+  assert.equal(keyEventName({ code: 'KeyJ' }, 'Down'), 'KeyboardCraftspersonKey19Down')
+  assert.equal(keyEventName({ code: 'KeyK' }, 'Up'), 'KeyboardCraftspersonKey20Up')
+  assert.equal(keyEventName({ code: 'ArrowUp' }, 'Down'), 'KeyboardCraftspersonKey36Down')
+  assert.equal(keyEventName({ code: 'ArrowLeft' }, 'Up'), 'KeyboardCraftspersonKey38Up')
+  assert.equal(keyEventName({ code: 'KeyF' }, 'Down'), '') // 面板外字母仍不转发
 })
 
 const CURSOR_EVENTS = ['CursorDown', 'CursorUp', 'CursorClick', 'CursorBeginDrag', 'CursorDrag', 'CursorEndDrag']
