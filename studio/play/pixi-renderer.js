@@ -6,7 +6,7 @@ import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.
 import { sliceRegions, resolveImageType } from '../assets/image-stretch.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
 export { loadBrowserFont } from './browser-font.js'
-import { DEFAULT_BROWSER_FONT } from '../fonts.js'
+import { DEFAULT_FONT } from '../fonts.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.
 import 'pixi.js/unsafe-eval'
@@ -65,6 +65,7 @@ function visualKeyOf(item, width, height) {
     item.kind, item.primitive, width, height, item.imageColor, item.imageId, imageSourceName(item.imageSource), item.imageType,
     item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillAmount,
     item.text, item.fontSize, item.fontColor, item.bgColor, item.enableOutline,
+    item.adaptiveFontSize, item.minimumFontSize, JSON.stringify(item.textLayout),
     item.outlineColor, item.horizontalAlignment, item.verticalAlignment, item.pressed,
     JSON.stringify(item.scroll),
   ].join('\t')
@@ -239,22 +240,23 @@ export class PixiPlayRenderer {
       const bg = argb(item.bgColor, 0x00ffffff)
       background.rect(-width / 2, -height / 2, width, height).fill(bg)
       visual.addChild(background)
-      const font = Math.max(8, finite(item.fontSize, 12))
+      const layout = item.textLayout
+      const font = layout?.fontSize ?? Math.max(1, finite(item.fontSize, 12))
       const anchor = textAnchor(item)
       const scroll = item.kind === 'textwindow' ? item.scroll : null
       const slice = scroll ? visibleTextLines(scroll, height) : null
       const text = new Text({
-        text: slice ? slice.text : String(item.text || ''),
+        text: slice ? slice.text : layout ? layout.lines.join('\n') : String(item.text || ''),
         style: new TextStyle({
-          fontFamily: this.fontFamily || DEFAULT_BROWSER_FONT,
+          fontFamily: this.fontFamily || DEFAULT_FONT,
           fontSize: font,
           fill: argb(item.fontColor, 0xffffffff),
           stroke: item.enableOutline ? { ...argb(item.outlineColor, 0xff000000), width: Math.max(2, font * 0.12), join: 'round' } : undefined,
-          wordWrap: !scroll,
+          wordWrap: !scroll && !layout,
           wordWrapWidth: Math.max(4, width - 4),
           breakWords: true,
           align: anchor.x === 1 ? 'right' : anchor.x === 0.5 ? 'center' : 'left',
-          lineHeight: font * 1.2,
+          lineHeight: layout?.lineHeight ?? font * 1.2,
         }),
       })
       text.anchor.set(anchor.x, anchor.y)

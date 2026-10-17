@@ -13,6 +13,7 @@ import {
 } from './layout.js'
 import { readCurrentTransform } from './sync.js'
 import { getPlatformTransform } from './transforms.js'
+import { textLayout } from '../play/text-layout.js'
 
 export function painterBoxes(root, boxes) {
   const out = []
@@ -59,6 +60,9 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       ...((node.kind === 'textbox' || node.kind === 'textwindow') ? {
         text: node.text ?? '',
         fontSize: node.fontSize,
+        adaptiveFontSize: node.adaptiveFontSize === true,
+        minimumFontSize: node.minimumFontSize,
+        textLayout: textLayout(node, box.width, box.height),
         fontColor: node.fontColor,
         bgColor: node.bgColor,
         enableOutline: node.enableOutline !== false,
