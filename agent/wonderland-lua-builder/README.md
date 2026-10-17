@@ -38,6 +38,14 @@ DSH 0.1.7-rc.1 起，本仓库根包 `dsh-plugin-beyond-simulator` 在构建时�
 
 通过仓库根目录的 `dsh plugin --profile web add github:1475505/miliastra-beyond-simulator` 安装插件后，在 DSH 的 **设置 → Agent 预设** 中查找本预设；新任务可选择它，已有任务不会自动切换。修改此目录中的主维护源后，在仓库根运行 `pnpm build` 同步包内副本；已安装的用户预设不会自动被覆盖。
 
+### Persona 工作目录变量兼容性
+
+本预设只在 persona 中使用仍受支持的 `{{model}}`，不依赖 `{{cwd}}`。Harness 0.2.0-rc.2 的 Agent Loop 注册 `provider`、`model`、`cwd`，而 0.2.1-rc.2 只注册前两项；新版由 working-directory 服务提供当前目录上下文。旧 persona 中的 `Your working directory is {{cwd}}.` 因此会在新版请求组装时触发 `unknown prompt variable`，模型尚未收到请求。删除这一句也兼容旧版：提示词没有义务引用所有已注册变量，文件和 Shell 工具仍使用会话工作目录。来源为 [0.2.0-rc.2 源码](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/core/agent-loop/src/index.ts)与 [0.2.1-rc.2 迁移说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/packages/core/system-prompt/README.md#contribute-a-prompt-variable)（2026-10-18 核对，`evidence_source=documented`，运行端 `official_document`，`device_status=not_required`）。这项修复不提高最低宿主版本，保留旧版复制入口；不表示整个插件已完成 0.2.1 的全部接口验收。
+
+先区分实际加载来源：支持目录预设的旧宿主中，若 `$DSH_HOME/.agent-presets/wonderland-lua-builder/agent.cordis.yml` 仍包含该句，需在保留其他自定义内容的前提下删除它并重启 Harness；插件不会覆盖此用户副本。Harness 0.2.1 改用 `@deepseek-ai/dsh-agent-preset-registry` 管理声明式注册项，默认不扫描这个旧目录；应更新含修复的插件包并重启，单改旧副本无效。声明式注册项和随包副本由构建从主维护源同步，不手改生成文件。来源与完整宿主验收见 [0.2.1 兼容性](../../dsh-plugin/README.md#harness-021-兼容性)。
+
+2026-10-18 提示词解析验证覆盖本机 0.1.5-rc.3 renderer，以及发布标签源码中的 0.2.0-rc.2、0.2.1-rc.2 renderer，修复后三组均成功，旧句在新版变量集合中复现原始错误（`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`）。后续完整宿主验证和限制统一记录在上述兼容性说明；提示词解析通过不等于 Desktop 浏览器界面或模型子代理已完成端到端验收。
+
 ## 资料与验证边界
 
 启动前先检查工作区指引、本地知识目录，以及当前 AI 宿主的插件/MCP/Skill 配置和可见能力，寻找 `miliastra-toolbox` 系列或其他知识来源。确认当前能读到官方客户端 2D/Lua API 与使用指南，记录来源、版本和缺项；已有资料直接复用，仅询问仍缺少的内容。详见 [知识库发现与可用性核验](skills/qxqy-game-studio/references/workflow.md#知识库发现与可用性核验)。本工作流不捆绑官方知识库，不能从普通 Lua/UI 或 3D 节点经验猜接口。

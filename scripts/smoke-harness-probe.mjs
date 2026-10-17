@@ -5,9 +5,10 @@ import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot'
+import { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import * as simulator from 'dsh-plugin-beyond-simulator'
 
-export const inject = ['webServer', 'tools', 'agentPresets', 'skills', 'sessions']
+export const inject = ['webServer', 'tools', 'agentPresets', 'skills', 'sessions', 'systemPrompt']
 export function apply(ctx, config) {
   ctx.webServer.register({ kind: 'exact', path: '/qxqy-smoke', async handler(_request, response) {
     response.setHeader('content-type', 'application/json')
@@ -23,7 +24,7 @@ export function apply(ctx, config) {
     try {
       const require = createRequire(import.meta.url)
       const manifest = JSON.parse(await readFile(require.resolve('dsh-plugin-beyond-simulator/package.json'), 'utf8'))
-      for (const version of ['0.1.0-rc.6', '0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2']) {
+      for (const version of ['0.1.0-rc.6', '0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.1', '0.2.1-rc.2']) {
         assert.equal(evaluatePluginCompatibility(manifest, {}, version), undefined, version)
       }
       assert.ok(evaluatePluginCompatibility(manifest, {}, '0.3.0-rc.1'), 'Do not silently admit a future minor API')
@@ -31,6 +32,15 @@ export function apply(ctx, config) {
       assert.equal(preset.broken, undefined, JSON.stringify(preset))
       const lease = await ctx.agentPresets.acquireScope(preset.id)
       try {
+        // Exercise the mounted preset's real prompt contributions without a
+        // model request. Old hosts may register cwd; newer hosts do not.
+        const assembly = await ctx.systemPrompt.assemble({ scope: lease.key })
+        const prompt = renderPrompt({
+          ...assembly,
+          variables: { ...assembly.variables, provider: 'compat-provider', model: 'compat-model' },
+        })
+        assert.match(prompt, /千星奇域 2D\+Lua game studio director powered by the compat-model model/)
+        assert.doesNotMatch(prompt, /\{\{(?:cwd|model)\}\}/)
         const skill = await ctx.skills.get('qxqy-game-studio', { scope: lease.key, cwd: config.workspace })
         assert.ok(skill, 'The embedded preset must discover its bundled game-studio Skill')
         assert.match(skill.content, /PREFLIGHT/)

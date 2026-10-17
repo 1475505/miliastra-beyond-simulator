@@ -22,7 +22,7 @@ dsh web
 
 GitHub 安装使用仓库默认分支，无需指定 `#master`。安装时会安装构建依赖并运行根目录的 `prepare`，生成插件及其资源。若 pnpm 提示需要批准构建，请按提示允许本插件（或错误中给出的精确 Git 依赖键），再重新执行安装命令。安装入口是仓库根目录，`dsh-plugin` 子目录是内部源码包。实现见 [分发说明](../DISTRIBUTION.md#harness-安装入口)。
 
-已有的用户 Agent 预设不会被升级覆盖；如需更新预设，请先备份自己的修改，再按下文的预设安装说明处理。
+支持目录预设的旧宿主中，已有的用户 Agent 预设不会被升级覆盖。Harness 0.2.1 使用声明式注册项，更新插件包才能更新随包预设，单改旧 `.agent-presets` 文件无效；区别见 [0.2.1 兼容性](#harness-021-兼容性)。
 
 若需要从源码生成安装包，准备 pnpm 10.15.0，在仓库根执行：
 
@@ -87,8 +87,35 @@ DSH Desktop 0.2 拒绝页面创建子窗口，旧版插件因此误报“浏览�
 ### 验证与边界
 
 - `pnpm test:packages` 在仓库外分别安装 `dsh-tools 0.1.0-rc.6 / Cordis 4.0.1` 和 `dsh-tools 0.2.0-rc.2 / Cordis 4.0.4`，经真实 ToolRuntime 验证 7 个工具、会话隔离、对象/字符串 JSON 参数、revision 冲突、Worker 与 PNG 图片内容，并验证 Web / MCP 包。
-- `pnpm test:harness` 默认在临时目录安装 Harness `0.2.0-rc.2`，用独立 `DSH_HOME` 完成 tarball 安装、完整 Web 启动、宿主版本准入、Agent 预设与 Skill 发现、真实工具调用及附件服务、HTTP 页面检查；可传入已有 CLI 的 `lib/bin.js` 绝对路径复用安装。无需模型 API Key。该项已加入 npm 发布前验收。
+- 当时的 `pnpm test:harness` 使用 Harness `0.2.0-rc.2`，用独立 `DSH_HOME` 完成 tarball 安装、完整 Web 启动、宿主版本准入、Agent 预设与 Skill 发现、真实工具调用及附件服务、HTTP 页面检查；可传入已有 CLI 的 `lib/bin.js` 绝对路径复用安装。当前默认版本与扩展矩阵见下节；无需模型 API Key，该项已加入 npm 发布前验收。
 - `pnpm test:git-install <CLI 的 lib/bin.js>` 使用 0.2 CLI 验证纯源码安装与 profile 注册。
 - 本轮观察：Windows x64 / Node.js 22.23.2 / pnpm 10.15.0；浏览器实测模拟器标签、文本编辑、独立试玩启动与停止；0.2.0-rc.1 仅检查版本准入，完整执行验收针对 rc.2。桌面 Electron 宿主、Linux/macOS 和真实模型对话未在本机验收；桌面端文件协议与新窗口路径需单独验证，内置 `dsh` 命令可用不等于桌面嵌入 UI 已通过。
 
 官方行为标记：`evidence_source=documented`，运行端 `official_document`；本轮测试标记：`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。模拟器包版本以根 `package.json` 为准；本地构建完成不等于 npm 已发布。
+
+## Harness 0.2.1 兼容性
+
+2026-10-18 核对官方 [0.2.1-rc.1 更新汇总](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.1)（覆盖 0.2.0-rc.2 以来的变更）及 [0.2.1-rc.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)。后者主要增加 DeepSeek-V4.1-Flash-1017 与 DeepSeek Search/Fetch API 支持；不应只看最后一个补丁版本而漏掉整个 0.2.1 系列的接口调整。以下官方结论均为 `evidence_source=documented`，运行端 `official_document`，`device_status=not_required`。
+
+| 更新项 | 本插件的适配结论 |
+|---|---|
+| 不再注册 `cwd` 提示词变量 | 已移除随包 persona 中的旧引用，保留 `{{model}}`，兼容旧版。详见 [预设迁移](../agent/wonderland-lua-builder/README.md#persona-工作目录变量兼容性)与[官方变量约定](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/packages/core/system-prompt/README.md#contribute-a-prompt-variable)。 |
+| Agent 预设改为声明式注册 | 新版 [agent-preset-registry](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/packages/preset/agent-preset-registry/src/index.ts) 不提供旧目录扫描。现有 `@deepseek-ai/dsh-agent-preset` 注册项可直接使用；旧版复制入口继续保留。新版需要更新插件内嵌预设，旧目录副本不是默认生效源。 |
+| 版本兼容判断优先采用 `engines.dsh` | 我们未声明该字段，宿主仍按 DSH peer 范围并启用 `includePrerelease` 判断。但 npm 的普通 peer 解析不会把 0.2.1-rc.2 纳入原有 `^0.2.0-rc.1`，实际安装报 `ERESOLVE`。已为 `dsh-tools` 显式追加 `\|\| ^0.2.1-rc.1`，保留原两段范围和 0.1.0-rc.6 开发依赖，不用 `--force` 或忽略 peer 绕过。依据[宿主准入实现](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/packages/boot/app-boot/src/plugin-compatibility.ts)与[SemVer 预发布规则](https://github.com/npm/node-semver#prerelease-tags)。 |
+| 会话可通过 `working_directory` 切换当前目录 | [新服务](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/packages/session/working-directory/README.md) 将当前目录放在投影中，`Session.header.cwd` 仍是原始工程。模拟器继续以原始工程根绑定存档和相对脚本，不把 Shell 的目录切换当作切换编辑器工程；这项行为保持旧版一致。 |
+| 子代理统一立即返回 ID、支持独立预设；Agent Team 调整通知 | 本预设挂载官方 `tool-subagent`、控制和工作流插件，没有自写 SDK runtime、`session/wait` 或 outbox 消费代码。无需复制新协议；旧 `backgroundMode` 等配置在新版已不参与行为，保留供旧宿主使用。新子代理的行为由宿主决定，不能把旧配置当作新版同步等待承诺。 |
+| 移除 invariant、`both` 展示及逐行 `agent-instructions.dshHome` | 本插件和预设未依赖这些入口/字段，也未替换旧 `stats` 行，无需兼容补丁。新增的模型、凭据优先级和搜索能力由官方服务处理；本插件不固定模型 ID、不读取模型密钥。 |
+| 插件热重载、子路径元信息、界面扩展位调整 | 现有路由已由 effect 注销，重载验证继续执行。`conversation.view`、ModuleLoader、`defineTool`、JSON 输出和图片附件接口仍可用。子路径元信息不再回退根 package.json，但本插件没有依赖这种回退，不因此改动执行接口。 |
+
+验收入口已补齐：`test:packages` 增加 `dsh-tools 0.2.1-rc.2 / Cordis 4.0.5`，保留 0.1.0-rc.6 与 0.2.0-rc.2 两组；`test:harness` 默认使用 0.2.1-rc.2，仍可传入旧版 CLI 路径。完整宿主探针会组装实际挂载预设的提示词并调用官方 `renderPrompt`，在发模型请求前检查变量错误，避免仅凭“预设可见、Skill 可读”漏掉这类启动故障。路由回归比较首次激活的数量，避免新增字体等正常路由造成固定条数误报。
+
+本轮本地观察：Windows x64 / Node.js 22.23.2 / pnpm 10.15.0，本地插件构建版本 2.1.1；以下均为 `evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。
+
+- `pnpm install --lockfile-only --frozen-lockfile --offline --ignore-scripts` 通过，锁文件无需改动；`pnpm test` 共 357 项通过、9 项条件跳过、0 失败；`pnpm pack:release` 三个本地包构建通过。
+- `pnpm test:packages` 三组均通过，覆盖实际 npm 安装、真实 ToolRuntime、JSON 参数、会话隔离、revision、Worker、PNG 附件、路由重载清理及 Web/MCP。修复前前两组通过，0.2.1-rc.2 组在安装阶段复现 `ERESOLVE`；追加 peer 范围后不加任何忽略 peer 的选项即可通过。
+- 同一最终 tarball 分别经 Harness 0.2.0-rc.2 与 0.2.1-rc.2 的隔离 `DSH_HOME` 完整 Web 启动。预设实际提示词渲染、Skill 正文/引用读取、7 个工具、两种 PNG 附件、HTTP 试玩资源及两轮带 Worker 的组件重启均通过。
+- `test:git-install` 传入 0.2.1-rc.2 CLI，通过源码 Git 依赖、`prepare` 构建、profile 注册、`--dump-config`、Client/Skill/预设、Worker 和 PNG。Windows 首次执行因 pnpm store 中已加载的 Canvas 原生 DLL 无法 unlink 而失败；对子进程设置 `npm_config_package_import_method=copy` 后通过。该次原始错误为 `EPERM`，不是构建审批拒绝，不能仅根据 Harness 随附的通用 Git 构建审批提示修改允许名单。此设置只用于隔离验收，没有修改用户的包管理器或 DSH 配置。
+
+完整宿主验收与准入检查、单独 renderer 测试分别记录，不互相替代。
+
+验证边界：没有调用真实模型，没有实跑模型子代理或 Agent Team，也没有操作用户的 Desktop 安装。Electron `file://`、Linux/macOS、SSH 文件系统和带路径前缀的 `--public-url` 代理部署未在本轮验收；现有 UI/试玩资源使用根绝对 URL，不能据此宣称子路径部署已兼容。更新说明中的这些新增部署能力不等于第三方插件自动完成适配。本地构建/测试完成不表示 npm 已发布。

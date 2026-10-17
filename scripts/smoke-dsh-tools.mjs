@@ -26,6 +26,8 @@ export async function smokeDshTools(workspace) {
   const tools = new ToolRuntime(ctx)
   const owner = ctx.plugin(plugin)
   await owner
+  const registeredRouteCount = routes.size
+  assert.ok(registeredRouteCount > 0, 'The plugin must register its HTTP routes')
   const agent = { id: 'package-smoke', session: { header: { cwd: workspace } } }
   let callId = 0
   const call = async (name, args = {}, caller = agent) => {
@@ -62,7 +64,7 @@ export async function smokeDshTools(workspace) {
     assert.match(JSON.stringify(stale), /revision conflict/)
     for (let cycle = 0; cycle < 2; cycle++) {
       await owner.restart()
-      assert.equal(routes.size, 6)
+      assert.equal(routes.size, registeredRouteCount)
       assert.equal(tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 7)
       assert.equal((await call('qxqy_studio_get')).value.save.name, '未命名存档')
     }

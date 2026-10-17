@@ -10,6 +10,7 @@ const { artifacts } = JSON.parse(await readFile(join(root, 'release/manifest.jso
 const harnessVersions = [
   { tools: '0.1.0-rc.6', cordis: '4.0.1' },
   { tools: '0.2.0-rc.2', cordis: '4.0.4' },
+  { tools: '0.2.1-rc.2', cordis: '4.0.5' },
 ]
 for (const harness of harnessVersions) {
   const destination = await mkdtemp(join(tmpdir(), 'qxqy-package-smoke-'))
