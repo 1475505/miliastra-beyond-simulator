@@ -9,6 +9,7 @@ import { readClientLanguageType } from './client-language.js'
 import { ScriptSync, contentHash, discoverScriptDirectories } from './script-sync.js'
 import { sharedImageAssets } from './image-assets.js'
 import { ControlGuidSync } from './control-guid-sync.js'
+import { localFont } from './local-font.js'
 
 // Keep the interactive default short, but allow project replay runners to raise
 // it for control-heavy pixel-art scenes and long deterministic golden cases.
@@ -28,6 +29,7 @@ function validateClockMode(value) {
 
 export class SimulatorController {
   constructor(workspacePath = '', { imageAssets = sharedImageAssets(), clockMode = 'realtime' } = {}) {
+    localFont()
     // The DSH adapter can begin before its host exposes a workspace.  Keep the
     // controller usable in that state instead of silently binding it to the
     // process cwd; Web and MCP always pass an explicit workspace.
@@ -138,7 +140,7 @@ export class SimulatorController {
   }
 
   createWorker() {
-    const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' })
+    const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module', workerData: { localFont: localFont()?.data ?? null } })
     worker.on('message', (message) => {
       const pending = this.pending.get(message?.id)
       if (!pending) return

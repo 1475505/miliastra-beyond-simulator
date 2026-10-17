@@ -5,6 +5,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { listWorkspaceArchives, resolveWorkspaceArchive } from './workspace-archives.js'
 import { serveImageAsset } from 'qxqy-studio/host/image-assets'
 import { serveAudioAsset } from 'qxqy-studio/host/audio-assets'
+import { localFont, serveLocalFont } from 'qxqy-studio/host/local-font'
 
 export const name = 'qxqy-simulator'
 export const inject = ['tools', 'webServer']
@@ -520,6 +521,7 @@ function registerApi(ctx, registry) {
 }
 
 export function apply(ctx) {
+  localFont()
   const registry = createRegistry()
   // Install cleanup before registration can throw, and let Cordis await workers.
   ctx.effect(() => () => registry.dispose(), 'qxqy-simulator: dispose sessions')
@@ -529,4 +531,5 @@ export function apply(ctx) {
   registerPlayRenderer(ctx)
   registerRoute(ctx, { kind: 'prefix', path: '/qxqy-assets', handler: (request, response) => serveImageAsset(request, response) })
   registerRoute(ctx, { kind: 'prefix', path: '/qxqy-audio', handler: (request, response) => serveAudioAsset(request, response) })
+  registerRoute(ctx, { kind: 'prefix', path: '/qxqy-font', handler: serveLocalFont })
 }

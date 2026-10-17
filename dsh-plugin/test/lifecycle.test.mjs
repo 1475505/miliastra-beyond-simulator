@@ -12,6 +12,7 @@ const routeKeys = [
   'exact /qxqy-simulator/play-renderer.js',
   'prefix /qxqy-assets',
   'prefix /qxqy-audio',
+  'prefix /qxqy-font',
 ]
 
 async function host(t) {

@@ -36,7 +36,7 @@
     <footer class="status"><span class="live" id="state">● 正在启动</span><span id="viewMode">页面：试玩</span><span class="spacer"></span><span class="metric" id="frame">Frame 0</span><span class="metric" id="time">0.00s</span></footer>
   </div>
   <script type="module">
-    import { PixiPlayRenderer, createPlaySession } from '/qxqy-simulator/play-renderer.js'
+    import { PixiPlayRenderer, createPlaySession, loadBrowserFont } from '/qxqy-simulator/play-renderer.js'
 
     (() => {
       'use strict'
@@ -49,7 +49,7 @@
       const $ = (id) => document.getElementById(id)
       const stage = $('stage')
       const cv = $('cv')
-      const renderer = new PixiPlayRenderer(cv)
+      const renderer = new PixiPlayRenderer(cv, { fontReady: loadBrowserFont() })
       const shell = $('shell')
       const workspace = $('workspace')
       const logView = $('logView')

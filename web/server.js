@@ -11,6 +11,7 @@ import { EditorSessions } from './lib/editor-sessions.js'
 import { resolveWorkspaceRoot } from 'qxqy-studio/host/workspace'
 import { serveImageAsset, sharedImageAssets } from 'qxqy-studio/host/image-assets'
 import { serveAudioAsset, sharedAudioAssets } from 'qxqy-studio/host/audio-assets'
+import { localFont, serveLocalFont } from 'qxqy-studio/host/local-font'
 
 const moduleDir = fileURLToPath(new URL('.', import.meta.url))
 const publicDir = resolve(moduleDir, 'public')
@@ -97,6 +98,7 @@ export async function createWebServer(options = {}) {
   const host = options.host || '127.0.0.1'
   const password = options.password ?? process.env.QXQY_WEB_PASSWORD ?? ''
   const loopback = ['127.0.0.1', 'localhost', '::1'].includes(host)
+  if (localFont() && !loopback) throw new Error('QXQY_FONT_PATH requires a loopback-only Web host')
   if (!loopback && !password) throw new Error('QXQY_WEB_PASSWORD is required when listening outside loopback')
   const digest = value => createHash('sha256').update(value).digest()
   const passwordDigest = digest(password)
@@ -147,6 +149,7 @@ export async function createWebServer(options = {}) {
       }
       if (await serveImageAsset(request, response, options.imageAssets)) return
       if (await serveAudioAsset(request, response, options.audioAssets)) return
+      if (serveLocalFont(request, response)) return
       if (request.method === 'GET' && staticFiles.has(requestUrl.pathname)) {
         const filename = staticFiles.get(requestUrl.pathname)
         const data = readFileSync(resolve(publicDir, filename))

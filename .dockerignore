@@ -16,3 +16,11 @@ dsh-plugin/presets
 !**/.env.example
 coverage
 frontend
+
+# Never send user-supplied font files to the image build context.
+**/.local-fonts
+**/*.[tT][tT][fF]
+**/*.[oO][tT][fF]
+**/*.[tT][tT][cC]
+**/*.[wW][oO][fF][fF]
+**/*.[wW][oO][fF][fF]2

@@ -5,6 +5,8 @@ import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './sc
 import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.js'
 import { sliceRegions, resolveImageType } from '../assets/image-stretch.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
+export { loadBrowserFont } from './browser-font.js'
+import { DEFAULT_BROWSER_FONT } from '../fonts.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.
 import 'pixi.js/unsafe-eval'
@@ -89,7 +91,7 @@ export function createCircleTexture(size) {
  * the flattened paint list remains for tests and fallbacks.
  */
 export class PixiPlayRenderer {
-  constructor(canvas) {
+  constructor(canvas, { fontReady = null } = {}) {
     this.canvas = canvas
     this.app = null
     this.nodes = new Map()
@@ -100,10 +102,11 @@ export class PixiPlayRenderer {
     this.canvasWidth = 0
     this.canvasHeight = 0
     this.scratch = new Matrix()
-    this.ready = this.initialize()
+    this.ready = this.initialize(fontReady)
   }
 
-  async initialize() {
+  async initialize(fontReady) {
+    this.fontFamily = await fontReady
     const app = new Application()
     await app.init({
       canvas: this.canvas,
@@ -243,10 +246,10 @@ export class PixiPlayRenderer {
       const text = new Text({
         text: slice ? slice.text : String(item.text || ''),
         style: new TextStyle({
-          fontFamily: 'Inter, "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
+          fontFamily: this.fontFamily || DEFAULT_BROWSER_FONT,
           fontSize: font,
           fill: argb(item.fontColor, 0xffffffff),
-          stroke: item.enableOutline ? { color: argb(item.outlineColor, 0xff000000).color, width: Math.max(2, font * 0.12), join: 'round' } : undefined,
+          stroke: item.enableOutline ? { ...argb(item.outlineColor, 0xff000000), width: Math.max(2, font * 0.12), join: 'round' } : undefined,
           wordWrap: !scroll,
           wordWrapWidth: Math.max(4, width - 4),
           breakWords: true,

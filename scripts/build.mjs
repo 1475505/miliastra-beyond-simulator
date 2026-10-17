@@ -3,6 +3,7 @@ import { cp, mkdir, copyFile, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { root, products, cleanGenerated } from './paths.mjs'
+import { distributable } from './distribution-filter.mjs'
 
 const external = ['@deepseek-ai/*', '@napi-rs/canvas', 'fengari', 'protobufjs']
 
@@ -67,7 +68,7 @@ export async function buildProduct(product) {
     await copyFile(join(root, 'skill/SKILL.md'), join(root, 'dsh-plugin/skill.md'))
     const presets = join(root, 'dsh-plugin/presets')
     await cleanGenerated(presets, join(root, 'dsh-plugin'))
-    await cp(join(root, 'agent/wonderland-lua-builder'), join(presets, 'wonderland-lua-builder'), { recursive: true })
+    await cp(join(root, 'agent/wonderland-lua-builder'), join(presets, 'wonderland-lua-builder'), { recursive: true, filter: distributable })
   } else {
     const entry = product === 'web' ? 'server' : 'index'
     await bundle(`${product}/${entry}.js`, join(output, `${entry}.js`))
@@ -86,7 +87,7 @@ export async function buildProduct(product) {
       await writeFile(join(root, 'web/public/play.html'), html)
       await writeFile(join(root, 'web/public/play.js'), script)
       await writeFile(join(root, 'web/public/play.css'), css)
-      await cp(join(root, 'web/public'), join(output, 'public'), { recursive: true })
+      await cp(join(root, 'web/public'), join(output, 'public'), { recursive: true, filter: distributable })
     }
   }
   console.log(`Built ${product}`)
