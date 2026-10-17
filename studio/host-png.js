@@ -478,7 +478,7 @@ function editorBoxStyle(item) {
 function drawEditorLabel(ctx, text, width) {
   const label = String(text || '')
   if (!label) return
-  ctx.font = '10px "Microsoft YaHei UI","Microsoft YaHei",sans-serif'
+  ctx.font = `10px ${localFontStack()}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   const metrics = ctx.measureText(label)

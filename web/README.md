@@ -54,6 +54,8 @@ MCP 0.3.0 起提供 `qxqy_preview_status()` 和 `qxqy_preview_open({ path: "game
 
 源码更新后需运行 `pnpm build` 并重启 Web/MCP；`pnpm start:web` 直接运行已有 `web/dist`，不会自动构建。npm 安装用户更新包后也需重启进程。
 
+大工作区可用 `QXQY_SCAN_DIR_LIMIT`、`QXQY_SCAN_ENTRY_LIMIT`、`QXQY_SCAN_DEPTH_LIMIT` 调整自动发现预算；只接受正安全整数，其他值使用上述默认值。每次扫描开始时读取一次，诊断回执返回实际限制。环境变量不会放宽显式文件路径的工作区边界。
+
 ### 2026-09-26 预览同步修复记录
 
 Web/MCP 0.3.0、共享宿主所在 DSH 2.0.3：修复空工作区启动后跳过新文件发现、默认保存路径与打开路径脱节、大文件不出现在列表及前 50 项截断遗漏最新文件。补充显式预览桥接、加载错误与版本信息。证据为仓库内 `web/test/preview-state.test.mjs`、`studio/test/workspace.test.mjs`、`studio/test/controller-archive.test.mjs` 与实际启动两个进程的 `mcp/test/web-integration.test.mjs`；`evidence_source: observed`，运行端 `simulator`，`device_status: not_required`。包公开状态以 npm 审核结果为准。
@@ -61,6 +63,8 @@ Web/MCP 0.3.0、共享宿主所在 DSH 2.0.3：修复空工作区启动后跳过
 同日浏览器实测：启动试玩后将临时存档替换为损坏 JSON，页面显示加载错误并停止旧试玩；恢复原文件（保留原大小与时间戳）后错误清除并自动回到编辑预览。轮询不得因旧试玩状态屏蔽错误事件；存在加载错误时，即使文件时间戳与上次成功加载相同也需要重试。
 
 试玩使用固定 30 FPS Worker、增量场景和 Pixi/WebGL；刷新试玩页会接回已有 Worker，保留暂停和当前玩家。截图仍由 Host 根据统一场景输出 PNG。
+
+试玩工具栏「键位响应」默认开启，按官方文档转发键盘及鼠标左右键的 Down/Up；关闭后光标点击和滚动仍可用，失焦会释放已按键。映射、文档/回传差异及范围见 [浏览器键位响应](../studio/docs/browser-input.md)。
 
 白名单静态图片按需从素材源加载，通过同源 `/qxqy-assets/` 路由显示，浏览器复用 HTTP 缓存，Host 与 MCP 共用磁盘缓存。可用 `QXQY_IMAGE_CACHE_DIR` 指定目录；图片属性面板提供「重新下载此素材」。详见 [素材缓存与预览边界](../studio/docs/image-assets.md)。
 
