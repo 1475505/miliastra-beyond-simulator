@@ -38,6 +38,11 @@ const reDecoded = decodeGilV2(reEncoded)
 
 ## 测试
 
+`header.total` 表示整个文件的字节长度，包含 UTF-8 Lua 段；编码时按实际
+Buffer 长度计算，`parseHeader` / `decodeGilV2` 拒绝总长度与输入不符的文件。
+测试覆盖中文、多语言、emoji、组合字符、空 Lua 及字节级往返。
+真实样本仅在文件存在时运行，缺失时显式跳过，解析或断言失败会报错。
+
 ```bash
 node --test studio/gia/v2/codec.test.mjs
 ```

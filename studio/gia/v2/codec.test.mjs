@@ -173,6 +173,51 @@ test('decodeGilV2: tail 标记错抛错', () => {
 })
 
 // ===== 4. decode edge cases =====
+for (const delta of [-1, 1]) {
+  test(`文件总长度不匹配 (${delta}): parseHeader 和 decodeGilV2 均拒绝`, () => {
+    const sample = makeSampleGil()
+    sample.writeUInt32BE(sample.length + delta, 0)
+    assert.throws(() => parseHeader(sample), /总长度/)
+    assert.throws(() => decodeGilV2(sample), /总长度/)
+  })
+}
+
+test('decodeGilV2: payloadLen 越过 tail 时拒绝', () => {
+  const sample = makeSampleGil()
+  sample.writeUInt32BE(sample.length - HEADER_BYTES - TAIL_BYTES + 1, 16)
+  assert.throws(() => decodeGilV2(sample), /文件过短/)
+})
+
+for (const text of ['中文注释：千星模拟器', 'café / Ελληνικά / 日本語', 'emoji 😀🚀 / e\u0301']) {
+  test(`UTF-8 Lua 字节长度和往返: ${text}`, () => {
+    const luaSource = `local PREFAB = {}\n-- ${text}\nlocal function hello() return "${text}" end\n`
+    assert.ok(Buffer.byteLength(luaSource, 'utf-8') > luaSource.length)
+    const sample = makeSampleGil({ luaSource, metadata: [] })
+    const decoded = decodeGilV2(sample)
+    assert.equal(decoded.luaSegment, luaSource)
+    assert.equal(decoded.luaSizeBytes, Buffer.byteLength(luaSource, 'utf-8'))
+    const encoded = encodeGilV2(decoded)
+    assert.equal(encoded.readUInt32BE(0), encoded.length)
+    assert.equal(parseHeader(encoded).total, encoded.length)
+    assert.deepEqual(encoded, sample)
+    const reDecoded = decodeGilV2(encoded)
+    assert.equal(reDecoded.luaSegment, luaSource)
+    assert.equal(reDecoded.luaSizeBytes, decoded.luaSizeBytes)
+    assert.deepEqual(reDecoded.luaFuncNames, ['hello'])
+    assert.deepEqual(encodeGilV2(reDecoded), encoded)
+  })
+}
+
+for (const luaSegment of [null, undefined, '']) {
+  test(`encodeGilV2: 空 Lua (${String(luaSegment)}) 总长度正确`, () => {
+    const decoded = decodeGilV2(makeSampleGil({ luaSource: '', metadata: [] }))
+    const encoded = encodeGilV2({ ...decoded, luaSegment })
+    assert.equal(parseHeader(encoded).total, encoded.length)
+    assert.equal(encoded.length, HEADER_BYTES + encoded.readUInt32BE(16) + TAIL_BYTES)
+    assert.equal(decodeGilV2(encoded).luaSegment, null)
+  })
+}
+
 test('decodeGilV2: 0 控件仍能解出 template 信息', () => {
   const sample = makeSampleGil({ controls: [] })
   const decoded = decodeGilV2(sample)
@@ -350,7 +395,7 @@ test('encode 字段保真: templateGuid / templateName / LUA 字符 / 函数列�
 })
 
 // ===== 8. 真 .gil 样本 (命令行) =====
-test('真 .gil 样本: 字段提取 + round-trip 字段保真', () => {
+test('真 .gil 样本: 字段提取 + round-trip 字段保真', (t) => {
   const here = dirname(fileURLToPath(import.meta.url))
   const candidates = [
     process.argv[2],
@@ -376,8 +421,9 @@ test('真 .gil 样本: 字段提取 + round-trip 字段保真', () => {
       console.log(`  ✓ ${p} (${buf.length}B, ${decoded.controls.length} ctrl, ${decoded.luaFuncNames.length} funcs)`)
       return
     } catch (e) {
-      continue
+      if (e.code === 'ENOENT') continue
+      throw e
     }
   }
-  console.log('  (跳过: 未找到真 .gil 样本)')
+  t.skip('未找到真 .gil 样本; 合成样本测试不依赖外部文件')
 })

@@ -83,13 +83,20 @@ export function parseHeader(buf) {
   if (version !== VERSION) {
     throw new Error(`不是 v2 协议: version=${version}`)
   }
+  // header.total 接受两种约定:
+  //   - 真实 .gil: total = HEADER (20) + payloadLen (TAIL 隐式追加 4 字节)
+  //   - 合成样本 (GPT patch 风格): total = 整个文件大小 (含 LUA + TAIL)
+  // 任何一种都通过, 都不符合则抛错
+  if (total !== buf.length && total + TAIL_BYTES !== buf.length) {
+    throw new Error(`文件总长度不匹配: header.total=${total} (期望 ${buf.length} 或 ${buf.length - TAIL_BYTES}), 实际 ${buf.length}`)
+  }
   return { total, segs, headTag, version, payloadLen, headerBytes: HEADER_BYTES }
 }
 
 // ===== 主解码 =====
 export function decodeGilV2(buf) {
   const header = parseHeader(buf)
-  // 严格校验总长度: header + payload + tail (LUA 段在 payload 和 tail 之间, 长度任意)
+  // 校验 payload 边界 (总长度已由 parseHeader 校验, 中间可含 LUA 段)
   if (buf.length < HEADER_BYTES + header.payloadLen + TAIL_BYTES) {
     throw new Error(`文件过短: ${buf.length} 字节 < 最小 ${HEADER_BYTES + header.payloadLen + TAIL_BYTES}`)
   }
@@ -238,8 +245,10 @@ export function encodeGilV2(decoded) {
     parts.push(Buffer.from(m.text, 'utf-8').subarray(0, m.size))
   }
   const payload = Buffer.concat(parts)
+  // UTF-8 字节数可能不同于字符串长度; 计算头部和写入时复用同一份字节
+  const luaBytes = decoded.luaSegment ? Buffer.from(decoded.luaSegment, 'utf-8') : Buffer.alloc(0)
   // 2. 头
-  const totalSize = HEADER_BYTES + payload.length + (decoded.luaSegment?.length || 0) + TAIL_BYTES
+  const totalSize = HEADER_BYTES + payload.length + luaBytes.length + TAIL_BYTES
   const header = Buffer.alloc(HEADER_BYTES)
   header.writeUInt32BE(totalSize, 0)
   header.writeUInt32BE(1, 4)            // segs
@@ -249,8 +258,7 @@ export function encodeGilV2(decoded) {
   // 3. tail
   const tail = Buffer.alloc(TAIL_BYTES)
   tail.writeUInt32BE(TAIL_TAG, 0)
-  // 4. LUA 段
-  const luaBytes = decoded.luaSegment ? Buffer.from(decoded.luaSegment, 'utf-8') : Buffer.alloc(0)
+  // 4. 拼接文件 (LUA 在 payload 和 tail 之间)
   return Buffer.concat([header, payload, luaBytes, tail])
 }
 
