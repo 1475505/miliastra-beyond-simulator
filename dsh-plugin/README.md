@@ -37,6 +37,8 @@ pnpm test:harness
 
 Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxqy_studio_ui_screenshot`、`qxqy_studio_play_screenshot`、`qxqy_studio_load`。截图由 Host 在进程内根据 `boxes` / `paint` 渲染 PNG，不需要打开模拟器标签或试玩页。
 
+独立及内嵌试玩共用「键位响应」开关，默认按官方键鼠表派发 Down/Up，关闭不影响光标点击；输入框和日志页不驱动游戏。规则与验证见 [浏览器键位响应](../studio/docs/browser-input.md)。
+
 白名单静态素材经同源 `/qxqy-assets/` 路由按需显示，与 Web/MCP 共用磁盘缓存；浏览器复用 HTTP 缓存。图片属性面板可重新下载当前素材。`QXQY_IMAGE_CACHE_DIR` 可指定缓存目录，详情见 [素材缓存](../studio/docs/image-assets.md)。
 
 2.1.0 增加 `ImageSource.Prefab` 元件图标：图片源选择「元件」并填写 ID（如 `10003004`），或在 Lua 中调用 `SetImage(Enum.ImageSource.Prefab, id)`。2,720 个白名单图标按需缓存，来源与 ID 一起参与缓存/刷新/渲染；GIA 来源尚未映射，导出有提示。
