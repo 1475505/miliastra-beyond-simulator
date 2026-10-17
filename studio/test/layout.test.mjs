@@ -837,7 +837,9 @@ test('new client template project exports one instantiable template with child c
   const added = studio.patch({ op: 'addTemplate', kind: 'image', name: '图标模板' })
   assert.equal(added.asset.templateCount, 2)
   assert.equal(added.tree.find((row) => row.name === '图标模板').depth, 0)
-  assert.equal(added.boxes.length, 1)
+  // 客户端模板同屏渲染：新增模板后，两个模板的控件都留在画布上。
+  assert.equal(added.boxes.some((box) => box.name === '图标模板'), true)
+  assert.equal(added.boxes.some((box) => box.name === '确认按钮'), true)
   assert.equal(added.inspector.guid, 1073742105)
   const exported = studio.exportData('gia')
   const compatibility = validateGiaCompatibility(Buffer.from(exported.data, 'base64'))

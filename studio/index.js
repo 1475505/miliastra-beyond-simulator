@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { normalizeScriptSync } from './script-sync-config.js'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import { applyPatch, createProject, snapshotProject } from './ui/project.js'
+import { applyPatch, createProject, projectControlRows, projectSubset, snapshotProject } from './ui/project.js'
 import { assertSaveVersion } from './ui/migrate-layout.js'
 import { createDefaultClientTemplateProject, createDefaultProject, findNode, walk } from './ui/authoring.js'
 import {
@@ -457,6 +457,11 @@ export function createStudio(seed, options = {}) {
     snap.serverLogic = serverLogic
     snap.migrationWarnings = [...migrationWarnings]
     snap.controlGuidChanges = toJson(controlGuidChanges)
+    // 导出面板要同时列出服务端与客户端两棵控件树，快照只含当前资产类型，这里补齐另一棵。
+    snap.exportControls = {
+      server: projectControlRows(projects.server),
+      client: projectControlRows(projects.client),
+    }
     if (activeAssetType === CLIENT_ASSET) {
       const ordered = collectClientNodes(project, true)
       snap.clientGuidAutofill = {
@@ -652,8 +657,8 @@ export function createStudio(seed, options = {}) {
     })
   }
 
-  function exportData(format = 'json', requestedAssetType = '') {
-    const result = exportDataRaw(format, requestedAssetType)
+  function exportData(format = 'json', requestedAssetType = '', options = {}) {
+    const result = exportDataRaw(format, requestedAssetType, options)
     if (controlGuidChanges.length && !['save', 'archive'].includes(String(format).toLowerCase())) {
       const warnings = controlGuidChanges.map((change) => `控件索引待核对 Lua 引用：${ASSET_LABELS[change.controlAsset]} / ${change.controlName} (${change.controlId})：${change.oldGuid} → ${change.newGuid}。请按语义更新脚本中的控件索引引用，核对后确认变更记录 ${change.id}；不要全局替换同值数字。`)
       result.warnings = [...new Set([...(result.warnings || []), ...warnings])]
@@ -661,7 +666,7 @@ export function createStudio(seed, options = {}) {
     return result
   }
 
-  function exportDataRaw(format = 'json', requestedAssetType = '') {
+  function exportDataRaw(format = 'json', requestedAssetType = '', options = {}) {
     const normalized = String(format).toLowerCase()
     if (normalized === 'save' || normalized === 'archive') {
       const data = Buffer.from(JSON.stringify(archiveData(), null, 2), 'utf8')
@@ -767,6 +772,40 @@ export function createStudio(seed, options = {}) {
         data: Buffer.from(script.source || '', 'utf8').toString('base64'),
         warnings: [],
       })
+    }
+    // 导出面板「服务端控件 / 客户端控件」：按勾选的控件裁剪出一份子工程，
+    // 同时产出 Authoring JSON 与 GIA 两份文件（两种格式都出）。
+    if (normalized === 'controls' || normalized === 'control-selection') {
+      const assetType = requestedAssetType === CLIENT_ASSET ? CLIENT_ASSET : SERVER_ASSET
+      const subset = projectSubset(projects[assetKey(assetType)], options?.controlIds)
+      const kept = new Set()
+      walk(subset.root, (node) => kept.add(node.id))
+      const mountedScripts = scriptsInProject(assetType).filter((script) => script.controlId && kept.has(script.controlId))
+      const baseName = `${assetExportStem(subset)} · 选中控件`
+      const warnings = []
+      const files = []
+      const jsonPayload = toJson({
+        ...subset,
+        scripts: mountedScripts,
+        controlGuidChanges: controlGuidChanges.filter((change) => change.controlAsset === assetType && kept.has(change.controlId)),
+      })
+      files.push(toJson({
+        filename: `${baseName}.json`,
+        mimeType: 'application/json',
+        encoding: 'base64',
+        data: Buffer.from(JSON.stringify(jsonPayload, null, 2), 'utf8').toString('base64'),
+        warnings: [],
+      }))
+      const gia = exportGia(subset, { scripts: mountedScripts })
+      warnings.push(...gia.warnings)
+      files.push(toJson({
+        filename: `${baseName}.gia`,
+        mimeType: 'application/octet-stream',
+        encoding: 'base64',
+        data: gia.buffer.toString('base64'),
+        warnings: gia.warnings,
+      }))
+      return toJson({ format: 'qxqy-control-selection', files, warnings: [...new Set(warnings)] })
     }
     const project = requestedAssetType
       ? projects[assetKey(requestedAssetType)]

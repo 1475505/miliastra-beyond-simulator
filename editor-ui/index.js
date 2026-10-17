@@ -39,6 +39,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
 .qxsim-server-logic{flex:1;min-height:0;overflow:auto;padding:18px 22px;background:var(--workspace)}.qxsim-logic-wrap{max-width:900px;margin:0 auto}.qxsim-logic-title{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:10px}.qxsim-logic-title h2{margin:0;font-size:18px}.qxsim-logic-title p{margin:3px 0 0;color:var(--muted);font-size:11px}.qxsim-logic-rule{margin:12px 0;border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow:hidden}.qxsim-logic-rule-head,.qxsim-logic-action-head{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--lineSoft)}.qxsim-logic-rule-head strong,.qxsim-logic-action-head strong{font-size:12px}.qxsim-logic-rule-head .qxsim-field{flex:1;margin:0}.qxsim-logic-rule-head .qxsim-field input{height:30px}.qxsim-logic-actions{padding:10px}.qxsim-logic-action{margin-bottom:9px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);overflow:hidden}.qxsim-logic-action:last-child{margin-bottom:0}.qxsim-logic-action-head{min-height:36px;padding:6px 8px}.qxsim-logic-action-head span{color:var(--muted);font-size:10px}.qxsim-logic-action-head .qxsim-iconbtn{width:28px;height:28px;margin-left:auto}.qxsim-logic-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:9px}.qxsim-logic-fields .wide{grid-column:1 / -1}.qxsim-logic-actions-foot{display:flex;gap:7px;margin-top:10px}.qxsim-logic-actions-foot .qxsim-action{flex:0 0 auto}.qxsim-logic-json{min-height:58px;font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}.qxsim-logic-target{height:31px;display:flex;align-items:center;padding:0 7px;border:1px solid var(--line);border-radius:5px;background:color-mix(in srgb,var(--input) 75%,var(--muted));color:var(--muted)}.qxsim-logic-error{margin:10px 0;color:var(--danger);font-size:11px}.qxsim-logic-empty{padding:24px 12px;border:1px dashed var(--line);border-radius:8px;text-align:center;color:var(--muted);background:color-mix(in srgb,var(--panel) 70%,transparent)}
 .qxsim-color-editor{margin-bottom:8px}.qxsim-color-editor:last-child{margin-bottom:0}.qxsim-alpha-row{display:grid;grid-template-columns:minmax(0,1fr) 88px;gap:7px;align-items:center}.qxsim-alpha-row input[type=range]{width:100%;min-width:0;margin:0;accent-color:var(--blue)}.qxsim-alpha-value{position:relative}.qxsim-alpha-value input[type=number]{padding-right:23px;appearance:textfield;-moz-appearance:textfield}.qxsim-alpha-value input::-webkit-inner-spin-button,.qxsim-alpha-value input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.qxsim-alpha-value>span{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}.qxsim-field .qxsim-color-error{color:var(--danger)}
 .qxsim-toolbar-center{min-width:0}.qxsim-device-switch{display:flex;flex:0 0 auto;gap:2px;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--input)}.qxsim-device-switch button{height:26px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap}.qxsim-device-switch button:hover{color:var(--text)}.qxsim-device-switch button.active{color:#fff;background:linear-gradient(#4f86ff,#3c6ed8);box-shadow:0 1px 5px #1d4b9f44}.qxsim-control.ratio{width:150px;min-width:0;padding-right:22px;text-overflow:ellipsis}.qxsim-io .qxsim-control{width:118px;min-width:0;padding-right:22px;text-overflow:ellipsis}.qxsim-platform-tag{padding:2px 7px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);font-weight:600;font-size:10px}
+.qxsim-export-overlay{position:fixed;inset:0;z-index:40}.qxsim-export-panel{position:fixed;width:336px;max-height:min(74vh,580px);overflow:auto;padding:4px 0 0;border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:0 14px 40px #0007;scrollbar-color:color-mix(in srgb,var(--muted) 55%,transparent) transparent}.qxsim-export-group{border-bottom:1px solid var(--lineSoft)}.qxsim-export-group:last-of-type{border-bottom:0}.qxsim-export-group-head{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;user-select:none}.qxsim-export-group-head:hover{background:var(--hover)}.qxsim-export-group-head strong{font-size:12px;font-weight:650}.qxsim-export-caret{width:10px;flex:0 0 10px;color:var(--muted);font-size:9px}.qxsim-export-count{margin-left:auto;color:var(--muted);font-size:10px}.qxsim-export-group.blocked .qxsim-export-group-head,.qxsim-export-group.blocked .qxsim-export-option{opacity:.42}.qxsim-export-options{padding:0 0 6px}.qxsim-export-option{display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 12px 4px 26px;cursor:pointer}.qxsim-export-option:hover{background:var(--hover)}.qxsim-export-option.disabled{cursor:default}.qxsim-export-option.disabled:hover{background:transparent}.qxsim-export-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:12px}.qxsim-export-meta{flex:0 0 auto;color:var(--muted);font-size:10px}.qxsim-export-check{flex:0 0 18px;width:18px;height:18px;display:grid;place-items:center;border:1px solid var(--line);border-radius:4px;background:var(--input);color:transparent;font-size:12px;line-height:1}.qxsim-export-option.checked .qxsim-export-check{background:#fff;border-color:#fff;color:#1b2130;font-weight:700}.qxsim-export-empty{padding:4px 12px 10px 26px;color:var(--muted);font-size:11px}.qxsim-export-foot{position:sticky;bottom:0;display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--line);background:var(--panel)}.qxsim-export-hint{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:10px}.qxsim-action.active{border-color:var(--blue);background:var(--hover)}
 .qxsim-toolbar{grid-template-columns:minmax(170px,1fr) auto auto;column-gap:12px}.qxsim-toolbar-center .zoom{width:78px;min-width:78px}.qxsim-actions{min-width:0}
 @container(max-width:1180px){.qxsim-toolbar{grid-template-columns:minmax(130px,1fr) auto auto;column-gap:8px}.qxsim-action{padding:0 8px}.qxsim-main{grid-template-columns:200px minmax(300px,1fr) 292px}.qxsim-control{min-width:132px}.qxsim-control.ratio{width:128px}.qxsim-io .qxsim-control{width:96px}.qxsim-device-switch button{padding:0 7px}.qxsim-workspace{padding-left:12px;padding-right:12px}.qxsim-brand-text span{display:none}.qxsim-asset-switch button{font-size:11px}}
 @container(max-width:1000px){.qxsim-toolbar{height:90px;flex-basis:90px;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:42px 42px}.qxsim-toolbar-center{justify-self:end}.qxsim-actions{grid-column:1 / -1}.qxsim-editor-nav .save-summary{display:none}.qxsim-inspector{top:130px}}
@@ -66,6 +67,49 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       keyhint: ['keyboardKeyCode', 'controllerKeyCode'],
       animation: ['animationId'],
       fullscreen: ['animationId'],
+    }
+    const EXPORT_GROUPS = [
+      {
+        key: 'archive', title: '资产包',
+        options: [
+          { value: 'save', label: 'JSON 格式（服务端+客户端+Lua 三合一）' },
+          { value: 'save-gia', label: 'GIA（已改动项）' },
+          { value: 'gia-combined', label: 'GIA 整合包（控件+脚本）' },
+        ],
+      },
+      {
+        key: 'serverTemplate', title: '服务端控件模板',
+        options: [
+          { value: 'json|server-control-template', label: 'Authoring JSON' },
+          { value: 'gia|server-control-template', label: 'GIA' },
+        ],
+      },
+      {
+        key: 'clientTemplate', title: '客户端控件模板',
+        options: [
+          { value: 'json|client-control-template', label: 'Authoring JSON' },
+          { value: 'gia|client-control-template', label: 'GIA' },
+        ],
+      },
+      {
+        key: 'scripts', title: 'Lua 脚本',
+        options: [
+          { value: 'scripts', label: '脚本包 JSON（全部脚本）' },
+          { value: 'scripts-gia', label: '脚本包 GIA（全部脚本）' },
+        ],
+      },
+      { key: 'serverControls', title: '服务端控件', controlsFrom: 'server', assetType: 'server-control-template' },
+      { key: 'clientControls', title: '客户端控件', controlsFrom: 'client', assetType: 'client-control-template' },
+    ]
+    // 互斥只发生在「类型标签」之间：勾选一组即清空与之互斥的组。
+    // 客户端控件模板与服务端控件模板互不冲突（可同时导出）；标签内可多选。
+    const EXPORT_CONFLICTS = {
+      archive: ['serverTemplate', 'clientTemplate', 'scripts', 'serverControls', 'clientControls'],
+      serverTemplate: ['archive', 'serverControls'],
+      clientTemplate: ['archive', 'clientControls'],
+      scripts: ['archive'],
+      serverControls: ['archive', 'serverTemplate'],
+      clientControls: ['archive', 'clientTemplate'],
     }
 
     function ensureStyle() {
@@ -527,6 +571,10 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
       const [refreshingImage, setRefreshingImage] = React.useState(false)
       const [notice, setNotice] = React.useState(''); const fileInputRef = React.useRef(null)
       const [exportWarnings, setExportWarnings] = React.useState([])
+      const [exportMenu, setExportMenu] = React.useState(null)
+      const [exportChecked, setExportChecked] = React.useState({})
+      const [exportCollapsed, setExportCollapsed] = React.useState({})
+      const [exporting, setExporting] = React.useState(false)
       const [archives, setArchives] = React.useState([])
       const [page, setPage] = React.useState('ui'); const [inspectorTab, setInspectorTab] = React.useState('base')
       const [zoom, setZoom] = React.useState('fit'); const [hiddenCanvasIds, setHiddenCanvasIds] = React.useState({}); const [search, setSearch] = React.useState(''); const [addMode, setAddMode] = React.useState('template')
@@ -701,22 +749,80 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
           : { op: 'add', kind, parentId: childParent(current.root, current.selectedId), name: label }
         void patch(op).then(() => setNotice(isTemplate ? `已新增${label}模板` : `已添加${label}子控件`)).catch(() => {})
       }
-      async function exportFile(format, arg = '') {
+      function exportGroupEnabled(checked, groupKey) {
+        return Object.keys(checked[groupKey] || {}).length > 0
+      }
+      function exportGroupBlocked(groupKey) {
+        return (EXPORT_CONFLICTS[groupKey] || []).some((other) => exportGroupEnabled(exportChecked, other))
+      }
+      function toggleExport(groupKey, value) {
+        setExportChecked((prev) => {
+          const next = { ...prev, [groupKey]: { ...(prev[groupKey] || {}) } }
+          if (next[groupKey][value]) delete next[groupKey][value]
+          else {
+            next[groupKey][value] = true
+            // 互斥：勾选本组即清空冲突组，保证任何时刻两组不会同时启用。
+            for (const other of EXPORT_CONFLICTS[groupKey] || []) delete next[other]
+          }
+          if (!Object.keys(next[groupKey]).length) delete next[groupKey]
+          return next
+        })
+      }
+      function openExportMenu(event) {
+        const rect = event.currentTarget.getBoundingClientRect()
+        setExportMenu({ top: Math.round(rect.bottom + 6), right: Math.round(Math.max(8, window.innerWidth - rect.right)) })
+      }
+      function exportOptionRow(groupKey, value, label, blocked, depth = 0, meta = '') {
+        const checked = Boolean(exportChecked[groupKey]?.[value])
+        const disabled = blocked && !checked
+        return e('div', {
+          key: value,
+          className: `qxsim-export-option${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`,
+          style: { paddingLeft: 26 + depth * 14 },
+          role: 'checkbox', 'aria-checked': checked, 'aria-disabled': disabled, tabIndex: disabled ? -1 : 0,
+          title: meta ? `${label} · ${meta}` : label,
+          onClick: () => { if (!disabled) toggleExport(groupKey, value) },
+          onKeyDown: (event) => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); toggleExport(groupKey, value) } },
+        },
+          e('span', { className: 'qxsim-export-name' }, label),
+          meta ? e('span', { className: 'qxsim-export-meta' }, meta) : null,
+          e('span', { className: 'qxsim-export-check', 'aria-hidden': true }, checked ? '✓' : ''))
+      }
+      async function runExportJobs(jobs) {
+        if (!jobs.length) return
+        setExportMenu(null); setExporting(true)
         try {
           await queueRef.current.catch(() => {})
           await saveScriptDraft()
           await saveLogicDraft()
-          const result = await callApi(sessionId, 'export', { format, assetType: arg })
-          setExportWarnings([...new Set([...(result.warnings || []), ...(result.files || []).flatMap(file => file.warnings || [])])])
-          if (Array.isArray(result?.files) && result.files.length) {
-            for (const file of result.files) downloadBase64(file)
-            setError('')
-            setNotice(`已导出 ${result.files.length} 个 GIA 文件（${result.files.map((file) => file.filename).join('、')}）；若浏览器拦截多文件下载，请允许后重试。`)
-            return
+          const warnings = []; const names = []
+          for (const job of jobs) {
+            const result = await callApi(sessionId, 'export', { format: job.format, assetType: job.assetType, controlIds: job.controlIds })
+            const files = Array.isArray(result.files) && result.files.length ? result.files : [result]
+            for (const file of files) { downloadBase64(file); names.push(file.filename) }
+            warnings.push(...(result.warnings || []), ...files.flatMap((file) => file.warnings || []))
           }
-          downloadBase64(result)
-          setError(''); setNotice(result.warnings?.length ? `已导出 ${result.filename}；请查看上方导出说明。` : `已导出 ${result.filename}`)
+          setExportWarnings([...new Set(warnings)])
+          setError('')
+          setNotice(names.length > 1
+            ? `已导出 ${names.length} 个文件：${names.join('、')}；若浏览器拦截多文件下载，请允许后重试。`
+            : `已导出 ${names[0]}${warnings.length ? '；请查看上方导出说明。' : ''}`)
         } catch (reason) { setError(reason?.message || String(reason)) }
+        finally { setExporting(false) }
+      }
+      async function exportSelection(checked) {
+        const jobs = []
+        for (const group of EXPORT_GROUPS) {
+          const values = Object.keys(checked[group.key] || {})
+          if (!values.length) continue
+          if (group.controlsFrom) jobs.push({ format: 'controls', assetType: group.assetType, controlIds: values })
+          else for (const value of values) { const [format, arg = ''] = value.split('|'); jobs.push({ format, assetType: arg }) }
+        }
+        return runExportJobs(jobs)
+      }
+      // 「Lua 脚本」页里的单脚本/脚本包导出沿用同一套下载与告警处理。
+      async function exportFile(format, arg = '') {
+        return runExportJobs([{ format, assetType: arg }])
       }
       async function loadWorkspaceArchive(path) {
         if (!path) return
@@ -809,8 +915,35 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
         ? snap.tree.filter((row) => row.id !== selectedRow.id && !(row.ancestorIds || []).includes(selectedRow.id))
         : []
       const selectedParentId = selectedRow?.parentId || snap.root.id
+      const exportSelectedCount = EXPORT_GROUPS.reduce((sum, group) => sum + Object.keys(exportChecked[group.key] || {}).length, 0)
+      const exportPanel = exportMenu ? e('div', { className: 'qxsim-export-overlay', onClick: () => setExportMenu(null) },
+        e('div', {
+          className: 'qxsim-export-panel', role: 'dialog', 'aria-label': '导出', style: { top: exportMenu.top, right: exportMenu.right },
+          onClick: (event) => event.stopPropagation(),
+        },
+          ...EXPORT_GROUPS.map((group) => {
+            const collapsed = Boolean(exportCollapsed[group.key])
+            const blocked = exportGroupBlocked(group.key)
+            const controls = group.controlsFrom ? (snap.exportControls?.[group.controlsFrom] || []) : []
+            return e('div', { key: group.key, className: `qxsim-export-group${blocked ? ' blocked' : ''}` },
+              e('div', { className: 'qxsim-export-group-head', onClick: () => setExportCollapsed((prev) => ({ ...prev, [group.key]: !prev[group.key] })) },
+                e('span', { className: 'qxsim-export-caret' }, collapsed ? '▶' : '▼'),
+                e('strong', null, group.title),
+                group.controlsFrom ? e('span', { className: 'qxsim-export-count' }, `${controls.length} 个控件`) : null),
+              collapsed ? null : e('div', { className: 'qxsim-export-options' },
+                group.options
+                  ? group.options.map((option) => exportOptionRow(group.key, option.value, option.label, blocked))
+                  : (controls.length
+                    ? controls.map((row) => exportOptionRow(group.key, row.id, row.name, blocked, row.depth, `${row.label} · #${row.guid}`))
+                    : e('div', { className: 'qxsim-export-empty' }, '没有可导出的控件'))))
+          }),
+          e('div', { className: 'qxsim-export-foot' },
+            e('span', { className: 'qxsim-export-hint' }, exportSelectedCount ? `已选 ${exportSelectedCount} 项` : '勾选要导出的内容'),
+            e('button', { className: 'qxsim-action primary', disabled: exporting || !exportSelectedCount, onClick: () => void exportSelection(exportChecked) }, exporting ? '导出中…' : '导出'))))
+        : null
       return e('div', { className: 'qxsim', 'data-theme': theme, 'data-qxsim-session-id': sessionId },
         playLauncher.overlay,
+        exportPanel,
         page === 'script' && error ? e('div', { className: 'qxsim-status error', role: 'alert' }, error) : null,
         savePath !== null ? e('div', { className: 'qxsim-save-overlay' },
           e('form', { className: 'qxsim-save-dialog', role: 'dialog', 'aria-modal': true, 'aria-label': '保存到工作区', onSubmit: event => { event.preventDefault(); void saveWorkspace() } },
@@ -832,7 +965,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false }) {
               e('input', { ref: fileInputRef, hidden: true, type: 'file', accept: '.json,.gia,.lua,application/json,application/octet-stream,text/plain', onChange: (event) => void importFile(event.target.files?.[0]) }),
               e('select', { className: 'qxsim-control zoom', 'aria-label': '从工作区拉取存档', defaultValue: '', onFocus: () => void refreshArchives(), onChange: (event) => { const path = event.target.value; event.target.value = ''; if (path) void loadWorkspaceArchive(path) } }, e('option', { value: '', disabled: true }, snap.workspace?.bound ? '⤓ 工作区存档' : '工作区未绑定'), ...(archives.length ? archives.map((row) => e('option', { key: row.path, value: row.path }, `${row.name} · ${row.path}`)) : [e('option', { value: '', disabled: true }, snap.workspace?.bound ? '未发现 qxqy-simulator-save' : '先绑定会话工作区')])),
               e('button', { className: 'qxsim-action', title: '导入存档、单项 UI 资产或 Lua', onClick: () => fileInputRef.current?.click() }, '⇧ 导入'),
-              e('select', { className: 'qxsim-control zoom', 'aria-label': '导出格式', defaultValue: '', onChange: (event) => { const [format, arg = ''] = event.target.value.split('|'); event.target.value = ''; if (format) void exportFile(format, arg) } }, e('option', { value: '', disabled: true }, '⇩ 导出'), e('option', { value: 'save' }, '资产包 JSON（三类合一）'), e('option', { value: 'save-gia' }, '资产包 GIA（已改动项）'), e('option', { value: 'gia-combined' }, '资产包 GIA 整合包（控件+脚本）'), e('optgroup', { label: '当前界面（左栏正在看的那棵树）' }, e('option', { value: 'json' }, '当前界面 Authoring JSON'), e('option', { value: 'gia' }, '当前界面 GIA')), e('optgroup', { label: '服务器控件模板' }, e('option', { value: 'json|server-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|server-control-template' }, 'GIA')), e('optgroup', { label: '客户端控件模板（仅当左栏切到「UI控件-客户端」时才是页面内容）' }, e('option', { value: 'json|client-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|client-control-template' }, 'GIA')), e('optgroup', { label: 'Lua 脚本' }, e('option', { value: 'scripts' }, '脚本包 JSON（全部脚本）'), e('option', { value: 'scripts-gia' }, '脚本包 GIA（全部脚本）')))),
+              e('button', { className: `qxsim-action${exportMenu ? ' active' : ''}`, title: '导出：可多选格式或勾选具体控件', 'aria-haspopup': 'dialog', 'aria-expanded': Boolean(exportMenu), onClick: openExportMenu }, '⇩ 导出')),
             e('button', { className: 'qxsim-action primary', title: '打开试玩；新窗口不可用时在应用内试玩', disabled: playLauncher.opening, onClick: startPlay }, playLauncher.opening ? '正在准备…' : '▷ 试玩 ↗'),
             e('button', { className: 'qxsim-iconbtn', title: '重新载入', onClick: reload }, '↻'))),
         e('nav', { className: 'qxsim-editor-nav', 'aria-label': '编辑页面' }, e('button', { className: page === 'ui' ? 'active' : '', onClick: () => leavePage('ui') }, 'UI 编辑'), e('button', { className: page === 'script' ? 'active' : '', onClick: () => leavePage('script') }, 'Lua 脚本'), e('button', { className: page === 'logic' ? 'active' : '', onClick: () => leavePage('logic') }, '服务端逻辑'), e('span', { className: 'save-summary' }, '一个存档 · 服务器控件模板 + 客户端控件模板 + Lua 脚本 + 服务端逻辑')),

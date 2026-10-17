@@ -123,13 +123,53 @@ function rowsForProject(project, guidById) {
   return (project.root.children || []).flatMap((node) => treeRows(node, guidById))
 }
 
+// 导出面板的控件清单：只保留真正的控件（客户端控件容器只是托管节点），
+// 并把 depth 归零到最上层控件，方便前端直接缩进渲染。
+export function projectControlRows(project) {
+  const guidById = assignGuids(project)
+  const rows = rowsForProject(project, guidById).filter((row) => row.kind !== 'server-container')
+  const minDepth = rows.reduce((min, row) => Math.min(min, row.depth), 0)
+  return rows.map((row) => ({
+    id: row.id,
+    guid: row.guid,
+    kind: row.kind,
+    label: row.label,
+    name: row.name,
+    depth: row.depth - minDepth,
+    parentId: row.parentId,
+    childCount: row.childCount,
+  }))
+}
+
+// 按选中控件裁剪出一份可独立导出的工程：保留选中节点及其祖先（维持层级与坐标），
+// 未选中的兄弟节点被移除。选中的顶层控件不会被提升，避免坐标漂移。
+export function projectSubset(project, controlIds) {
+  const selected = (controlIds || []).filter((id) => typeof id === 'string' && id)
+  const parentById = new Map()
+  walk(project.root, (node, parent) => parentById.set(node.id, parent || null))
+  const keep = new Set()
+  for (const id of selected) {
+    if (!parentById.has(id)) continue
+    let cursor = id
+    while (cursor && !keep.has(cursor)) {
+      keep.add(cursor)
+      cursor = parentById.get(cursor)?.id
+    }
+  }
+  if (!keep.size) throw new Error('没有选中任何可导出的控件')
+  const next = JSON.parse(JSON.stringify(project))
+  const prune = (node) => {
+    node.children = (node.children || []).filter((child) => keep.has(child.id))
+    for (const child of node.children) prune(child)
+  }
+  prune(next.root)
+  return next
+}
+
+// 客户端控件模板与服务端界面一样，全部控件同屏渲染：模板之间只按树顺序互相遮挡，
+// 不再只画「当前选中模板」，否则切换模板时上一个模板会整块消失。
 function visibleBoxesForProject(project, boxes) {
-  const ordered = painterBoxes(project.root, boxes)
-  if (project.meta.assetType !== 'client-control-template') return ordered
-  const template = selectedTemplateRoot(project)
-  const ids = new Set()
-  if (template && template.kind !== 'server-container') walk(template, (node) => ids.add(node.id))
-  return ordered.filter((box) => ids.has(box.id))
+  return painterBoxes(project.root, boxes)
 }
 
 export function snapshotProject(project) {
