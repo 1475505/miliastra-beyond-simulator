@@ -1,37 +1,9 @@
 import { BrowserAudioPlayer } from './audio-player.js'
+import { keyEventName, mouseKeyEventName } from './key-bindings.js'
+export { keyEventName } from './key-bindings.js'
 
 export const PLAY_POLL_INTERVAL_MS = 33
 export const PLAY_MOVE_THROTTLE_MS = 60
-
-// 官方 KeyboardCraftspersonKey 键号字母面板（Key11-22 = U Z Y G H I O P J K L V）
-const CRAFT_LETTER_CODES = { KeyU: 11, KeyZ: 12, KeyY: 13, KeyG: 14, KeyH: 15, KeyI: 16, KeyO: 17, KeyP: 18, KeyJ: 19, KeyK: 20, KeyL: 21, KeyV: 22 }
-// 语义字母表（布局无关）：Colemak/Dvorak 用户按「打出来的字母」理解键位——如 j 在物理 Y 位、d 在物理 F 位
-const CRAFT_LETTER_KEYS = { u: 11, z: 12, y: 13, g: 14, h: 15, i: 16, o: 17, p: 18, j: 19, k: 20, l: 21, v: 22 }
-// 方向键（Key36-39 = ↑ ↓ ← →，奇匠键号系列）
-const ARROW_CODES = { ArrowUp: 36, ArrowDown: 37, ArrowLeft: 38, ArrowRight: 39 }
-// WASD 具名移动键（Enum.KeyEventType 官方命名）：语义字母 + 物理 code 双表
-const MOVE_LETTERS = { w: 'Forward', s: 'Backward', a: 'Left', d: 'Right' }
-const MOVE_CODES = { KeyW: 'Forward', KeyS: 'Backward', KeyA: 'Left', KeyD: 'Right' }
-
-export function keyEventName(event, phase) {
-  const code = event.code || ''
-  const key = String(event.key || '').toLowerCase()
-  // ① 语义字母优先：按「打出什么字母」解释（IME 'Process'/非字母时自然跳过）
-  const craft = CRAFT_LETTER_KEYS[key]
-  if (craft) return `KeyboardCraftspersonKey${craft}${phase}`
-  const move = MOVE_LETTERS[key]
-  if (move) return `KeyboardMove${move}Key${phase}`
-  // ② 物理位回落：数字/方向键/无字母语义时按 code（QWERTY 与真机行为不变）
-  const digit = code.startsWith('Digit') ? code.slice(5) : ''
-  if (digit && Number(digit) >= 1 && Number(digit) <= 9) return `KeyboardCraftspersonKey${digit}${phase}`
-  const craftCode = CRAFT_LETTER_CODES[code]
-  if (craftCode) return `KeyboardCraftspersonKey${craftCode}${phase}`
-  const arrow = ARROW_CODES[code]
-  if (arrow) return `KeyboardCraftspersonKey${arrow}${phase}`
-  const moveCode = MOVE_CODES[code]
-  if (moveCode) return `KeyboardMove${moveCode}Key${phase}`
-  return ''
-}
 
 export function stagePoint(event, rect, width, height) {
   return {
@@ -46,7 +18,7 @@ export function stagePoint(event, rect, width, height) {
  * scene snapshots and sends light-weight input.
  */
 export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError, onAudioStatus, audio,
-  isActive } = {}) {
+  isActive, isInputActive, keyInputEnabled = true } = {}) {
   audio ||= typeof window !== 'undefined' ? new BrowserAudioPlayer({ onStatus: onAudioStatus }) : null
   if (typeof window !== 'undefined') audio?.bindUnlock(window)
   let generation = 0
@@ -59,7 +31,28 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   let moveTimer = null
   let lastMove = null
   let activePointer = null
+  let switchingView = false
   const inputDisposers = []
+  const keyReleasers = new Set()
+  let keyQueue = Promise.resolve()
+
+  function sendKey(key) {
+    const current = generation
+    // HTTP requests can complete out of order. Keep a quick Down→Up pair in
+    // order, and discard queued input when the Worker/session is replaced.
+    keyQueue = keyQueue.then(() => current === generation && running
+      ? act('key', { key }, { allowInactive: true }) : null)
+    return keyQueue
+  }
+
+  function releaseKeys(send = true) {
+    return Promise.all([...keyReleasers].map(release => release(send))).then(() => keyQueue)
+  }
+
+  function setKeyInputEnabled(enabled) {
+    keyInputEnabled = Boolean(enabled)
+    if (!keyInputEnabled) void releaseKeys()
+  }
 
   function emitError(error) {
     if (onError) onError(error)
@@ -132,24 +125,30 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   }
 
   function reset() {
+    // These transitions replace or terminate the Worker; never carry held
+    // browser keys into the next session. Blur/toggle/view release live keys.
+    void releaseKeys(false)
     generation++
     audio?.reset()
     clearMove()
     activePointer = null
+    switchingView = false
     running = false
     sceneRev = 0
     stopPolling()
   }
 
-  async function act(action, args) {
-    if (isActive && !isActive()) return null
+  async function act(action, args, { allowInactive = false } = {}) {
+    if (!allowInactive && isActive && !isActive()) return null
+    const current = generation
     try {
       const value = await api(action, { light: true, ...(args || {}) })
+      if (current !== generation || !running) return value
       if (value && typeof value === 'object' && value.frame !== undefined && onStatus) onStatus(value)
       pollSoon(30)
       return value
     } catch (error) {
-      emitError(error)
+      if (current === generation) emitError(error)
       return null
     }
   }
@@ -172,6 +171,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   async function attach() {
     // Reconnect a reloaded browser to the existing worker without restarting
     // the game, changing its player, or resuming a paused session.
+    await releaseKeys()
     reset()
     const current = generation
     sceneRev = 0
@@ -199,14 +199,21 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   }
 
   async function view(args = {}) {
-    generation++
-    audio?.reset()
-    const current = generation
-    sceneRev = 0
-    const next = await api('view', { view: true, compact: true, ...args })
-    if (current !== generation) return next
-    await applyScene({ ...next, running: true })
-    return next
+    switchingView = true
+    let current = generation
+    try {
+      await releaseKeys()
+      if (current !== generation) return null
+      current = ++generation
+      audio?.reset()
+      sceneRev = 0
+      const next = await api('view', { view: true, compact: true, ...args })
+      if (current !== generation) return next
+      await applyScene({ ...next, running: true })
+      return next
+    } finally {
+      if (current === generation) switchingView = false
+    }
   }
 
   async function stop() {
@@ -220,8 +227,38 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
 
   function bindInput(surface, { keysOn } = {}) {
     const keyTarget = keysOn || surface
+    const document = surface.ownerDocument || keyTarget.ownerDocument
+    const blurTarget = document?.defaultView || keyTarget
+    const mouseUpTarget = document || keyTarget
+    const held = new Map()
+    let pointerType = ''
+    const canInput = () => snapshot && running && !switchingView && (!isActive || isActive()) && (!isInputActive || isInputActive())
+    const canKey = () => keyInputEnabled && canInput()
+    const editable = event => event.target?.isContentEditable || event.target?.closest?.(
+      'input,textarea,select,button,a[href],[role="textbox"],[contenteditable]:not([contenteditable="false"])')
+    const press = (id, name) => {
+      if (!name || held.has(id)) return
+      const alreadyDown = [...held.values()].includes(name)
+      held.set(id, name)
+      if (!alreadyDown) void sendKey(name)
+    }
+    const release = id => {
+      const name = held.get(id)
+      if (!name) return null
+      held.delete(id)
+      if (running && ![...held.values()].includes(name)) {
+        return sendKey(name.replace(/Down$/, 'Up'))
+      }
+      return null
+    }
+    const releaseHeld = (send = true) => {
+      if (!send) { held.clear(); return Promise.resolve() }
+      return Promise.all([...held.keys()].map(release))
+    }
+    keyReleasers.add(releaseHeld)
     const onPointerDown = (event) => {
-      if (!snapshot || !running || (isActive && !isActive())) return
+      pointerType = event.pointerType || ''
+      if (!canInput()) return
       if (activePointer !== null || (event.button != null && event.button !== 0)) return
       activePointer = event.pointerId
       surface.setPointerCapture?.(event.pointerId)
@@ -229,35 +266,36 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       void act('pointer', { type: 'down', ...point(event, surface) })
     }
     const onPointerUp = (event) => {
-      if (!snapshot || !running || (isActive && !isActive())) return
+      if (!canInput()) return
       if (activePointer !== event.pointerId) return
       flushMove()
       void act('pointer', { type: 'up', ...point(event, surface) })
       activePointer = null
     }
     const onPointerMove = (event) => {
-      if (!snapshot || !running || (isActive && !isActive())) return
+      if (!canInput()) return
       if (activePointer !== null && activePointer !== event.pointerId) return
       lastMove = point(event, surface)
       if (moveTimer) return
       moveTimer = setTimeout(() => {
         moveTimer = null
-        void act('pointer', { type: 'move', ...lastMove })
+        if (canInput()) void act('pointer', { type: 'move', ...lastMove })
       }, PLAY_MOVE_THROTTLE_MS)
     }
     const onPointerLeave = () => {
       if (activePointer !== null) return
       clearMove()
-      if (snapshot && running && (!isActive || isActive())) void act('pointer', { type: 'move', x: -1, y: -1 })
+      if (canInput()) void act('pointer', { type: 'move', x: -1, y: -1 })
     }
     const onPointerCancel = (event) => {
+      if (event.pointerType === 'mouse') { void release('mouse:0'); void release('mouse:2') }
       if (activePointer !== event.pointerId) return
       clearMove()
       activePointer = null
       if (snapshot && running) void act('pointer', { type: 'cancel', ...point(event, surface) })
     }
     const onWheel = (event) => {
-      if (!snapshot || !running || (isActive && !isActive())) return
+      if (!canInput()) return
       event.preventDefault()
       const rect = surface.getBoundingClientRect()
       // Browser line/page deltas have no pixel unit. Use 16 CSS px per line and
@@ -269,21 +307,30 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
         deltaY: event.deltaY * unitY * snapshot.canvasHeight / rect.height })
     }
     const onKeyDown = (event) => {
-      if (!snapshot || !running || (isActive && !isActive())) return
+      if (!canKey() || editable(event)) return
       const name = keyEventName(event, 'Down')
       if (name) {
         event.preventDefault()
-        void act('key', { key: name })
+        if (!event.repeat) press(`key:${event.code || event.key}`, name)
       }
     }
     const onKeyUp = (event) => {
-      if (!snapshot || !running || (isActive && !isActive())) return
-      const name = keyEventName(event, 'Up')
-      if (name) {
+      const id = `key:${event.code || event.key}`
+      if (held.has(id)) {
         event.preventDefault()
-        void act('key', { key: name })
+        void release(id)
       }
     }
+    // Mouse events include button chords; PointerEvent down/up only describe
+    // the first/last button. Ignore compatibility mouse events from touch.
+    const onMouseDown = event => {
+      if (!canKey() || (pointerType && pointerType !== 'mouse') || event.sourceCapabilities?.firesTouchEvents) return
+      press(`mouse:${event.button}`, mouseKeyEventName(event.button, 'Down'))
+    }
+    const onMouseUp = event => { void release(`mouse:${event.button}`) }
+    const onBlur = () => { void releaseHeld() }
+    const onVisibility = () => { if (document?.hidden) onBlur() }
+    const onContextMenu = event => { if (canKey()) event.preventDefault() }
     surface.addEventListener('pointerdown', onPointerDown)
     surface.addEventListener('pointerup', onPointerUp)
     surface.addEventListener('pointermove', onPointerMove)
@@ -291,9 +338,17 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     surface.addEventListener('pointercancel', onPointerCancel)
     surface.addEventListener('lostpointercapture', onPointerCancel)
     surface.addEventListener('wheel', onWheel, { passive: false })
+    surface.addEventListener('mousedown', onMouseDown)
+    surface.addEventListener('contextmenu', onContextMenu)
+    mouseUpTarget.addEventListener('mouseup', onMouseUp)
     keyTarget.addEventListener('keydown', onKeyDown)
     keyTarget.addEventListener('keyup', onKeyUp)
+    keyTarget.addEventListener('focusout', onBlur)
+    blurTarget.addEventListener('blur', onBlur)
+    document?.addEventListener('visibilitychange', onVisibility)
     const dispose = () => {
+      void releaseHeld()
+      keyReleasers.delete(releaseHeld)
       surface.removeEventListener('pointerdown', onPointerDown)
       surface.removeEventListener('pointerup', onPointerUp)
       surface.removeEventListener('pointermove', onPointerMove)
@@ -301,8 +356,14 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       surface.removeEventListener('pointercancel', onPointerCancel)
       surface.removeEventListener('lostpointercapture', onPointerCancel)
       surface.removeEventListener('wheel', onWheel)
+      surface.removeEventListener('mousedown', onMouseDown)
+      surface.removeEventListener('contextmenu', onContextMenu)
+      mouseUpTarget.removeEventListener('mouseup', onMouseUp)
       keyTarget.removeEventListener('keydown', onKeyDown)
       keyTarget.removeEventListener('keyup', onKeyUp)
+      keyTarget.removeEventListener('focusout', onBlur)
+      blurTarget.removeEventListener('blur', onBlur)
+      document?.removeEventListener('visibilitychange', onVisibility)
       clearMove()
     }
     inputDisposers.push(dispose)
@@ -321,6 +382,9 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     get snapshot() { return snapshot },
     get running() { return running },
     get sceneRev() { return sceneRev },
+    get keyInputEnabled() { return keyInputEnabled },
+    setKeyInputEnabled,
+    releaseKeys,
     applyScene,
     poll,
     pollSoon,

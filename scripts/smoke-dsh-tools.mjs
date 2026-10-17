@@ -62,7 +62,7 @@ export async function smokeDshTools(workspace) {
     assert.match(JSON.stringify(stale), /revision conflict/)
     for (let cycle = 0; cycle < 2; cycle++) {
       await owner.restart()
-      assert.equal(routes.size, 5)
+      assert.equal(routes.size, 6)
       assert.equal(tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 7)
       assert.equal((await call('qxqy_studio_get')).value.save.name, '未命名存档')
     }

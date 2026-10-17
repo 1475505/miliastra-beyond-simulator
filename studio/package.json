@@ -14,11 +14,13 @@
     "./host/worker": "./host/worker.js",
     "./host/image-assets": "./host/image-assets.js",
     "./host/audio-assets": "./host/audio-assets.js",
+    "./host/local-font": "./host/local-font.js",
     "./play/renderer": "./play/pixi-renderer.js"
   },
   "files": [
     "index.js",
     "constants.js",
+    "fonts.js",
     "host-png.js",
     "host",
     "assets",

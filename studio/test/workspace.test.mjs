@@ -9,6 +9,13 @@ import { SimulatorController } from '../host/controller.js'
 import { listWorkspaceArchives, resolveWorkspaceFile } from '../host/workspace.js'
 
 function workspaceFor(t) {
+  const limits = ['QXQY_SCAN_DIR_LIMIT', 'QXQY_SCAN_ENTRY_LIMIT', 'QXQY_SCAN_DEPTH_LIMIT']
+  const previous = limits.map(name => process.env[name])
+  for (const name of limits) delete process.env[name]
+  t.after(() => limits.forEach((name, i) => {
+    if (previous[i] === undefined) delete process.env[name]
+    else process.env[name] = previous[i]
+  }))
   const workspace = fs.mkdtempSync(join(tmpdir(), 'qxqy-workspace-discovery-'))
   t.after(() => fs.rmSync(workspace, { recursive: true, force: true }))
   return workspace
@@ -75,8 +82,6 @@ test('discovery keeps the latest 50 archives after scanning every candidate with
 })
 
 test('excluded and deep archives remain accessible by an explicit workspace path', (t) => {
-  for (const k of ['QXQY_SCAN_DIR_LIMIT','QXQY_SCAN_ENTRY_LIMIT','QXQY_SCAN_DEPTH_LIMIT']) delete process.env[k]
-
   const workspace = workspaceFor(t)
   const deepPath = `${Array.from({ length: 9 }, (_, i) => `level-${i}`).join('/')}/deep.save.json`
   const paths = ['.hidden/hidden.save.json', 'dist/generated.save.json', deepPath]
@@ -156,4 +161,29 @@ test('discovery stops streaming entries at its budget and reports an incomplete 
   assert.equal(discovery.entryLimitReached, true)
   assert.equal(discovery.truncated, true)
   assert.match(discovery.warnings.join('\n'), /扫描上限/)
+})
+
+test('scan budgets read positive integers per invocation and expose the effective limits', t => {
+  const workspace = workspaceFor(t)
+  const path = 'one/two/deep.save.json'
+  archiveAt(workspace, path)
+  archiveAt(workspace, 'root.save.json')
+  process.env.QXQY_SCAN_DEPTH_LIMIT = '1'
+  assert.equal(listWorkspaceArchives(workspace).archives.some(row => row.path === path), false)
+  process.env.QXQY_SCAN_DEPTH_LIMIT = '3'
+  assert.equal(listWorkspaceArchives(workspace).archives.some(row => row.path === path), true)
+  process.env.QXQY_SCAN_DIR_LIMIT = '1'
+  const dirs = listWorkspaceArchives(workspace).discovery
+  assert.equal(dirs.scannedDirectories, 1)
+  assert.equal(dirs.directoryLimitReached, true)
+  delete process.env.QXQY_SCAN_DIR_LIMIT
+  process.env.QXQY_SCAN_ENTRY_LIMIT = '1'
+  const entries = listWorkspaceArchives(workspace).discovery
+  assert.equal(entries.scannedEntries, 1)
+  assert.equal(entries.entryLimitReached, true)
+  assert.equal(entries.limits.entries, 1)
+  for (const invalid of ['0', '-1', '0.5', '1.5', 'Infinity', 'invalid']) {
+    process.env.QXQY_SCAN_ENTRY_LIMIT = invalid
+    assert.equal(listWorkspaceArchives(workspace).discovery.limits.entries, 10000, invalid)
+  }
 })

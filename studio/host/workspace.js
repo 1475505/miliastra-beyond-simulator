@@ -13,7 +13,7 @@ const HEAD_BYTES = 4096
 // workspace/hmlt-qixia/hmlt-qixia.save.json never appeared in the GUI list.
 const envInt = (name, fallback) => {
   const n = Number(process.env[name])
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+  return Number.isSafeInteger(n) && n > 0 ? n : fallback
 }
 // 调用时读取（非模块加载时定格）：进程中途变更/测试密闭性都友好
 const scanLimits = () => ({
@@ -80,7 +80,7 @@ function fileHead(path, size = HEAD_BYTES) {
 }
 
 function walk(dir, root, out, depth, discovery) {
-  const L = scanLimits()
+  const L = discovery.limits
   if (depth > L.depth) {
     discovery.depthLimitedDirectories += 1
     return
@@ -175,8 +175,8 @@ export function listWorkspaceArchives(workspaceRoot) {
   archives.sort((a, b) => b.mtime - a.mtime || a.path.localeCompare(b.path))
   discovery.matchedArchives = archives.length
   if (archives.length > MAX_FILES) discovery.warnings.push(`发现 ${archives.length} 个存档，仅显示修改时间最新的 ${MAX_FILES} 个；其他存档可通过指定路径打开。`)
-  if (discovery.entryLimitReached || discovery.directoryLimitReached) discovery.warnings.push(`自动发现达到扫描上限（${scanLimits().entries} 项 / ${scanLimits().directories} 个目录），列表可能不完整；可通过指定路径打开存档。`)
-  if (discovery.depthLimitedDirectories) discovery.warnings.push(`自动发现跳过 ${discovery.depthLimitedDirectories} 个超过 ${scanLimits().depth} 层的目录；可通过指定路径打开其中的存档。`)
+  if (discovery.entryLimitReached || discovery.directoryLimitReached) discovery.warnings.push(`自动发现达到扫描上限（${discovery.limits.entries} 项 / ${discovery.limits.directories} 个目录），列表可能不完整；可通过指定路径打开存档。`)
+  if (discovery.depthLimitedDirectories) discovery.warnings.push(`自动发现跳过 ${discovery.depthLimitedDirectories} 个超过 ${discovery.limits.depth} 层的目录；可通过指定路径打开其中的存档。`)
   if (discovery.skippedEntries) discovery.warnings.push('自动发现跳过隐藏项及生成目录（如 node_modules、dist）；可通过指定路径打开其中的存档。')
   if (discovery.unreadableEntries) discovery.warnings.push(`自动发现无法读取 ${discovery.unreadableEntries} 个文件或目录；请检查访问权限，或通过指定路径查看具体错误。`)
   discovery.truncated = archives.length > MAX_FILES || discovery.entryLimitReached || discovery.directoryLimitReached || discovery.depthLimitedDirectories > 0
