@@ -10,7 +10,7 @@ async function load() {
   const options = { cache: 'no-store', credentials: 'same-origin', mode: 'same-origin', signal: AbortSignal.timeout(10_000) }
   const manifest = await fetch(`${FONT_ROUTE}/manifest`, options)
   if (!manifest.ok) throw new Error('无法读取本地字体配置，请检查宿主配置及本机连接')
-  const { id } = await manifest.json()
+  const { id, scope = 'all' } = await manifest.json()
   if (id === null) return null
   if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id)) throw new Error('本地字体标识无效')
   const response = await fetch(`${FONT_ROUTE}/file/${id}`, options)
@@ -25,11 +25,15 @@ async function load() {
   // views. Override explicit code/form fonts too, without changing size or weight.
   const styleId = 'qxqy-local-font-style'
   let style = document.getElementById(styleId)
-  if (!style) {
-    style = document.createElement('style')
-    style.id = styleId
-    document.head.appendChild(style)
+  if (scope === 'game') {
+    style?.remove()
+  } else {
+    if (!style) {
+      style = document.createElement('style')
+      style.id = styleId
+      document.head.appendChild(style)
+    }
+    style.textContent = `[data-qxqy-font-ui], [data-qxqy-font-ui] * { font-family: ${stack} !important; }`
   }
-  style.textContent = `[data-qxqy-font-ui], [data-qxqy-font-ui] * { font-family: ${stack} !important; }`
   return stack
 }

@@ -44,7 +44,7 @@ export function readLocalFont(path) {
 
 let configured = false
 let font = null
-let active = { path: '', source: 'system' }
+let active = { path: '', source: 'system', scope: 'all' }
 let startupConfig = null
 let configurationError = ''
 let saved = false
@@ -68,18 +68,22 @@ export function localFont() {
     // Workers receive the exact startup bytes, even if the file is later changed.
     if (workerData && Object.hasOwn(workerData, 'localFont')) {
       font = workerData.localFont ? register(workerData.localFont) : null
-    } else if (process.env.QXQY_FONT_PATH) {
-      font = readLocalFont(process.env.QXQY_FONT_PATH)
-      active = { path: process.env.QXQY_FONT_PATH, source: 'environment' }
     } else {
-      try {
-        startupConfig = readFontConfig()
-        const selected = selectFont(startupConfig)
-        font = selected.font
-        active = { path: selected.path, source: selected.source }
-      } catch (error) {
-        // A moved/deleted saved font must not make the settings UI inaccessible.
-        configurationError = error.message
+      try { startupConfig = readFontConfig() }
+      catch (error) { configurationError = error.message }
+      active.scope = startupConfig?.scope || 'all'
+      if (process.env.QXQY_FONT_PATH) {
+        font = readLocalFont(process.env.QXQY_FONT_PATH)
+        active = { ...active, path: process.env.QXQY_FONT_PATH, source: 'environment' }
+      } else if (startupConfig) {
+        try {
+          const selected = selectFont(startupConfig)
+          font = selected.font
+          active = { ...active, path: selected.path, source: selected.source }
+        } catch (error) {
+          // A moved/deleted saved font must not make the settings UI inaccessible.
+          configurationError = error.message
+        }
       }
     }
     configured = true
@@ -89,7 +93,7 @@ export function localFont() {
 
 export function localFontSettings() {
   localFont()
-  let config = { mode: 'auto', path: '' }, error = configurationError
+  let config = { mode: 'auto', path: '', scope: 'all' }, error = configurationError
   try { config = readFontConfig() } catch (reason) { error = reason.message }
   return { ...config, active: { ...active }, error, environmentPath: process.env.QXQY_FONT_PATH || '',
     defaultPaths: defaultFontPaths(), restartRequired: saved || (startupConfig !== null && JSON.stringify(startupConfig) !== JSON.stringify(config)) }
@@ -97,9 +101,14 @@ export function localFontSettings() {
 
 export function saveLocalFontSettings(value) {
   localFont()
-  if (process.env.QXQY_FONT_PATH) throw new Error('当前字体由 QXQY_FONT_PATH 固定，请移除该环境变量并重启后再使用前端设置')
-  const config = normalizeFontConfig(value)
-  const selected = selectFont(config) // Validate before touching the previous configuration.
+  const environmentPath = process.env.QXQY_FONT_PATH
+  // An environment-selected font locks its source, not the UI application scope.
+  if (environmentPath && (!value || !Object.hasOwn(value, 'scope') || Object.hasOwn(value, 'mode') || Object.hasOwn(value, 'path'))) {
+    throw new Error('当前字体由 QXQY_FONT_PATH 固定，请移除该环境变量并重启后再使用前端设置')
+  }
+  const config = normalizeFontConfig(environmentPath ? { ...localFontSettings(), scope: value.scope } : value)
+  const selected = environmentPath ? { path: environmentPath, source: 'environment' } : selectFont(config)
+  // Validate before touching the previous configuration; active snapshots stay unchanged.
   writeFontConfig(config)
   saved = true
   return { ...localFontSettings(), nextFont: { path: selected.path, source: selected.source } }
@@ -152,7 +161,7 @@ export function serveLocalFont(request, response, { settingsEnabled = true } = {
     const current = localFont()
     if (current && !localRequest(request)) return send(403, 'text/plain', 'Local font access requires a direct loopback connection')
     if (url.pathname === `${FONT_ROUTE}/manifest`) {
-      return send(200, 'application/json', JSON.stringify({ id: current?.id ?? null }))
+      return send(200, 'application/json', JSON.stringify({ id: current?.id ?? null, scope: active.scope }))
     }
     if (current && url.pathname === `${FONT_ROUTE}/file/${current.id}`) return send(200, current.type, current.data)
     return send(404, 'text/plain', 'Font not found')

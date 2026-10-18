@@ -74,6 +74,7 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 |---|---|---|
 | 仅 DSH 插件 | `npm-dsh-2026-10-07-1` | `node scripts/publish-npm.mjs --check --product=dsh-plugin` |
 | 仅 MCP | `npm-mcp-2026-10-07-1` | `node scripts/publish-npm.mjs --check --product=mcp` |
+| 仅 Web | `npm-web-2026-10-18-1` | `node scripts/publish-npm.mjs --check --product=web` |
 | 三包 | `npm-2026-10-07-1` | `node scripts/publish-npm.mjs --check` |
 
 Git tag 触发 npm 流程，不会自动创建 GitHub Release。版本公告单独创建 Release，并仅附加本次发布产品的安装包。

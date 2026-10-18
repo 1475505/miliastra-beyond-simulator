@@ -14,12 +14,12 @@
     "luaApiDocumentSha256": "4a43f93f2b322be8336ff33d9cb07b3bc3a8d4c8a931a45d18f90e4e64941bab"
   },
   "summary": {
-    "reviewed": 740,
-    "queried": 740,
+    "reviewed": 745,
+    "queried": 745,
     "apiMatches": 26,
     "apiAligned": 24,
     "contextOverrides": 2,
-    "noExactApiMatch": 714,
+    "noExactApiMatch": 719,
     "changed": 40
   },
   "glossary": [
@@ -1018,10 +1018,10 @@
       }
     },
     {
-      "zh": "用于整个模拟器界面、编辑画布、试玩及截图。设置仅保存在本机，重启宿主后生效。",
-      "en": "Used throughout the simulator interface, editing canvas, playtests, and screenshots. Settings stay on this machine and apply after restarting the host.",
+      "zh": "自定义字体可用于游戏内文本或整体 UI。设置仅保存在本机，重启宿主后生效。",
+      "en": "Apply the custom font to in-game text or the entire UI. Settings stay on this machine and apply after restarting the host.",
       "api": {
-        "checkedAt": "2026-10-18T14:46:52.260Z",
+        "checkedAt": "2026-10-18T15:21:18.282Z",
         "matched": false,
         "translation": null
       },
@@ -1058,9 +1058,10 @@
       }
     },
     {
-      "zh": "当前由环境变量 QXQY_FONT_PATH 指定。移除该变量并重启宿主后，可在这里修改。",
-      "en": "QXQY_FONT_PATH currently overrides these settings. Remove it and restart the host to edit them here.",
+      "zh": "字体文件由环境变量 QXQY_FONT_PATH 指定，仍可调整应用范围。",
+      "en": "QXQY_FONT_PATH selects the font file. You can still change where it applies.",
       "api": {
+        "checkedAt": "2026-10-18T15:21:18.282Z",
         "matched": false,
         "translation": null
       },
@@ -1068,6 +1069,36 @@
         "kind": "manual",
         "reason": "接口无等值译文；已按界面语境、占位参数及本项目术语逐项审校。"
       }
+    },
+    {
+      "zh": "应用范围",
+      "en": "Apply to",
+      "api": { "checkedAt": "2026-10-18T15:21:18.282Z", "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按字体应用目标选择器审校。" }
+    },
+    {
+      "zh": "仅游戏内文本",
+      "en": "In-game text only",
+      "api": { "checkedAt": "2026-10-18T15:21:18.282Z", "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；指模拟器画布与试玩中的游戏文字。" }
+    },
+    {
+      "zh": "整体 UI",
+      "en": "Entire UI",
+      "api": { "checkedAt": "2026-10-18T15:21:18.282Z", "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；指包含游戏文字的整个模拟器界面。" }
+    },
+    {
+      "zh": "仅游戏内文本：用于画布、试玩和截图；整体 UI：同时替换工具栏、面板、代码和日志字体。",
+      "en": "In-game text only: canvas, playtests, and screenshots. Entire UI: also changes fonts in toolbars, panels, code, and logs.",
+      "api": { "checkedAt": "2026-10-18T15:21:18.282Z", "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按两种字体范围的实际行为及 playtest 术语审校。" }
+    },
+    {
+      "zh": "请选择字体应用范围",
+      "en": "Choose where to apply the font",
+      "api": { "checkedAt": "2026-10-18T15:21:18.282Z", "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按字体范围校验提示审校。" }
     },
     {
       "zh": "字体来源",

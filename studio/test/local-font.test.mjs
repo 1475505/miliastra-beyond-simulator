@@ -93,15 +93,18 @@ test('font settings use portable defaults and survive real host restarts without
   const module = new URL('../host/local-font.js', import.meta.url).href
   const env = { ...process.env, QXQY_FONT_CONFIG_PATH: config, QXQY_FONT_PATH: '' }
   const run = script => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e',
-    `import {localFont,localFontSettings,saveLocalFontSettings} from ${JSON.stringify(module)}; ${script}`],
+    `import {localFont,localFontSettings,saveLocalFontSettings,serveLocalFont} from ${JSON.stringify(module)};
+    const manifest=()=>{let body;serveLocalFont({url:'/qxqy-font/manifest',method:'GET',headers:{host:'localhost'},socket:{remoteAddress:'127.0.0.1'}},{writeHead(){},end(value){body=value}});return JSON.parse(body)};
+    ${script}`],
   { env, windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))
   assert.deepEqual(defaultFontPaths('linux', {}), [])
   const candidates = defaultFontPaths('win32', {})
   assert.equal(candidates[0], 'C:\\Program Files\\Genshin Impact\\Genshin Impact Game\\YuanShen_Data\\StreamingAssets\\MiHoYoSDKRes\\HttpServerResources\\font\\zh-cn.ttf')
   assert.ok(candidates.every(value => value.startsWith('C:\\')))
   assert.ok(defaultFontPaths('win32', { SystemDrive: 'D:', ProgramFiles: 'D:\\Apps' })[0].startsWith('D:\\Apps\\'))
-  assert.deepEqual(normalizeFontConfig({ mode: 'custom', path: `"${path}"` }), { mode: 'custom', path })
-  assert.deepEqual(readFontConfig(config), { mode: 'auto', path: '' })
+  assert.deepEqual(normalizeFontConfig({ mode: 'custom', path: `"${path}"` }), { mode: 'custom', path, scope: 'all' })
+  assert.deepEqual(readFontConfig(config), { mode: 'auto', path: '', scope: 'all' })
+  assert.throws(() => normalizeFontConfig({ mode: 'system', scope: 'invalid' }), /应用范围/)
   writeFontConfig({ mode: 'system', path: '' }, config)
   const selected = run(`saveLocalFontSettings({mode:'custom',path:${JSON.stringify(path)}}); console.log(JSON.stringify({settings:localFontSettings(),id:localFont()?.id??null}));`)
   assert.equal(selected.id, null, 'saving must not change the active host/Worker font before restart')
@@ -111,11 +114,25 @@ test('font settings use portable defaults and survive real host restarts without
   assert.match(restarted.id, /^[a-f0-9]{64}$/)
   assert.equal(restarted.settings.restartRequired, false)
   assert.equal(restarted.settings.active.path, path)
+  assert.equal(restarted.settings.scope, 'all', 'old settings keep whole-UI behavior')
+  const scopeChange = run(`saveLocalFontSettings({mode:'custom',path:${JSON.stringify(path)},scope:'game'}); console.log(JSON.stringify({settings:localFontSettings(),manifest:manifest()}));`)
+  assert.equal(scopeChange.settings.scope, 'game')
+  assert.equal(scopeChange.settings.active.scope, 'all')
+  assert.equal(scopeChange.manifest.scope, 'all', 'saving scope does not change the startup snapshot')
+  const gameScope = run('console.log(JSON.stringify({settings:localFontSettings(),manifest:manifest()}));')
+  assert.equal(gameScope.settings.active.scope, 'game')
+  assert.equal(gameScope.manifest.scope, 'game')
+  assert.equal(gameScope.manifest.id, restarted.id, 'scope changes must not replace the game font')
   const before = readFileSync(config, 'utf8')
   assert.throws(() => run(`saveLocalFontSettings({mode:'custom',path:'relative.ttf'});`))
   assert.equal(readFileSync(config, 'utf8'), before, 'invalid paths must preserve the last saved settings')
   assert.throws(() => run(`process.env.QXQY_FONT_PATH=${JSON.stringify(path)}; saveLocalFontSettings({mode:'system'});`))
   assert.equal(readFileSync(config, 'utf8'), before, 'the environment variable keeps priority')
+  const environmentScope = run(`process.env.QXQY_FONT_PATH=${JSON.stringify(path)}; saveLocalFontSettings({scope:'all'}); console.log(JSON.stringify({settings:localFontSettings(),manifest:manifest()}));`)
+  assert.equal(environmentScope.settings.scope, 'all', 'scope remains editable with an environment-selected font')
+  assert.equal(environmentScope.settings.path, path, 'scope-only writes preserve the saved font source')
+  assert.equal(environmentScope.settings.active.source, 'environment')
+  assert.equal(environmentScope.manifest.scope, 'game', 'environment-selected fonts also retain the startup scope')
   writeFileSync(path, 'font moved or corrupted')
   const recovered = run('console.log(JSON.stringify({settings:localFontSettings(),id:localFont()?.id??null}));')
   assert.equal(recovered.id, null)

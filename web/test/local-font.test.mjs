@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
+import { fileURLToPath } from 'node:url'
 import { createWebServer } from '../server.js'
 import { localFont } from '../../studio/host/local-font.js'
 import { geometryFont } from '../../studio/test/fixtures/geometry-font.mjs'
@@ -37,17 +40,20 @@ test('Web local font authentication, privacy, export boundary and real browser r
   assert.equal((await fetch(settingsUrl)).status, 401)
   const settings = await (await fetch(settingsUrl, { headers: auth })).json()
   assert.equal(settings.path, path)
+  assert.equal(settings.scope, 'all')
   const postSettings = value => fetch(settingsUrl, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(value) })
   assert.equal((await fetch(settingsUrl, { headers: { ...auth, origin: 'https://example.invalid' } })).status, 403)
   const previousSettings = await readFile(config, 'utf8')
   assert.equal((await postSettings({ mode: 'custom', path: join(directory, 'missing.ttf') })).status, 400)
+  assert.equal((await postSettings({ mode: 'custom', path, scope: 'invalid' })).status, 400)
   assert.equal(await readFile(config, 'utf8'), previousSettings)
   const changed = await (await postSettings({ mode: 'system' })).json()
   assert.equal(changed.restartRequired, true)
   assert.equal(localFont().data.length, bytes.length, 'active font remains stable until the host restarts')
   const manifest = await fetch(manifestUrl, { headers: auth })
-  const { id } = await manifest.json()
+  const { id, scope } = await manifest.json()
   assert.equal(id, localFont().id)
+  assert.equal(scope, 'all')
   const response = await fetch(`${app.url}/qxqy-font/file/${id}`, { headers: auth })
   assert.equal(response.headers.get('cache-control'), 'no-store')
   assert.equal(response.headers.get('cross-origin-resource-policy'), 'same-origin')
@@ -60,13 +66,14 @@ test('Web local font authentication, privacy, export boundary and real browser r
   app = await createWebServer({ workspace: directory, port: 0 })
 
   await t.test('browser uses the loaded font in editor text and incremental fitted Pixi scenes', {
-    skip: !process.env.QXQY_BROWSER, timeout: 60_000,
+    skip: !process.env.QXQY_BROWSER, timeout: 90_000,
   }, async () => {
     browser = await startTestBrowser(directory)
     const { evaluate, wait } = browser
     await browser.navigate(app.url + '/editor')
     await wait(`document.querySelector('.qxsim-box.textbox')?.style.fontFamily.includes('QxqyLocal_')`)
     const family = fontFamily(id)
+    assert.ok((await evaluate(`getComputedStyle(document.querySelector('.qxsim-editor-nav')).fontFamily`)).includes(family))
     assert.ok((await evaluate(`getComputedStyle(document.querySelector('.qxsim-box.textbox span')).fontFamily`)).includes(family),
       'the actual text span must not override the loaded font')
     const runtime = createRuntime({ canvasWidth: 240, canvasHeight: 160 })
@@ -109,6 +116,7 @@ test('Web local font authentication, privacy, export boundary and real browser r
     // The settings surface shares the same editor component with Harness.
     await evaluate(`document.querySelector('[aria-label="字体设置"]').click()`)
     await wait(`document.querySelector('[aria-label="字体来源"]')?.value === 'system'`)
+    assert.equal(await evaluate(`document.querySelector('[aria-label="应用范围"]').value`), 'all')
     await evaluate(`(() => {
       const select=document.querySelector('[aria-label="字体来源"]');
       select.value='custom';select.dispatchEvent(new Event('change',{bubbles:true}));
@@ -124,10 +132,71 @@ test('Web local font authentication, privacy, export boundary and real browser r
     await wait(`document.querySelector('.qxsim-font-dialog [role="alert"]')?.textContent.includes('readable')`)
     assert.equal(JSON.parse(await readFile(config, 'utf8')).mode, 'system')
     await fill(`"${path}"`)
+    await evaluate(`(() => {
+      const select=document.querySelector('[aria-label="应用范围"]');
+      select.value='game';select.dispatchEvent(new Event('change',{bubbles:true}));
+    })()`)
     await evaluate(`document.querySelector('.qxsim-font-dialog button[type="submit"]').click()`)
     await wait(`document.querySelector('.qxsim-font-dialog [role="status"]')?.textContent.includes('已保存')`)
-    assert.deepEqual(JSON.parse(await readFile(config, 'utf8')), { mode: 'custom', path })
+    assert.deepEqual(JSON.parse(await readFile(config, 'utf8')), { mode: 'custom', path, scope: 'game' })
     assert.ok((await evaluate(`getComputedStyle(document.querySelector('.qxsim-box.textbox span')).fontFamily`)).includes(family))
+    assert.ok((await evaluate(`getComputedStyle(document.querySelector('.qxsim-editor-nav')).fontFamily`)).includes(family), 'scope applies after restart, not during an active editing session')
     await evaluate(`document.querySelector('.qxsim-font-dialog button[type="button"]').click()`)
+
+    // Real process restarts verify persisted scope and the manifest/browser path.
+    // Each scope must keep the same custom game font while changing only chrome.
+    let host, exited
+    const stopHost = async () => { if (host && host.exitCode === null && host.signalCode === null) host.kill(); await exited; host = null }
+    t.after(stopHost)
+    for (const scope of ['game', 'all']) {
+      host = spawn(process.execPath, [fileURLToPath(new URL('../server.js', import.meta.url)), '--workspace', directory, '--port', '0'],
+        { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+      exited = once(host, 'exit')
+      const url = await new Promise((resolve, reject) => {
+        let output = '', error = ''
+        const timer = setTimeout(() => reject(new Error('Font host startup timeout: ' + error)), 10_000)
+        host.stdout.on('data', chunk => { output += chunk; const match = output.match(/http:\/\/127\.0\.0\.1:\d+/); if (match) { clearTimeout(timer); resolve(match[0]) } })
+        host.stderr.on('data', chunk => { error += chunk })
+        host.once('error', reason => { clearTimeout(timer); reject(reason) })
+        host.once('exit', () => { clearTimeout(timer); reject(new Error('Font host exited: ' + error)) })
+      })
+      assert.deepEqual(await (await fetch(url + '/qxqy-font/manifest')).json(), { id, scope })
+      await browser.navigate(url + '/editor')
+      await wait(`document.querySelector('.qxsim-box.textbox')?.style.fontFamily.includes('QxqyLocal_')`)
+      assert.ok((await evaluate(`getComputedStyle(document.querySelector('.qxsim-box.textbox span')).fontFamily`)).includes(family))
+      const chrome = async selector => assert.equal((await evaluate(`getComputedStyle(document.querySelector(${JSON.stringify(selector)})).fontFamily`)).includes(family), scope === 'all', selector + ': ' + scope)
+      await chrome('.qxsim-editor-nav')
+      await chrome('.qxsim-language')
+      await evaluate(`document.querySelector('[aria-label="字体设置"]').click()`)
+      await wait(`document.querySelector('[aria-label="应用范围"]')?.value === ${JSON.stringify(scope)}`)
+      await chrome('.qxsim-font-dialog select')
+      if (scope === 'game') {
+        await evaluate(`(()=>{const select=document.querySelector('[aria-label="应用范围"]');select.value='all';select.dispatchEvent(new Event('change',{bubbles:true}));})()`)
+        await evaluate(`document.querySelector('.qxsim-font-dialog button[type="submit"]').click()`)
+        await wait(`document.querySelector('.qxsim-font-dialog [role="status"]')?.textContent.includes('已保存')`)
+        assert.equal(JSON.parse(await readFile(config, 'utf8')).scope, 'all')
+      }
+      await browser.navigate(url + '/editor/play#' + await evaluate(`sessionStorage.getItem('qxqy-editor-session')`))
+      await wait(`document.getElementById('state')?.textContent.includes('试玩运行中')`)
+      await chrome('#pause')
+      await chrome('#log')
+      await chrome('#caseAsserts')
+      await evaluate(`(async()=>{
+        const {PixiPlayRenderer,loadBrowserFont}=await import('/editor/play-renderer.js');
+        const cv=document.createElement('canvas');document.body.append(cv);
+        const renderer=new PixiPlayRenderer(cv,{fontReady:loadBrowserFont()});await renderer.ready;
+        await renderer.applyScene(${JSON.stringify(playSnapshot(session, { view: true }).scene)},240,160);
+        const text=renderer.nodes.get(${label.Id}).__visual.children.find(child=>typeof child.text==='string');
+        window.scopeGameFont=text.style.fontFamily;renderer.destroy();
+      })()`)
+      assert.ok((await evaluate('window.scopeGameFont')).includes(family), 'both scopes retain the Pixi game font')
+      await browser.navigate(url)
+      await wait(`document.getElementById('connection')?.classList.contains('online')`)
+      await evaluate(`import('/play-renderer.js').then(m=>m.loadBrowserFont())`)
+      await chrome('.topbar')
+      await chrome('#runtime-logs')
+      await browser.navigate('about:blank')
+      await stopHost()
+    }
   })
 })

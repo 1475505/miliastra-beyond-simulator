@@ -2,6 +2,13 @@
 
 独立的 MCP stdio server，让 Codex 或其他 MCP client 直接驱动千星沙箱模拟器。它不依赖 DSH；编辑和试玩仍复用 `../studio`、`../client/lua-runtime` 与 `../server`。
 
+## 0.5.0 更新
+
+- 同步本机字体配置，改善文字测量、自动字号和截图。
+- 修复部分模板引用 GIA 导入、脚本挂载及 `SetVisible` 参数校验。
+
+更新或修改字体后重启 MCP 服务；配套 Web 请同步升级至 0.5.0。
+
 ## 安装与自检
 
 推荐 Node.js 22+。源码开发在仓库根统一安装与构建：

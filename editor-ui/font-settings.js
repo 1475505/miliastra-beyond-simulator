@@ -16,6 +16,7 @@ export function createFontSettings(React) {
     const [settings, setSettings] = React.useState(null)
     const [mode, setMode] = React.useState('auto')
     const [path, setPath] = React.useState('')
+    const [scope, setScope] = React.useState('all')
     const [busy, setBusy] = React.useState(false)
     const [error, setError] = React.useState('')
     const [notice, setNotice] = React.useState('')
@@ -26,6 +27,7 @@ export function createFontSettings(React) {
       request().then(value => {
         if (!active) return
         setSettings(value); setMode(value.mode)
+        setScope(value.scope || 'all')
         setPath(value.environmentPath || value.path || value.active.path || value.defaultPaths[0] || '')
       }, reason => { if (active) setError(reason.message) })
       return () => { active = false }
@@ -33,9 +35,9 @@ export function createFontSettings(React) {
     async function save(event) {
       event.preventDefault(); setBusy(true); setError(''); setNotice('')
       try {
-        const value = await request({ mode, path })
+        const value = await request(locked ? { scope } : { mode, path, scope })
         setSettings(value)
-        const detected = mode === 'auto' ? (value.nextFont.path ? t`找到字体：${value.nextFont.path}。` : t('默认位置未找到字体，将使用系统字体。')) : ''
+        const detected = !locked && mode === 'auto' ? (value.nextFont.path ? t`找到字体：${value.nextFont.path}。` : t('默认位置未找到字体，将使用系统字体。')) : ''
         setNotice(t`已保存。${detected}重启 Web、MCP 或 Harness 宿主后，刷新编辑器及试玩页生效。`)
       } catch (reason) { setError(reason.message) }
       finally { setBusy(false) }
@@ -46,10 +48,10 @@ export function createFontSettings(React) {
     } }, e('form', { className: 'qxsim-save-dialog qxsim-font-dialog', role: 'dialog', 'aria-modal': true,
       'aria-label': t('字体设置'), onSubmit: save, style: { width: 'min(680px, 94%)', maxHeight: '90%', overflow: 'auto' } },
     e('h2', null, t('字体设置')),
-    e('p', null, t('用于整个模拟器界面、编辑画布、试玩及截图。设置仅保存在本机，重启宿主后生效。')),
+    e('p', null, t('自定义字体可用于游戏内文本或整体 UI。设置仅保存在本机，重启宿主后生效。')),
     settings ? e(React.Fragment, null,
       e('p', { style: { overflowWrap: 'anywhere' } }, t`当前字体：${settings.active.path || t('系统字体')}`),
-      locked ? e('p', { role: 'status' }, t('当前由环境变量 QXQY_FONT_PATH 指定。移除该变量并重启宿主后，可在这里修改。')) : null,
+      locked ? e('p', { role: 'status' }, t('字体文件由环境变量 QXQY_FONT_PATH 指定，仍可调整应用范围。')) : null,
       settings.error ? e('p', { role: 'alert' }, t(settings.error)) : null,
       e('label', { className: 'qxsim-field' }, t('字体来源'), e('select', { autoFocus: true, 'aria-label': t('字体来源'), value: mode,
         disabled: busy || locked, onChange: event => { setMode(event.target.value); setNotice('') } },
@@ -64,12 +66,17 @@ export function createFontSettings(React) {
         e('p', null, t('按顺序尝试以下位置；都未找到时使用系统字体。安装在其他盘符时请选择“指定本机字体文件”。')),
         settings.defaultPaths.length ? e('ul', { style: { paddingLeft: 20, overflowWrap: 'anywhere' } },
           settings.defaultPaths.map(value => e('li', { key: value }, value))) : e('p', null, t('当前系统不自动查找，请指定字体文件。'))) : null,
+      e('label', { className: 'qxsim-field' }, t('应用范围'),
+        e('select', { 'aria-label': t('应用范围'), value: scope, disabled: busy,
+          onChange: event => { setScope(event.target.value); setNotice('') } },
+          e('option', { value: 'game' }, t('仅游戏内文本')), e('option', { value: 'all' }, t('整体 UI'))),
+        e('small', null, t('仅游戏内文本：用于画布、试玩和截图；整体 UI：同时替换工具栏、面板、代码和日志字体。'))),
       settings.restartRequired && !notice ? e('p', { role: 'status' }, t('有已保存的字体设置，重启宿主并刷新页面后生效。')) : null,
     ) : !error ? e('p', null, t('正在读取设置…')) : null,
     error ? e('p', { role: 'alert' }, t(error)) : null,
     error && !settings ? e('button', { type: 'button', className: 'qxsim-action', onClick: () => setAttempt(value => value + 1) }, t('重试')) : null,
     notice ? e('p', { role: 'status', style: { overflowWrap: 'anywhere' } }, notice) : null,
     e('footer', null, e('button', { type: 'button', className: 'qxsim-action', disabled: busy, onClick: onClose }, t('关闭')),
-      e('button', { type: 'submit', className: 'qxsim-action primary', disabled: busy || !settings || locked }, busy ? t('保存中…') : t('保存设置')))))
+      e('button', { type: 'submit', className: 'qxsim-action primary', disabled: busy || !settings }, busy ? t('保存中…') : t('保存设置')))))
   }
 }

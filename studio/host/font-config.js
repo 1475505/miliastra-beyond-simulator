@@ -26,15 +26,17 @@ export function fontConfigPath() {
 
 export function normalizeFontConfig(value) {
   if (!value || !['auto', 'custom', 'system'].includes(value.mode)) throw new Error('请选择自动查找、指定文件或系统字体')
+  const scope = value.scope === undefined ? 'all' : value.scope
+  if (!['game', 'all'].includes(scope)) throw new Error('请选择字体应用范围')
   let path = typeof value.path === 'string' ? value.path.trim() : ''
   if (path.length > 4096) throw new Error('字体路径过长')
   if ((path.startsWith('"') && path.endsWith('"')) || (path.startsWith("'") && path.endsWith("'"))) path = path.slice(1, -1)
   if (value.mode === 'custom' && !path) throw new Error('请填写字体文件的绝对路径')
-  return { mode: value.mode, path: value.mode === 'custom' ? path : '' }
+  return { mode: value.mode, path: value.mode === 'custom' ? path : '', scope }
 }
 
 export function readFontConfig(file = fontConfigPath()) {
-  if (!existsSync(file)) return { mode: 'auto', path: '' }
+  if (!existsSync(file)) return { mode: 'auto', path: '', scope: 'all' }
   try { return normalizeFontConfig(JSON.parse(readFileSync(file, 'utf8'))) }
   catch { throw new Error('本机字体设置无法读取，请在「字体设置」中重新保存') }
 }
