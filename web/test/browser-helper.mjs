@@ -31,6 +31,13 @@ export async function startTestBrowser(directory, extraArgs = []) {
     socket = new WebSocket(endpoint)
     await once(socket, 'open')
     const pending = new Map()
+    socket.addEventListener('close', () => {
+      for (const request of pending.values()) {
+        clearTimeout(request.timer)
+        request.reject(new Error('Browser connection closed'))
+      }
+      pending.clear()
+    })
     const errors = []
     let sequence = 0
     socket.addEventListener('message', event => {
@@ -44,6 +51,7 @@ export async function startTestBrowser(directory, extraArgs = []) {
       else request.resolve(message.result)
     })
     const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
+      if (socket.readyState !== WebSocket.OPEN) return reject(new Error('Browser connection closed'))
       const id = ++sequence
       const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)) }, 15_000)
       pending.set(id, { resolve, reject, timer })
@@ -55,21 +63,26 @@ export async function startTestBrowser(directory, extraArgs = []) {
     await send('Runtime.enable', {}, sessionId)
     const evaluate = async expression => {
       const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true }, sessionId)
-      if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails))
+      if (result.exceptionDetails) throw Object.assign(new Error(JSON.stringify(result.exceptionDetails)), { code: 'BROWSER_EVALUATION_ERROR' })
       return result.result.value
     }
     const wait = async expression => {
       // A poll expression may legitimately throw while the page is still
       // rendering: `document.querySelector('#x').value` reads through null
       // before #x exists. Treat that as "not yet" and keep polling instead of
-      // failing on the first intermediate state. Only the timeout is fatal.
+      // failing on the first intermediate state. Transport/protocol failures
+      // must still fail immediately instead of being retried as page state.
       let lastError
       for (let i = 0; i < 150; i++) {
-        try { if (await evaluate(expression)) return } catch (error) { lastError = error }
+        try { if (await evaluate(expression)) return } catch (error) {
+          if (error.code !== 'BROWSER_EVALUATION_ERROR') throw error
+          lastError = error
+        }
         await delay(100)
       }
       const detail = lastError ? `\nlast error: ${lastError.message}` : ''
-      throw new Error(`Browser wait failed: ${expression}${detail}\n${await evaluate('document.body.innerText')}\n${JSON.stringify(errors)}`)
+      const body = await evaluate('document.body?.innerText ?? ""').catch(error => `Unable to read page: ${error.message}`)
+      throw new Error(`Browser wait failed: ${expression}${detail}\n${body}\n${JSON.stringify(errors)}`)
     }
     return { send, evaluate, wait, close, sessionId, targetId,
       navigate: url => send('Page.navigate', { url }, sessionId),
