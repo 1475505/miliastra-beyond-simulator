@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
@@ -10,6 +11,7 @@ import { textWindowMetrics } from '../play/scroll.js'
 import { renderScenePng } from '../host-png.js'
 import { geometryFont } from './fixtures/geometry-font.mjs'
 import { distributable } from '../../scripts/distribution-filter.mjs'
+import { defaultFontPaths, normalizeFontConfig, readFontConfig, writeFontConfig } from '../host/font-config.js'
 
 test('local font validates input, stays out of serializable state and drives PNG/measurement/Worker', async t => {
   const directory = mkdtempSync(join(tmpdir(), 'qxqy-font-'))
@@ -81,4 +83,43 @@ test('distribution excludes font containers and the local-only directory', () =>
   }
   assert.equal(distributable(join('public', 'styles.css')), true)
   assert.equal(distributable(join('studio', 'play', 'browser-font.js')), true)
+})
+
+test('font settings use portable defaults and survive real host restarts without changing projects', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'qxqy-font-config-'))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const config = join(directory, 'settings', 'font.json'), path = join(directory, 'private.ttf')
+  writeFileSync(path, geometryFont())
+  const module = new URL('../host/local-font.js', import.meta.url).href
+  const env = { ...process.env, QXQY_FONT_CONFIG_PATH: config, QXQY_FONT_PATH: '' }
+  const run = script => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e',
+    `import {localFont,localFontSettings,saveLocalFontSettings} from ${JSON.stringify(module)}; ${script}`],
+  { env, windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))
+  assert.deepEqual(defaultFontPaths('linux', {}), [])
+  const candidates = defaultFontPaths('win32', {})
+  assert.equal(candidates[0], 'C:\\Program Files\\Genshin Impact\\Genshin Impact Game\\YuanShen_Data\\StreamingAssets\\MiHoYoSDKRes\\HttpServerResources\\font\\zh-cn.ttf')
+  assert.ok(candidates.every(value => value.startsWith('C:\\')))
+  assert.ok(defaultFontPaths('win32', { SystemDrive: 'D:', ProgramFiles: 'D:\\Apps' })[0].startsWith('D:\\Apps\\'))
+  assert.deepEqual(normalizeFontConfig({ mode: 'custom', path: `"${path}"` }), { mode: 'custom', path })
+  assert.deepEqual(readFontConfig(config), { mode: 'auto', path: '' })
+  writeFontConfig({ mode: 'system', path: '' }, config)
+  const selected = run(`saveLocalFontSettings({mode:'custom',path:${JSON.stringify(path)}}); console.log(JSON.stringify({settings:localFontSettings(),id:localFont()?.id??null}));`)
+  assert.equal(selected.id, null, 'saving must not change the active host/Worker font before restart')
+  assert.equal(selected.settings.restartRequired, true)
+  assert.equal(readFontConfig(config).path, path)
+  const restarted = run('console.log(JSON.stringify({settings:localFontSettings(),id:localFont()?.id??null}));')
+  assert.match(restarted.id, /^[a-f0-9]{64}$/)
+  assert.equal(restarted.settings.restartRequired, false)
+  assert.equal(restarted.settings.active.path, path)
+  const before = readFileSync(config, 'utf8')
+  assert.throws(() => run(`saveLocalFontSettings({mode:'custom',path:'relative.ttf'});`))
+  assert.equal(readFileSync(config, 'utf8'), before, 'invalid paths must preserve the last saved settings')
+  assert.throws(() => run(`process.env.QXQY_FONT_PATH=${JSON.stringify(path)}; saveLocalFontSettings({mode:'system'});`))
+  assert.equal(readFileSync(config, 'utf8'), before, 'the environment variable keeps priority')
+  writeFileSync(path, 'font moved or corrupted')
+  const recovered = run('console.log(JSON.stringify({settings:localFontSettings(),id:localFont()?.id??null}));')
+  assert.equal(recovered.id, null)
+  assert.match(recovered.settings.error, /valid TTF or OTF/)
+  run("saveLocalFontSettings({mode:'system'}); console.log(JSON.stringify(localFontSettings()));")
+  assert.equal(run('console.log(JSON.stringify(localFontSettings()));').error, '')
 })

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createWebServer } from '../server.js'
@@ -16,11 +16,16 @@ test('Web local font authentication, privacy, export boundary and real browser r
   const path = join(directory, 'user-font.ttf'), bytes = geometryFont()
   await writeFile(path, bytes)
   const previous = process.env.QXQY_FONT_PATH
-  process.env.QXQY_FONT_PATH = path
+  const previousConfig = process.env.QXQY_FONT_CONFIG_PATH
+  const config = join(directory, 'font.json')
+  process.env.QXQY_FONT_CONFIG_PATH = config
+  delete process.env.QXQY_FONT_PATH
+  await writeFile(config, JSON.stringify({ mode: 'custom', path }))
   let app, browser
   t.after(async () => {
     await browser?.close(); await app?.close()
     if (previous === undefined) delete process.env.QXQY_FONT_PATH; else process.env.QXQY_FONT_PATH = previous
+    if (previousConfig === undefined) delete process.env.QXQY_FONT_CONFIG_PATH; else process.env.QXQY_FONT_CONFIG_PATH = previousConfig
     await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
   })
   await assert.rejects(createWebServer({ workspace: directory, host: '0.0.0.0', port: 0, password: 'test' }), /loopback-only/)
@@ -28,6 +33,18 @@ test('Web local font authentication, privacy, export boundary and real browser r
   const auth = { authorization: `Basic ${Buffer.from('simulator:test').toString('base64')}` }
   const manifestUrl = app.url + '/qxqy-font/manifest'
   assert.equal((await fetch(manifestUrl)).status, 401)
+  const settingsUrl = app.url + '/qxqy-font/settings'
+  assert.equal((await fetch(settingsUrl)).status, 401)
+  const settings = await (await fetch(settingsUrl, { headers: auth })).json()
+  assert.equal(settings.path, path)
+  const postSettings = value => fetch(settingsUrl, { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify(value) })
+  assert.equal((await fetch(settingsUrl, { headers: { ...auth, origin: 'https://example.invalid' } })).status, 403)
+  const previousSettings = await readFile(config, 'utf8')
+  assert.equal((await postSettings({ mode: 'custom', path: join(directory, 'missing.ttf') })).status, 400)
+  assert.equal(await readFile(config, 'utf8'), previousSettings)
+  const changed = await (await postSettings({ mode: 'system' })).json()
+  assert.equal(changed.restartRequired, true)
+  assert.equal(localFont().data.length, bytes.length, 'active font remains stable until the host restarts')
   const manifest = await fetch(manifestUrl, { headers: auth })
   const { id } = await manifest.json()
   assert.equal(id, localFont().id)
@@ -89,5 +106,28 @@ test('Web local font authentication, privacy, export boundary and real browser r
       revision = scene.revision
     }
     await evaluate('fontRenderer.destroy()')
+    // The settings surface shares the same editor component with Harness.
+    await evaluate(`document.querySelector('[aria-label="字体设置"]').click()`)
+    await wait(`document.querySelector('[aria-label="字体来源"]')?.value === 'system'`)
+    await evaluate(`(() => {
+      const select=document.querySelector('[aria-label="字体来源"]');
+      select.value='custom';select.dispatchEvent(new Event('change',{bubbles:true}));
+    })()`)
+    await wait(`Boolean(document.querySelector('[aria-label="字体文件路径"]'))`)
+    const fill = value => evaluate(`(() => {
+      const input=document.querySelector('[aria-label="字体文件路径"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    })()`)
+    await fill(join(directory, 'missing.ttf'))
+    await evaluate(`document.querySelector('.qxsim-font-dialog button[type="submit"]').click()`)
+    await wait(`document.querySelector('.qxsim-font-dialog [role="alert"]')?.textContent.includes('readable')`)
+    assert.equal(JSON.parse(await readFile(config, 'utf8')).mode, 'system')
+    await fill(`"${path}"`)
+    await evaluate(`document.querySelector('.qxsim-font-dialog button[type="submit"]').click()`)
+    await wait(`document.querySelector('.qxsim-font-dialog [role="status"]')?.textContent.includes('已保存')`)
+    assert.deepEqual(JSON.parse(await readFile(config, 'utf8')), { mode: 'custom', path })
+    assert.ok((await evaluate(`getComputedStyle(document.querySelector('.qxsim-box.textbox span')).fontFamily`)).includes(family))
+    await evaluate(`document.querySelector('.qxsim-font-dialog button[type="button"]').click()`)
   })
 })

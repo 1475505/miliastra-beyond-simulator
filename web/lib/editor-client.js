@@ -1,6 +1,12 @@
+import { localizePage, subscribeLocale, loadSystemLanguage } from '../../studio/i18n.js'
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import { createEditor } from 'qxqy-editor-ui'
+import manifest from '../package.json' with { type: 'json' }
+
+await loadSystemLanguage('/editor/api/locale')
+localizePage()
+subscribeLocale(() => localizePage())
 
 const key = 'qxqy-editor-session'
 let sessionId = sessionStorage.getItem(key)
@@ -9,6 +15,7 @@ if (!sessionId) {
   sessionStorage.setItem(key, sessionId)
 }
 const editor = createEditor(React, {
+  version: manifest.version,
   async api(sessionId, action, body = {}) {
     const response = await fetch(`/editor/api/${action}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },

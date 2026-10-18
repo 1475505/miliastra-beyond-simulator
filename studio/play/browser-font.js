@@ -20,5 +20,16 @@ async function load() {
   const face = new FontFace(fontFamily(id), bytes)
   await face.load()
   document.fonts.add(face)
-  return fontStack(id)
+  const stack = fontStack(id)
+  // Only simulator surfaces opt in: Harness can share this document with other
+  // views. Override explicit code/form fonts too, without changing size or weight.
+  const styleId = 'qxqy-local-font-style'
+  let style = document.getElementById(styleId)
+  if (!style) {
+    style = document.createElement('style')
+    style.id = styleId
+    document.head.appendChild(style)
+  }
+  style.textContent = `[data-qxqy-font-ui], [data-qxqy-font-ui] * { font-family: ${stack} !important; }`
+  return stack
 }

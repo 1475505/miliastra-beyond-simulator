@@ -12,6 +12,9 @@ import { resolveWorkspaceRoot } from 'qxqy-studio/host/workspace'
 import { serveImageAsset, sharedImageAssets } from 'qxqy-studio/host/image-assets'
 import { serveAudioAsset, sharedAudioAssets } from 'qxqy-studio/host/audio-assets'
 import { localFont, serveLocalFont } from 'qxqy-studio/host/local-font'
+import { createUpdateChecker } from 'qxqy-studio/host/updates'
+import { systemLanguage, localLanguageRequest } from 'qxqy-studio/host/system-language'
+import manifest from './package.json' with { type: 'json' }
 
 const moduleDir = fileURLToPath(new URL('.', import.meta.url))
 const publicDir = resolve(moduleDir, 'public')
@@ -105,6 +108,8 @@ export async function createWebServer(options = {}) {
   const session = new WebSession(options)
   await session.initialize()
   const editors = new EditorSessions(session.workspace, options)
+  const checkUpdates = options.checkUpdates || createUpdateChecker({ packageName: manifest.name, currentVersion: manifest.version })
+  const readLanguage = options.systemLanguage || systemLanguage
   const eventStreams = new Set()
   const unsubscribe = session.subscribe((event) => {
     const message = `event: state\ndata: ${JSON.stringify(event)}\n\n`
@@ -149,7 +154,7 @@ export async function createWebServer(options = {}) {
       }
       if (await serveImageAsset(request, response, options.imageAssets)) return
       if (await serveAudioAsset(request, response, options.audioAssets)) return
-      if (serveLocalFont(request, response)) return
+      if (await serveLocalFont(request, response, { settingsEnabled: loopback })) return
       if (request.method === 'GET' && staticFiles.has(requestUrl.pathname)) {
         const filename = staticFiles.get(requestUrl.pathname)
         const data = readFileSync(resolve(publicDir, filename))
@@ -196,7 +201,8 @@ export async function createWebServer(options = {}) {
       if (request.method === 'POST' && requestUrl.pathname.startsWith('/editor/api/')) {
         const body = await readBody(request, 8 * 1024 * 1024)
         const action = requestUrl.pathname.slice('/editor/api/'.length)
-        const value = await editors.call(action, body, abort.signal)
+        const value = action === 'locale' ? (localLanguageRequest(request) ? await readLanguage() : { language: '', source: 'browser' })
+          : action === 'updates' ? await checkUpdates() : await editors.call(action, body, abort.signal)
         sendJson(response, 200, { ok: true, value })
         return
       }

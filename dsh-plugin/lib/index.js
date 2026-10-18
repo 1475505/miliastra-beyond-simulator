@@ -6,6 +6,9 @@ import { listWorkspaceArchives, resolveWorkspaceArchive } from './workspace-arch
 import { serveImageAsset } from 'qxqy-studio/host/image-assets'
 import { serveAudioAsset } from 'qxqy-studio/host/audio-assets'
 import { localFont, serveLocalFont } from 'qxqy-studio/host/local-font'
+import { createUpdateChecker } from 'qxqy-studio/host/updates'
+import { systemLanguage, localLanguageRequest } from 'qxqy-studio/host/system-language'
+import manifest from '../../package.json' with { type: 'json' }
 
 export const name = 'qxqy-simulator'
 export const inject = ['tools', 'webServer']
@@ -472,7 +475,7 @@ function registerTools(ctx, registry) {
   }))
 }
 
-function registerApi(ctx, registry) {
+function registerApi(ctx, registry, checkUpdates) {
   registerRoute(ctx, {
     kind: 'prefix',
     path: API_PREFIX,
@@ -491,13 +494,18 @@ function registerApi(ctx, registry) {
       request.once('aborted', () => abort.abort())
       try {
         const body = await readBody(request)
+        if (action === 'locale') {
+          sendJson(response, 200, { ok: true, value: localLanguageRequest(request) ? await systemLanguage() : { language: '', source: 'browser' }, error: null })
+          return
+        }
         const workspacePath = await lookupSessionWorkspace(body.sessionId, {
           sessions: ctx.get?.('sessions'),
           sessionPersistence: ctx.get?.('sessionPersistence'),
         })
         const controller = registry.get(body.sessionId, workspacePath)
         let value
-        if (action === 'get') value = controller.get()
+        if (action === 'updates') value = await checkUpdates()
+        else if (action === 'get') value = controller.get()
         else if (action === 'patch') value = controller.patch(body.op)
         else if (action === 'export') value = controller.exportData(body.format, body.assetType)
         else if (action === 'import') value = controller.importData(body.format, body.data, body.filename)
@@ -526,7 +534,7 @@ export function apply(ctx) {
   // Install cleanup before registration can throw, and let Cordis await workers.
   ctx.effect(() => () => registry.dispose(), 'qxqy-simulator: dispose sessions')
   registerTools(ctx, registry)
-  registerApi(ctx, registry)
+  registerApi(ctx, registry, createUpdateChecker({ packageName: manifest.name, currentVersion: manifest.version }))
   registerPlayPage(ctx)
   registerPlayRenderer(ctx)
   registerRoute(ctx, { kind: 'prefix', path: '/qxqy-assets', handler: (request, response) => serveImageAsset(request, response) })

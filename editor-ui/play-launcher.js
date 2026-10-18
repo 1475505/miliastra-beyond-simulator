@@ -1,3 +1,4 @@
+import { t } from '../studio/i18n.js'
 // Known Desktop pages use the modal directly. Other hosts can try a popup
 // synchronously while the click still has user activation.
 function closePopup(popup) {
@@ -10,7 +11,7 @@ export function preparePlayPopup() {
   try {
     popup = window.open('about:blank', '_blank')
     if (!popup || popup.closed) return null
-    popup.document.write('<!doctype html><meta charset="utf-8"><title>正在准备试玩…</title><p>正在保存项目并准备试玩…</p>')
+    popup.document.write(t('<!doctype html><meta charset="utf-8"><title>正在准备试玩…</title><p>正在保存项目并准备试玩…</p>'))
     return popup
   } catch {
     closePopup(popup)
@@ -69,7 +70,7 @@ export function createPlayLauncher(React) {
           await stop()
           if (mounted) onClosed()
         } catch (reason) {
-          if (mounted) { setError(`停止试玩失败，请重试：${reason?.message || reason}`); setClosing(false) }
+          if (mounted) { setError(t`停止试玩失败，请重试：${reason?.message || reason}`); setClosing(false) }
         }
       }
       const receive = event => {
@@ -99,13 +100,13 @@ export function createPlayLauncher(React) {
       try {
         const frame = event.currentTarget
         const controller = frame.contentWindow?.qxqyEmbeddedPlay
-        if (!controller) throw new Error('试玩页未能加载，请返回编辑后重试。')
+        if (!controller) throw new Error(t('试玩页未能加载，请返回编辑后重试。'))
         state.controller = controller
         setLoaded(true)
         frame.focus()
         controller.focus()
         const request = (action, args = {}) => {
-          if (state.closing) return Promise.reject(new Error('试玩正在关闭'))
+          if (state.closing) return Promise.reject(new Error(t('试玩正在关闭')))
           const pending = api(entry.sessionId, 'play', { action, args })
           state.requests.add(pending)
           pending.then(() => state.requests.delete(pending), () => state.requests.delete(pending))
@@ -115,12 +116,12 @@ export function createPlayLauncher(React) {
       } catch (reason) { setError(reason?.message || String(reason)) }
     }
 
-    return e('dialog', { ref: dialogRef, className: 'qxsim-play-overlay', 'aria-label': '内嵌试玩', 'aria-modal': true },
+    return e('dialog', { ref: dialogRef, className: 'qxsim-play-overlay', 'aria-label': t('内嵌试玩'), 'aria-modal': true },
       e('header', { className: 'qxsim-play-header' },
-        e('span', { role: 'status' }, closing ? '正在停止试玩…' : loaded ? '内嵌试玩' : '正在载入试玩…'),
-        e('button', { className: 'qxsim-action', type: 'button', disabled: closing, onClick: () => void lifetime.current?.close?.() }, '关闭试玩')),
-      error ? e('div', { className: 'qxsim-play-error', role: 'alert' }, error) : null,
-      e('iframe', { title: '千星沙箱试玩', src: entry.url, onLoad, tabIndex: 0 }))
+        e('span', { role: 'status' }, closing ? t('正在停止试玩…') : loaded ? t('内嵌试玩') : t('正在载入试玩…')),
+        e('button', { className: 'qxsim-action', type: 'button', disabled: closing, onClick: () => void lifetime.current?.close?.() }, t('关闭试玩'))),
+      error ? e('div', { className: 'qxsim-play-error', role: 'alert' }, t(error)) : null,
+      e('iframe', { title: t('千星沙箱试玩'), src: entry.url, onLoad, tabIndex: 0 }))
   }
 
   return function usePlayLauncher({ sessionId, api, playUrl, onError }) {

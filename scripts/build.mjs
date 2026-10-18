@@ -6,13 +6,17 @@ import { root, products, cleanGenerated } from './paths.mjs'
 import { distributable } from './distribution-filter.mjs'
 
 const external = ['@deepseek-ai/*', '@napi-rs/canvas', 'fengari', 'protobufjs']
+// The GIA codec parses its schema during import. Keep the full protobuf
+// implementation inside DSH bundles rather than relying on a host process's
+// mutable CommonJS module cache or dependency interop for protobuf.parse.
+const dshExternal = external.filter(name => name !== 'protobufjs')
 
-async function bundle(entry, outfile, browser = false) {
+async function bundle(entry, outfile, browser = false, dependencies = external) {
   await build({
     absWorkingDir: root, entryPoints: [entry], outfile, bundle: true,
     format: 'esm', platform: browser ? 'browser' : 'node',
     target: browser ? 'es2022' : 'node20', minify: true,
-    external: browser ? [] : external, logLevel: 'warning',
+    external: browser ? [] : dependencies, logLevel: 'warning',
   })
 }
 
@@ -61,7 +65,7 @@ export async function buildProduct(product) {
     ].join('\n')
     await writeFile(join(root, 'dsh-plugin/cordis.patch.yml'), patch)
     for (const name of ['index', 'worker', 'skill', 'preset']) {
-      await bundle(`dsh-plugin/lib/${name}.js`, join(output, `${name}.js`))
+      await bundle(`dsh-plugin/lib/${name}.js`, join(output, `${name}.js`), false, dshExternal)
     }
     await bundle('dsh-plugin/lib/play-renderer.js', join(output, 'play-renderer.js'), true)
     await build({ absWorkingDir: root, entryPoints: ['dsh-plugin/lib/client.js'], outfile: join(output, 'client.js'), bundle: true, format: 'iife', minify: true, platform: 'browser', target: 'es2022' })

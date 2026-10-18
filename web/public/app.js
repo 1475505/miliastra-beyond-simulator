@@ -1,4 +1,8 @@
-import { PixiPlayRenderer, createPlaySession, loadBrowserFont } from './play-renderer.js'
+import { PixiPlayRenderer, createPlaySession, loadBrowserFont, t, getLocale, localizePage, subscribeLocale, loadSystemLanguage } from './play-renderer.js'
+
+await loadSystemLanguage('/editor/api/locale')
+localizePage()
+subscribeLocale(() => { localizePage(); if (model) render() })
 
 const byId = (id) => document.getElementById(id)
 
@@ -75,7 +79,7 @@ function applyTheme(theme) {
   const next = theme === 'light' ? 'light' : 'dark'
   document.documentElement.dataset.theme = next
   document.querySelector('meta[name="theme-color"]').content = next === 'light' ? '#f5f6f8' : '#20242e'
-  elements.theme.title = next === 'dark' ? '切换到亮色主题' : '切换到暗色主题'
+  elements.theme.title = next === 'dark' ? t('切换到亮色主题') : t('切换到暗色主题')
   localStorage.setItem('qxqy-simulator-theme', next)
 }
 
@@ -116,7 +120,7 @@ function renderArchives() {
   elements.archive.replaceChildren()
   const archives = model?.archives || []
   if (!archives.length && !model?.activePath) {
-    const empty = option('', '未发现 qxqy-simulator-save')
+    const empty = option('', t('未发现 qxqy-simulator-save'))
     empty.disabled = true
     elements.archive.append(empty)
     return
@@ -125,7 +129,7 @@ function renderArchives() {
     elements.archive.append(option(archive.path, `${archive.name} · ${archive.path}`))
   }
   if (model.activePath && !archives.some(archive => archive.path === model.activePath)) {
-    elements.archive.prepend(option(model.activePath, `${model.snapshot?.save?.name || '当前存档'} · ${model.activePath}`))
+    elements.archive.prepend(option(model.activePath, `${model.snapshot?.save?.name || t('当前存档')} · ${model.activePath}`))
   }
   elements.archive.value = model.activePath || previous || archives[0].path
 }
@@ -133,7 +137,7 @@ function renderArchives() {
 function renderDevices() {
   const presets = model?.snapshot?.canvas?.presets || []
   const previous = elements.device.value
-  elements.device.replaceChildren(...presets.map((preset) => option(preset.id, preset.label)))
+  elements.device.replaceChildren(...presets.map((preset) => option(preset.id, t(preset.label))))
   const active = mode === 'play' && model?.play?.canvasId
     ? model.play.canvasId
     : model?.snapshot?.canvas?.id
@@ -144,11 +148,11 @@ function renderTree() {
   const rows = model?.activePath ? (model?.snapshot?.tree || []) : []
   elements.tree.replaceChildren()
   elements.treeCount.textContent = String(rows.length)
-  elements.treeTitle.textContent = model?.snapshot?.asset?.type === 'client-control-template' ? '模板与子控件' : '控件树'
+  elements.treeTitle.textContent = model?.snapshot?.asset?.type === 'client-control-template' ? t('模板与子控件') : t('控件树')
   if (!rows.length) {
     const empty = document.createElement('div')
     empty.className = 'tree-empty'
-    empty.textContent = model?.activePath ? '当前资产没有控件。' : '打开存档后显示控件结构。'
+    empty.textContent = model?.activePath ? t('当前资产没有控件。') : t('打开存档后显示控件结构。')
     elements.tree.append(empty)
     return
   }
@@ -188,18 +192,18 @@ function addDetail(label, value) {
 function renderNodeDetails() {
   const row = model?.activePath && model?.snapshot?.tree?.find((item) => item.id === selectedId)
   elements.nodeDetails.replaceChildren()
-  elements.nodeName.textContent = row?.name || '未选择'
+  elements.nodeName.textContent = row?.name || t('未选择')
   if (!row) return
-  addDetail('类型', row.label || row.kind)
+  addDetail(t('类型'), t(row.label) || row.kind)
   addDetail('ID', row.id)
   addDetail('GUID', row.guid)
-  addDetail('树深度', row.depth)
-  addDetail('父节点', row.parentId)
-  addDetail('子控件', row.childCount)
+  addDetail(t('树深度'), row.depth)
+  addDetail(t('父节点'), row.parentId)
+  addDetail(t('子控件'), row.childCount)
 }
 
 function formatLogs(logs) {
-  if (!Array.isArray(logs) || !logs.length) return '试玩启动后显示 Lua 日志。'
+  if (!Array.isArray(logs) || !logs.length) return t('试玩启动后显示 Lua 日志。')
   return logs.map((entry) => {
     if (typeof entry === 'string') return entry
     const time = entry.time == null ? '' : `[${Number(entry.time).toFixed(3)}] `
@@ -217,26 +221,26 @@ function renderStage() {
   elements.stageEmpty.hidden = showEditor || showPlay
   elements.stageShell.classList.toggle('playing', mode === 'play' && Boolean(model?.play?.running))
   if (!hasArchive) {
-    elements.stageEmpty.querySelector('strong').textContent = model?.lastError ? '存档加载失败' : '等待工作区存档'
-    const watched = model?.workspace ? `正在监听 ${model.workspace}。` : ''
+    elements.stageEmpty.querySelector('strong').textContent = model?.lastError ? t('存档加载失败') : t('等待工作区存档')
+    const watched = model?.workspace ? t`正在监听 ${model.workspace}。` : ''
     elements.stageEmpty.querySelector('p').textContent = model?.lastError
       ? model.lastError
-      : `${watched}Codex 保存 qxqy-simulator-save JSON 后会自动出现在这里。`
+      : t`${watched}Codex 保存 qxqy-simulator-save JSON 后会自动出现在这里。`
   } else if (mode === 'play' && !model.play.running) {
-    elements.stageEmpty.querySelector('strong').textContent = '试玩尚未启动'
-    elements.stageEmpty.querySelector('p').textContent = '选择设备并点击“启动”，即可运行 Lua 和交互逻辑。'
+    elements.stageEmpty.querySelector('strong').textContent = t('试玩尚未启动')
+    elements.stageEmpty.querySelector('p').textContent = t('选择设备并点击“启动”，即可运行 Lua 和交互逻辑。')
   }
   if (showEditor) refreshEditorImage()
-  elements.assetLabel.textContent = hasArchive ? (snapshot?.asset?.label || '等待存档') : '等待存档'
-  elements.saveName.textContent = hasArchive ? (snapshot?.save?.name || '未命名存档') : '未命名存档'
+  elements.assetLabel.textContent = hasArchive ? (snapshot?.asset?.label || t('等待存档')) : t('等待存档')
+  elements.saveName.textContent = hasArchive ? (snapshot?.save?.name || t('未命名存档')) : t('未命名存档')
   elements.canvasLabel.textContent = hasArchive && snapshot?.canvas ? `${snapshot.canvas.label} · ${snapshot.canvas.width}×${snapshot.canvas.height}` : '—'
   elements.revisionLabel.textContent = hasArchive ? `Revision ${snapshot?.version ?? '—'}` : 'Revision —'
-  elements.activePath.textContent = model?.activePath || '尚未打开存档'
+  elements.activePath.textContent = model?.activePath || t('尚未打开存档')
   elements.playReadout.textContent = mode === 'play'
     ? model?.play?.running
-      ? `Frame ${model.play.frame} · ${model.play.time.toFixed(3)}s${model.play.paused ? ' · 已暂停' : ''}`
-      : '等待启动 Runtime'
-    : '编辑器静态预览 · 磁盘自动刷新'
+      ? `Frame ${model.play.frame} · ${model.play.time.toFixed(3)}s${model.play.paused ? t(' · 已暂停') : ''}`
+      : t('等待启动 Runtime')
+    : t('编辑器静态预览 · 磁盘自动刷新')
 }
 
 function refreshEditorImage() {
@@ -264,7 +268,7 @@ function refreshEditorImage() {
   }
   image.onerror = () => {
     elements.stageLoading.hidden = true
-    notify('编辑器画面加载失败。', true)
+    notify(t('编辑器画面加载失败。'), true)
     finish()
   }
   image.src = next
@@ -290,9 +294,9 @@ function updatePlayChrome() {
   const playState = model?.play
   elements.playReadout.textContent = mode === 'play'
     ? playState?.running
-      ? `Frame ${playState.frame} · ${Number(playState.time || 0).toFixed(3)}s${playState.paused ? ' · 已暂停' : ''}`
-      : '等待启动 Runtime'
-    : '编辑器静态预览 · 磁盘自动刷新'
+      ? `Frame ${playState.frame} · ${Number(playState.time || 0).toFixed(3)}s${playState.paused ? t(' · 已暂停') : ''}`
+      : t('等待启动 Runtime')
+    : t('编辑器静态预览 · 磁盘自动刷新')
   if (mode === 'play') elements.runtimeLogs.textContent = formatLogs(playState?.logs)
   renderControls()
 }
@@ -336,8 +340,8 @@ function render() {
   elements.metricScripts.textContent = hasArchive ? String(snapshot?.scriptCount || 0) : '0'
   elements.metricCanvas.textContent = hasArchive && snapshot?.canvas ? `${snapshot.canvas.width}×${snapshot.canvas.height}` : '—'
   elements.runtimeLogs.textContent = formatLogs(model?.play?.logs)
-  elements.serverVersion.textContent = model?.version ? `Web ${model.version}` : '服务版本未知，请更新 Web'
-  elements.workspacePath.textContent = model?.workspace ? `工作区：${model.workspace}` : ''
+  elements.serverVersion.textContent = model?.version ? `Web ${model.version}` : t('服务版本未知，请更新 Web')
+  elements.workspacePath.textContent = model?.workspace ? t`工作区：${model.workspace}` : ''
   elements.diagnostics.textContent = [model?.lastError, ...(model?.discovery?.warnings || [])].filter(Boolean).join('\n')
   elements.diagnostics.hidden = !elements.diagnostics.textContent
   elements.diagnostics.classList.toggle('error', Boolean(model?.lastError))
@@ -355,10 +359,10 @@ async function refreshState({ quiet = false, force = false, forceDiscovery = fal
       mode = 'play'
       await play.attach()
     }
-    setConnection('online', '实时监听中')
+    setConnection('online', t('实时监听中'))
     render()
   } catch (error) {
-    setConnection('error', '连接中断')
+    setConnection('error', t('连接中断'))
     if (!quiet) notify(error.message, true)
   }
 }
@@ -387,8 +391,8 @@ const play = createPlaySession({
   onStatus: (next) => { applyPlayStatus(next); updatePlayChrome() },
   onError: (error) => notify(error.message, true),
   onAudioStatus: status => {
-    elements.playAudio.textContent = !status.unlocked ? '开启声音' : status.muted ? '声音已关闭' : '声音已开启'
-    elements.playAudio.title = status.error || (!status.unlocked ? '点击或在画布内操作以解锁音效' : '切换静音')
+    elements.playAudio.textContent = !status.unlocked ? t('开启声音') : status.muted ? t('声音已关闭') : t('声音已开启')
+    elements.playAudio.title = status.error || (!status.unlocked ? t('点击或在画布内操作以解锁音效') : t('切换静音'))
   },
   isActive: () => mode === 'play',
 })
@@ -396,7 +400,7 @@ play.bindInput(elements.stageCanvas, { keysOn: elements.stageShell })
 elements.playKeys.addEventListener('click', () => {
   play.setKeyInputEnabled(!play.keyInputEnabled)
   elements.playKeys.setAttribute('aria-pressed', String(play.keyInputEnabled))
-  elements.playKeys.textContent = play.keyInputEnabled ? '键位响应：开' : '键位响应：关'
+  elements.playKeys.textContent = play.keyInputEnabled ? t('键位响应：开') : t('键位响应：关')
   if (play.keyInputEnabled) elements.stageShell.focus()
 })
 elements.playAudio.addEventListener('click', () => play.audio?.toggle())
@@ -407,7 +411,7 @@ elements.archive.addEventListener('change', () => run(async () => {
   mode = 'editor'
   selectedId = ''
   render()
-  notify('已打开存档')
+  notify(t('已打开存档'))
 }))
 
 elements.reload.addEventListener('click', () => run(async () => {
@@ -416,7 +420,7 @@ elements.reload.addEventListener('click', () => run(async () => {
     model = await requestJson('/api/open', { method: 'POST', body: JSON.stringify({ path: model.activePath }) })
     mode = 'editor'
     render()
-    notify('已重新读取磁盘存档')
+    notify(t('已重新读取磁盘存档'))
   } else {
     await refreshState({ forceDiscovery: true })
     const newest = model?.archives?.[0]?.path
@@ -425,7 +429,7 @@ elements.reload.addEventListener('click', () => run(async () => {
       mode = 'editor'
       selectedId = ''
       render()
-      notify('已打开存档')
+      notify(t('已打开存档'))
     }
   }
 }))
@@ -476,11 +480,11 @@ elements.playStop.addEventListener('click', () => run(async () => {
   updatePlayChrome()
 }))
 
-elements.clearLogs.addEventListener('click', () => { elements.runtimeLogs.textContent = '日志已在当前视图清空。' })
+elements.clearLogs.addEventListener('click', () => { elements.runtimeLogs.textContent = t('日志已在当前视图清空。') })
 
 const events = new EventSource('/api/events')
-events.addEventListener('open', () => setConnection('online', '实时监听中'))
-events.addEventListener('error', () => setConnection('error', '正在重连'))
+events.addEventListener('open', () => setConnection('online', t('实时监听中')))
+events.addEventListener('error', () => setConnection('error', t('正在重连')))
 events.addEventListener('state', (event) => {
   let change = {}
   try { change = JSON.parse(event.data) } catch {}
@@ -488,7 +492,7 @@ events.addEventListener('state', (event) => {
     mode = 'editor'
     selectedId = ''
     play.reset()
-    notify(change.reason === 'external-change' ? '检测到存档变化，预览已更新' : '预览存档已打开')
+    notify(change.reason === 'external-change' ? t('检测到存档变化，预览已更新') : t('预览存档已打开'))
   }
   // 试玩画面有独立的轻量状态轮询；忽略 play 事件，避免重复刷新。
   if (change.type !== 'play') void refreshState({ quiet: true, force: true })

@@ -3,7 +3,7 @@ import { once } from 'node:events'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-export async function startTestBrowser(directory, extraArgs = []) {
+export async function startTestBrowser(directory, extraArgs = [], { language = 'zh-CN', preference = 'zh' } = {}) {
   const child = spawn(process.env.QXQY_BROWSER, [
     '--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-popup-blocking',
     '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--remote-debugging-port=0',
@@ -61,6 +61,13 @@ export async function startTestBrowser(directory, extraArgs = []) {
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true })
     await send('Page.enable', {}, sessionId)
     await send('Runtime.enable', {}, sessionId)
+    // Existing fixtures test Chinese UI explicitly. Locale tests opt into auto
+    // and provide their own host-language fixture, independent of the test OS.
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: `
+      Object.defineProperty(navigator, 'language', { configurable: true, get: () => ${JSON.stringify(language)} });
+      Object.defineProperty(navigator, 'languages', { configurable: true, get: () => [${JSON.stringify(language)}] });
+      try { if (localStorage.getItem('qxqy-ui-language') === null && ${JSON.stringify(preference)} !== 'auto') localStorage.setItem('qxqy-ui-language', ${JSON.stringify(preference)}); } catch {}
+    ` }, sessionId)
     const evaluate = async expression => {
       const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true }, sessionId)
       if (result.exceptionDetails) throw Object.assign(new Error(JSON.stringify(result.exceptionDetails)), { code: 'BROWSER_EVALUATION_ERROR' })

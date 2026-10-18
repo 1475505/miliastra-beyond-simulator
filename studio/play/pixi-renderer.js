@@ -6,6 +6,7 @@ import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.
 import { sliceRegions, resolveImageType } from '../assets/image-stretch.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
 export { loadBrowserFont } from './browser-font.js'
+export { t, getLocale, getLanguagePreference, setLanguagePreference, subscribeLocale, localizePage, loadSystemLanguage, getSystemLanguage } from '../i18n.js'
 import { DEFAULT_FONT } from '../fonts.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.

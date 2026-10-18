@@ -113,5 +113,17 @@ export function createGiaRaw(kind, source = {}) {
     const value = Object.hasOwn(source || {}, definition.key) ? source[definition.key] : definition.defaultValue
     out[definition.key] = sanitizeRawFieldValue(definition, value)
   }
+  if (kind === 'reference') {
+    // Opaque wire payloads are internal preservation fields, never inspector
+    // properties or inferred template indices. Keep them across JSON reloads.
+    for (const key of ['templateRefSlotBase64', 'templateRefOuterBase64']) {
+      if (!Object.hasOwn(source || {}, key)) continue
+      const value = source[key]
+      if (typeof value !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+        throw new Error(`${key} must be base64`)
+      }
+      if (value) out[key] = value
+    }
+  }
   return out
 }

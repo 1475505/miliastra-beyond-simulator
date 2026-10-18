@@ -1,11 +1,25 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createWebServer } from '../server.js'
+import { cleanGenerated } from '../../scripts/paths.mjs'
 
-test('non-local listener requires a password before creating a session', async () => {
+test('non-local listener requires a password before creating a session', async t => {
+  // Authentication must not depend on a font configured by the person running
+  // the tests; local-font privacy is covered by the dedicated font fixture.
+  const directory = mkdtempSync(join(tmpdir(), 'qxqy-access-font-'))
+  const previousConfig = process.env.QXQY_FONT_CONFIG_PATH
+  const previousFont = process.env.QXQY_FONT_PATH
+  process.env.QXQY_FONT_CONFIG_PATH = join(directory, 'font.json')
+  delete process.env.QXQY_FONT_PATH
+  writeFileSync(process.env.QXQY_FONT_CONFIG_PATH, JSON.stringify({ mode: 'system' }))
+  t.after(async () => {
+    if (previousConfig === undefined) delete process.env.QXQY_FONT_CONFIG_PATH; else process.env.QXQY_FONT_CONFIG_PATH = previousConfig
+    if (previousFont === undefined) delete process.env.QXQY_FONT_PATH; else process.env.QXQY_FONT_PATH = previousFont
+    await cleanGenerated(directory, tmpdir())
+  })
   await assert.rejects(createWebServer({ host: '0.0.0.0', password: '' }), /PASSWORD is required/)
 })
 

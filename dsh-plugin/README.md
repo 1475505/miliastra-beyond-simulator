@@ -12,7 +12,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.1.1.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.0.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -54,6 +54,20 @@ Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxq
 插件随包附带 agent 预设 `wonderland-lua-builder`（千星 2D+Lua 游戏制作）：源目录 [`../agent/wonderland-lua-builder`](../agent/wonderland-lua-builder)。构建时把 `agent.cordis.yml` 嵌入 `dsh-plugin/cordis.patch.yml`。在提供 `@deepseek-ai/dsh-agent-preset` 的 DSH 0.1.7-rc.1 及更新版本中，新版注册项会启用；旧版 DSH 自动跳过它，避免缺失模块阻塞启动。旧版复制入口始终保留：启动时仅当 `$DSH_HOME/.agent-presets/wonderland-lua-builder` 不存在，才从包内 `dsh-plugin/presets/` 复制，已有用户预设不覆盖。支持预设选择的 DSH 中，可在「设置 → Agent 预设」选择；已有任务不会自动切换。
 
 编辑器自动跟随 Harness 亮/暗主题并占满宿主内容高度，分为“UI 编辑 / Lua 脚本 / 服务端逻辑”三个页面。顶栏显示存档名、会话工作区和当前资产。点击“试玩 ↗”会先保存脚本与服务端逻辑，再打开同源 `/qxqy-simulator/play#<sessionId>`；试玩画面由 PixiJS v8 WebGL 渲染，Runtime 仍在 Worker 内推进并独占 Lua、布局、锚点、命中和测试语义。`qxqy_studio_play_screenshot` 根据 Runtime `paint` 在 Host 出 PNG，`qxqy_studio_ui_screenshot` 根据编辑器 `boxes` 出舞台 PNG，都不依赖可见页签。完整使用与排障见 [`../../docs/simulator-usage.md`](../../docs/simulator-usage.md)。
+
+## Desktop protobuf 导入失败
+
+2026-10-18 用户在持续运行的 Desktop 0.2.1-rc.2 中更新并启用本地 2.1.1 包，报告 `failed to import: TypeError: hu.parse is not a function`。构建符号对应 GIA codec 的外部 protobufjs.parse 调用。只读核对确认安装的 Host 文件与交付包一致，protobufjs 8.7.2 文件完整，新的 Node 22 / Desktop 自带 Node 24.21.0 子进程中均有 parse；同一个旧包在 Desktop 自带 SDK 的全新临时 profile 中也可启动。因此没有证据将原有宿主取得错误导出值的具体原因定为缺包、某个版本或特定缓存机制。当前主进程自 02:46 持续运行是直接观察，旧模块状态参与故障仍是推断。
+
+2.1.2 将完整 protobufjs 编入 DSH Host 和 Worker，GIA 初始化不再读取宿主外部 CommonJS 对象的 parse。SDK 与原生 Canvas、Lua VM 仍按原兼容边界使用；没有修改用户的 Desktop profile 或第三方依赖文件。采用新补丁版本区分本地 2.1.1 构建，本地打包不代表已发布 npm。
+
+最小受控回归在独立子进程中将外部 protobufjs.parse 设为 undefined：旧交付文件产生相同的 `hu.parse is not a function`，新包能导入并完成 GIA 导入导出的字节一致往返。测试另检查 Host/Worker 没有 protobufjs 的外部导入。该夹具验证依赖隔离，不能写成已复现原有进程产生错误导出值的完整触发链。新增回归见 test/protobuf-bundle.test.mjs。
+
+修复包安装后，应保存工作、从托盘完整退出 Harness，再启动；仅切换启用状态或关闭窗口不等于重启宿主。Node 会缓存已经失败的 ESM 导入，宿主 app-boot 的 importFailure 也会重新取得该缓存错误，所以替换磁盘文件后必须让进程重新加载。
+
+最终验收：Windows x64 / Node.js 22.23.2 全仓 387 pass / 13 条件 skip / 0 fail；首次认证用例被本机已保存的自定义字体影响，补上独立系统字体夹具后通过，未改用户字体文件或生产配置。2.1.2 的三组 dsh-tools 0.1.0-rc.6、0.2.0-rc.2、0.2.1-rc.2 安装验收通过。Desktop 0.2.1-rc.2 随附 Electron 44.7.0 / Node 24.21.0 下，解析器隔离回归及独立临时 profile 的完整 SDK 启动、工具、GIA、Worker/PNG、语言与真实浏览器编辑/试玩均通过。
+
+以上为 `evidence_source=observed`、运行端 `simulator`、`device_status=not_required`；原有进程的确切触发机制未确认，用户原窗口中的修复回验尚未取得。受控夹具与新进程验收不能替代这一边界。
 
 ## Desktop 内嵌试玩（2.0.8）
 

@@ -832,6 +832,7 @@ export function createStudio(seed, options = {}) {
     let next
     let warnings = []
     let metadata = {}
+    let importedGiaScripts = []
     if (normalized === 'json') {
       try {
         next = JSON.parse(bytes.toString('utf8'))
@@ -894,13 +895,13 @@ export function createStudio(seed, options = {}) {
           }
         })
       }
-      collectMounts(imported.project, SERVER_ASSET)
+      collectMounts(imported.project, imported.project.meta.assetType)
       collectMounts(imported.clientProject, CLIENT_ASSET)
-      absorbScripts((imported.scripts || []).map((script) => (
+      importedGiaScripts = (imported.scripts || []).map((script) => (
         mountByGuid.has(Number(script.guid))
           ? { ...script, ...mountByGuid.get(Number(script.guid)) }
           : script
-      )))
+      ))
     } else {
       throw new Error(`unsupported import format: ${format}`)
     }
@@ -924,6 +925,9 @@ export function createStudio(seed, options = {}) {
       project.meta.sourceFile = basename(filename)
       project.meta.sourceFormat = normalized
     }
+    // Resolve mounts only after the imported control tree exists. Resolving
+    // against the previous tree silently clears valid client-template mounts.
+    absorbScripts(importedGiaScripts)
     absorbScripts(next?.scripts || [])
     if (next?.script && (next.script.path || next.script.source)) {
       absorbScripts([next.script])

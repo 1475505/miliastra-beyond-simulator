@@ -30,6 +30,13 @@
 
 后续版本的同级控件按键派发顺序另见[架构中的模拟器策略](architecture.md#模拟器策略非官方证明)。创作者预告上层控件优先接收；这不是上述真机探针已观察到的顺序结论。
 
+## SetVisible 布尔参数校验（2026-10-13）
+
+- 真机证据：用户在 WOO 实际游玩回传截图（`codex-clipboard-b9484d59-620b-4e85-a8e8-8d2975578b5c.png`），报 `bad argument #2 to 'SetVisible' (boolean expected, got nil)`，调用链为 `main:1909 render → OnUpdate`；错误边界随后停止玩法。客户端版本、具体平台未提供。`evidence_source=observed`，运行端 `device`，原故障 `device_status=failed`；截图只证明 nil 被拒，不证明修复后的完整玩法通过。
+- 文档依据：本地官方 API 快照 rev223 将控件 `visible` 列为 boolean，`SetVisible(visible)` 只改变可见性、不停止脚本逻辑（`evidence_source=documented`，运行端 `official_document`，未在线核验）。模拟器此前经 JS `!!v` 将 nil 默认为 false，漏报了该脚本错误。
+- 修复仅在 Lua `SetVisible` 桥接检查布尔参数：true/false 原样生效；nil、遗漏实参及其他非布尔值在转换前报错，拒绝后不改变可见性。其他无效类型的统一拒绝是依据布尔契约采用的模拟器防错策略，未逐类真机验证；不扩展到其他方法、额外参数个数或宿主内部 scene 调用。
+- 自包含回归：`test/set-visible.test.mjs` 覆盖 nil/遗漏参数、数字、字符串、普通与循环表、函数、控件 userdata，以及显隐不改变 active、不中断 OnUpdate。修复前 2 项中 1 失败（nil 被接受），修复后 2/2 通过；运行端 `simulator`，游戏真机复验仍为 `device_status=pending`。
+
 ## Tween 缓动、生命周期边界与字段读回（2026-09-29，TWALL v1）
 
 - 来源：TWALL v1 真机探针，PC，2026-09-29 聊天粘贴日志（完整 294 帧已存档，原始文件待补），见 `probes/tween-coverage-20260929/` 与根 `knowledge/fact.md` 同名条目。`evidence_source=observed`，运行端 `device`。

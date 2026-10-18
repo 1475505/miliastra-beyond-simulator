@@ -97,7 +97,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.1.1.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.0.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -225,6 +225,10 @@ pnpm test:packages
 
 本项目采用 [GNU GPL v3.0（GPL-3.0-only）](LICENSE)。源码仓库：[1475505/miliastra-beyond-simulator](https://github.com/1475505/miliastra-beyond-simulator)。
 
+## 界面语言与更新
+
+顶部导航栏「字体设置」旁提供界面语言切换，底栏提供「检查更新」和「联系作者」；非中文运行环境默认英文，项目内容保持原文。使用和术语来源见 [界面说明](studio/docs/interface.md)。
+
 ## 本地自定义字体
 
-可通过宿主环境变量 QXQY_FONT_PATH 指定自有授权的本地 TTF/OTF，统一编辑画布、试玩、PNG 和换行测量。默认不附带字体，仅支持本机访问，不写入项目存档。配置、许可及分发边界见 [本地字体说明](studio/docs/local-fonts.md)。
+在编辑器上方「字体设置」中可指定本地 TTF/OTF，或选择系统字体；默认尝试 Windows 原神的常见安装位置，未找到则使用系统字体。设置仅保存在本机，保存后重启宿主并刷新页面生效；原有环境变量 `QXQY_FONT_PATH` 仍优先。整个模拟器界面、编辑画布、试玩、PNG 和换行测量使用同一自定义字体，不附带字体文件、不写入项目存档。配置与分发边界见 [本地字体说明](studio/docs/local-fonts.md)。

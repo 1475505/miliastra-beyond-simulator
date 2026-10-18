@@ -15,12 +15,16 @@
     "./host/image-assets": "./host/image-assets.js",
     "./host/audio-assets": "./host/audio-assets.js",
     "./host/local-font": "./host/local-font.js",
+    "./host/updates": "./host/updates.js",
+    "./host/system-language": "./host/system-language.js",
     "./play/renderer": "./play/pixi-renderer.js"
   },
   "files": [
     "index.js",
     "constants.js",
     "fonts.js",
+    "i18n.js",
+    "locales",
     "host-png.js",
     "host",
     "assets",

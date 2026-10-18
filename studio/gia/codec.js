@@ -35,7 +35,7 @@ message UiControlGroup {
       oneof value {
         Transform transform = 11; WrapperString name = 12; Field14 field14 = 14;
         string empty72 = 72; string empty73 = 73; string empty74 = 74; string empty75 = 75;
-        string empty76 = 76; string empty77 = 77; string empty78 = 78; string empty79 = 79;
+        bytes empty76 = 76; string empty77 = 77; string empty78 = 78; string empty79 = 79;
         string empty80 = 80; string empty81 = 81; string empty82 = 82; string empty83 = 83;
         string empty84 = 84; string empty85 = 85; string empty86 = 86;
       }
@@ -45,7 +45,7 @@ message UiControlGroup {
       oneof value {
         Transform transform = 13; Field14 field14 = 14; RootChildRef rootChildRef = 73;
         GenericSlot genericSlot = 74; TextConfig textConfig = 75; CursorConfig cursorConfig = 76;
-        string templateRefSlot = 77; FooterSlot footerSlot = 78; ContainerNodeConfig containerNodeSlot = 79;
+        bytes templateRefSlot = 77; FooterSlot footerSlot = 78; ContainerNodeConfig containerNodeSlot = 79;
         GridViewConfig gridView = 80; ButtonPresetConfig buttonPreset = 81; KeyHintConfig keyHint = 83;
         ImageSlotConfig imageSlot = 84; ImageConfig image = 85; string effectSlot = 86;
         string fullscreenEffectSlot = 87;
@@ -417,7 +417,12 @@ function typeData(node, guid, guidById, warnings) {
     }), footer]
   }
   if (node.kind === 'reference') {
-    return [generic, ref(66, 89, 'empty76', 'templateRefSlot', raw.templateRefSlot ?? ''), footer]
+    const opaque = raw.templateRefSlotBase64
+    if (opaque || raw.templateRefOuterBase64) warnings.push(`${node.name}: 模板引用的非空二进制配置尚未解析，已原样保留；不会自动展开被引用模板。`)
+    const slot = ref(66, 89, 'empty76', 'templateRefSlot', opaque
+      ? Buffer.from(opaque, 'base64') : Buffer.from(raw.templateRefSlot ?? '', 'utf8'))
+    slot.empty76 = Buffer.from(raw.templateRefOuterBase64 || '', 'base64')
+    return [generic, slot, footer]
   }
   if (node.kind === 'grid') {
     if (node.itemPrefabId || node.interactable === false || node.showScrollBar === false || node.raycastTarget === false || node.scrollDirection !== 'Vertical' || node.layoutConstraint !== 'AutoWrap') {
@@ -783,7 +788,7 @@ export function isScriptGia(input) {
 }
 
 function extractScriptMappings(root) {
-  const units = (root.graph || []).filter((unit) => Number(unit.which) === SCRIPT_MAPPING_WHICH)
+  const units = [...(root.graph || []), ...(root.accessories || [])].filter((unit) => Number(unit.which) === SCRIPT_MAPPING_WHICH)
   const warnings = []
   const scripts = units.map((unit, index) => {
     const mapping = unit.script?.mapping || {}
@@ -860,6 +865,25 @@ function dataDetails(unit, key) {
   return unit.ui?.content?.data?.find((entry) => entry.details?.[key])?.details?.[key] || null
 }
 
+function templateReferenceFields(unit) {
+  const entry = unit.ui?.content?.data?.find(row => (row.field501 === 66 && row.field502 === 89)
+    || Object.hasOwn(row.details || {}, 'templateRefSlot'))
+  const bytes = Buffer.from(entry?.details?.templateRefSlot || [])
+  const text = bytes.toString('utf8')
+  // Only empty/legacy plain-text slots have an established simulator meaning.
+  // A non-empty native reference may be a nested message: preserve its bytes,
+  // not a guessed GUID or a lossy replacement-character string.
+  const isText = Buffer.from(text, 'utf8').equals(bytes) && !/[\u0000-\u001f\u007f-\u009f]/u.test(text)
+  return {
+    referencedPrefabId: isText ? text : '',
+    raw: {
+      templateRefSlot: isText ? text : '',
+      ...(!isText ? { templateRefSlotBase64: bytes.toString('base64') } : {}),
+      ...(entry?.empty76?.length ? { templateRefOuterBase64: Buffer.from(entry.empty76).toString('base64') } : {}),
+    },
+  }
+}
+
 function transformMaps(unit) {
   const multi = dataDetails(unit, 'transform')?.multiPlatform
   const out = {}
@@ -892,7 +916,7 @@ function detectKind(unit) {
   const data = unit.ui?.content?.data || []
   if (data.some((entry) => entry.details?.textConfig)) return data.some((entry) => entry.field501 === 71) ? 'textwindow' : 'textbox'
   if (data.some((entry) => entry.details?.cursorConfig)) return 'cursor'
-  if (data.some((entry) => Object.hasOwn(entry.details || {}, 'templateRefSlot'))) return 'reference'
+  if (data.some((entry) => Object.hasOwn(entry.details || {}, 'templateRefSlot') || (entry.field501 === 66 && entry.field502 === 89))) return 'reference'
   if (data.some((entry) => entry.details?.gridView)) return 'grid'
   if (data.some((entry) => entry.details?.buttonPreset)) return 'button'
   if (data.some((entry) => entry.details?.keyHint)) return 'keyhint'
@@ -921,7 +945,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
     const cursor = dataDetails(unit, 'cursorConfig')
     const keyHint = dataDetails(unit, 'keyHint')
     const containerNodeSlot = dataDetails(unit, 'containerNodeSlot')
-    const templateRefSlot = dataDetails(unit, 'templateRefSlot')
+    const reference = kind === 'reference' ? templateReferenceFields(unit) : null
     const effectSlot = dataDetails(unit, 'effectSlot')
     const fullscreenEffectSlot = dataDetails(unit, 'fullscreenEffectSlot')
     const node = createNode(kind, {
@@ -953,7 +977,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
           } : {}),
         } : {}),
         ...(kind === 'cursor' ? { cursorField501: cursor?.field501 ?? 0 } : {}),
-        ...(kind === 'reference' ? { templateRefSlot: templateRefSlot ?? '' } : {}),
+        ...(reference?.raw || {}),
         ...(kind === 'grid' ? {
           gridField501: grid?.field501 ?? 1,
           gridField507: grid?.field507 ?? 1,
@@ -1022,7 +1046,7 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
         padding2X: grid?.padding2?.field501 ?? 20, padding2Y: grid?.padding2?.field502 ?? 20,
         previewCount: grid?.field511 ?? 5,
       } : {}),
-      ...(kind === 'reference' ? { referencedPrefabId: templateRefSlot ?? '' } : {}),
+      ...(reference ? { referencedPrefabId: reference.referencedPrefabId } : {}),
       ...(kind === 'keyhint' ? {
         keyboardKeyCode: keyHint?.field502 ?? null,
         controllerKeyCode: keyHint?.field501 ?? null,
@@ -1031,6 +1055,9 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
       ...(kind === 'fullscreen' ? { animationId: fullscreenEffectSlot ?? '' } : {}),
     })
     nodes.set(unit.id?.id, node)
+    if (reference?.raw.templateRefSlotBase64 || reference?.raw.templateRefOuterBase64) {
+      warnings.push(`${node.name}: 模板引用配置含尚未解析的二进制字段，已原样保存；引用目标未推断，预览不会自动展开。`)
+    }
     if ((kind === 'textbox' || kind === 'textwindow') && ![undefined, 0, 1, 2].includes(text?.align)) warnings.push(`${node.name}: 水平对齐枚举 ${text.align} 的含义未知，已原样保留。`)
     if ((kind === 'textbox' || kind === 'textwindow') && ![undefined, 0, 1, 2].includes(text?.verticalAlign)) warnings.push(`${node.name}: 垂直对齐枚举 ${text.verticalAlign} 的含义未知，已原样保留。`)
     if (kind === 'image' && ![undefined, 0, 1, 2, 3, 4, 5].includes(image?.fillType)) warnings.push(`${node.name}: 填充形状枚举 ${image.fillType} 未识别，已保留原值。`)
@@ -1078,7 +1105,9 @@ export function importGia(input) {
   const decoded = RootType.toObject(RootType.decode(payload), {
     longs: Number, enums: Number, bytes: Buffer, defaults: false, arrays: true, objects: true,
   })
-  const graphs = decoded.graph || []
+  const allUnits = [...(decoded.graph || []), ...(decoded.accessories || [])]
+  const uiUnit = unit => Boolean(unit.ui?.content) && [15, 21, 70].includes(Number(unit.which))
+  const graphs = (decoded.graph || []).filter(uiUnit)
   if (!graphs.some((graph) => graph.ui?.content)) throw new Error('GIA 不含可识别的 UIControlGroup 主图')
   const graphGroup = graphs.find((graph) => graph.which === 21) || null
   const templateGraphs = graphs.filter((graph) => Number(graph.which) === 70)
@@ -1086,7 +1115,7 @@ export function importGia(input) {
   // accessories. Template-list assets use repeated graph fields for their
   // top-level controls and accessories only for state children.
   // Combined archives keep the group plus UIControlTemplate(70) graphs.
-  const accessories = decoded.accessories || []
+  const accessories = (decoded.accessories || []).filter(uiUnit)
   const groupRelated = new Set((graphGroup?.relatedIds || []).map((entry) => entry.id || 0))
   const serverUnits = graphGroup
     ? (groupRelated.size ? accessories.filter((unit) => groupRelated.has(unit.id?.id || 0)) : accessories)
@@ -1096,6 +1125,8 @@ export function importGia(input) {
     : (graphGroup ? [] : [...graphs, ...accessories])
   if (!serverUnits.length && !clientUnits.length) throw new Error('GIA 不含客户端控件')
   const warnings = ['GIA 导入为已验证 UI 字段的语义导入；未知 protobuf 字段不会进入 Authoring JSON。']
+  const unsupported = allUnits.filter(unit => !uiUnit(unit) && Number(unit.which) !== SCRIPT_MAPPING_WHICH)
+  if (unsupported.length) warnings.push(`跳过 ${unsupported.length} 个非 UI / 非脚本依赖单元；这些资源不会进入存档或重新导出。`)
   const extractedScripts = extractScriptMappings(decoded)
   warnings.push(...extractedScripts.warnings)
   let project = null
