@@ -22,7 +22,11 @@ window.sample = async (scene, flat = false) => {
   return ${JSON.stringify(maskSamples)}.map(([x,y]) => Array.from(out.pixels.slice((y*out.width+x)*4,(y*out.width+x)*4+4)));
 };
 renderer.ready.then(() => window.ready = true);
-` }, bundle: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent' })
+` }, bundle: true, platform: 'browser', format: 'esm', write: false, logLevel: 'silent',
+    // The virtual entry resolves './studio/...' from the repo root, but bare
+    // 'pixi.js' is a studio dependency that pnpm keeps out of the root store,
+    // so esbuild needs studio's node_modules on its lookup path explicitly.
+    nodePaths: [fileURLToPath(new URL('../../studio/node_modules', import.meta.url))] })
   const app = createServer((req, res) => {
     res.setHeader('content-type', req.url === '/bundle.js' ? 'text/javascript' : 'text/html')
     res.end(req.url === '/bundle.js' ? bundle.outputFiles[0].text : '<!doctype html><canvas></canvas><script type="module" src="/bundle.js"></script>')
