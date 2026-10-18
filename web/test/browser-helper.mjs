@@ -59,8 +59,17 @@ export async function startTestBrowser(directory, extraArgs = []) {
       return result.result.value
     }
     const wait = async expression => {
-      for (let i = 0; i < 150; i++) { if (await evaluate(expression)) return; await delay(100) }
-      throw new Error(`Browser wait failed: ${expression}\n${await evaluate('document.body.innerText')}\n${JSON.stringify(errors)}`)
+      // A poll expression may legitimately throw while the page is still
+      // rendering: `document.querySelector('#x').value` reads through null
+      // before #x exists. Treat that as "not yet" and keep polling instead of
+      // failing on the first intermediate state. Only the timeout is fatal.
+      let lastError
+      for (let i = 0; i < 150; i++) {
+        try { if (await evaluate(expression)) return } catch (error) { lastError = error }
+        await delay(100)
+      }
+      const detail = lastError ? `\nlast error: ${lastError.message}` : ''
+      throw new Error(`Browser wait failed: ${expression}${detail}\n${await evaluate('document.body.innerText')}\n${JSON.stringify(errors)}`)
     }
     return { send, evaluate, wait, close, sessionId, targetId,
       navigate: url => send('Page.navigate', { url }, sessionId),
