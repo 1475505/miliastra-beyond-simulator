@@ -3,10 +3,11 @@ import assert from 'node:assert/strict'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { Container, DOMAdapter, Matrix } from 'pixi.js'
 import { createRuntime } from '../../client/lua-runtime/src/index.js'
+import { createStudio } from '../index.js'
 import { paintList, playSnapshot } from '../play/session.js'
-import { renderPaintPng, renderScenePng, flattenScenePaint } from '../host-png.js'
+import { renderEditorPng, renderPaintPng, renderScenePng, flattenScenePaint } from '../host-png.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
-import { maskScenes, maskSamples, maskAlphas } from './fixtures/image-mask.mjs'
+import { editorMaskProject, maskScenes, maskSamples, maskAlphas } from './fixtures/image-mask.mjs'
 
 function control(name, kind, x, y, w, h, extra = {}) {
   return {
@@ -164,4 +165,48 @@ test('a rotated mask uses its own rectangle rather than the axis-aligned bounds'
   assert.equal(await alphaPixel(png, 120, 80), 255, 'center survives rotation')
   assert.equal(await alphaPixel(png, 145, 80), 0, 'wide axis-aligned point is outside the rotated thin rectangle')
   assert.equal(await alphaPixel(png, 120, 60), 255, 'the rotated long axis remains inside')
+})
+
+test('editor boxes preserve mask ancestry; editor PNG composites groups and keeps selection outside masks', async () => {
+  const studio = createStudio(editorMaskProject())
+  const context = createCanvas(1600, 900).getContext('2d')
+  const draw = async snapshot => {
+    context.clearRect(0, 0, 1600, 900)
+    context.drawImage(await loadImage(renderEditorPng(snapshot).data), 0, 0)
+    return (x, y) => [...context.getImageData(x, y, 1, 1).data]
+  }
+  const snapshot = studio.get()
+  const background = await draw({ ...snapshot, boxes: [] })
+  const bg = [background(740, 450), background(760, 450)]
+  assert.equal(snapshot.boxes.find(box => box.id === 'mask').masks[0].id, 'mask')
+  assert.deepEqual(snapshot.boxes.find(box => box.id === 'red').masks.map(mask => mask.id), ['mask'])
+  assert.equal(snapshot.boxes.find(box => box.id === 'sibling').masks, undefined)
+  let pixel = await draw(snapshot)
+  assert.deepEqual(pixel(740, 450), bg[0], 'outside child pixels are clipped')
+  const expected = [255, 0, 0].map((value, i) => Math.round(value * 134 / 255 + bg[1][i] * 121 / 255))
+  pixel(760, 450).slice(0, 3).forEach((value, i) => assert.ok(Math.abs(value - expected[i]) <= 1,
+    'overlapping children receive their common feather only once'))
+  assert.deepEqual(pixel(800, 450), [255, 0, 0, 255])
+  assert.deepEqual(pixel(910, 450), [0, 0, 255, 255])
+  studio.patch({ op: 'set', id: 'mask', key: 'width', value: 0 })
+  pixel = await draw(studio.get())
+  assert.deepEqual(pixel(760, 450), bg[1], 'zero-sized masks retain empty coverage')
+  studio.patch({ op: 'set', id: 'mask', key: 'width', value: 100 })
+  studio.patch({ op: 'set', id: 'mask', key: 'rotationZ', value: 90 })
+  pixel = await draw(studio.get())
+  assert.deepEqual(pixel(740, 450), bg[0], 'rotated mask stays in its own local rectangle')
+  studio.patch({ op: 'set', id: 'mask', key: 'rotationZ', value: 0 })
+  studio.patch({ op: 'select', id: 'red' })
+  pixel = await draw(studio.get())
+  assert.deepEqual(pixel(710, 450), [97, 185, 255, 255], 'selected child outline is editable outside the mask')
+  studio.patch({ op: 'set', id: 'mask', key: 'visible', value: false })
+  assert.equal(studio.get().boxes.find(box => box.id === 'red').visibleInHierarchy, false)
+  pixel = await draw(studio.get())
+  assert.deepEqual(pixel(740, 450), bg[0])
+
+  const nestedSnapshot = createStudio(editorMaskProject({ nested: true })).get()
+  assert.deepEqual(nestedSnapshot.boxes.find(box => box.id === 'red').masks.map(mask => mask.id), ['mask', 'inner'])
+  pixel = await draw(nestedSnapshot)
+  const fadedTwice = [255, 0, 0].map((value, i) => Math.round(value * 70 / 255 + bg[1][i] * 185 / 255))
+  pixel(760, 450).slice(0, 3).forEach((value, i) => assert.ok(Math.abs(value - fadedTwice[i]) <= 1))
 })

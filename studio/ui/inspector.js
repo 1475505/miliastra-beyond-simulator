@@ -14,6 +14,7 @@ import {
 import { readCurrentTransform } from './sync.js'
 import { getPlatformTransform } from './transforms.js'
 import { textLayout } from '../play/text-layout.js'
+import { centerMaskMatrix, imageMaskSpec } from '../play/image-mask.js'
 
 export function painterBoxes(root, boxes) {
   const out = []
@@ -29,7 +30,7 @@ export function painterBoxes(root, boxes) {
 export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)) {
   const canvas = canvasBox(canvasId)
   const boxes = {}
-  function rec(node, parentBox, parentMatrix) {
+  function rec(node, parentBox, parentMatrix, parentVisible = true, masks = []) {
     const transform = getPlatformTransform(node.transformByPlatform, platform)
     const box = computeRect(parentBox, transform)
     // A server container is an authoring-only bridge to the client root: its
@@ -39,6 +40,10 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       ? parentMatrix
       : composeRectMatrix(parentMatrix, box, transform)
     const render = transformedRectMetrics(box, matrix)
+    const visibleInHierarchy = parentVisible && node.visible !== false
+    const mask = node.kind === 'image' && node.enableMask === true
+      ? imageMaskSpec({ ...node, width: box.width, height: box.height }, centerMaskMatrix(matrix, box.centerX, box.centerY)) : null
+    const nextMasks = mask ? [...masks, mask] : masks
     boxes[node.id] = {
       ...box,
       ...inspectorFromRect(box),
@@ -46,6 +51,7 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       kind: node.kind,
       name: node.name,
       visible: node.visible !== false,
+      visibleInHierarchy,
       active: node.active !== false,
       rotationX: transform.rotation.x,
       rotationY: transform.rotation.y,
@@ -56,6 +62,7 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       renderHeight: render.height,
       renderRotationZ: render.rotationZ,
       renderMatrix: matrix,
+      ...(nextMasks.length ? { masks: nextMasks } : {}),
       primitive: node.kind === 'image' ? imagePrimitive(node.imageId, node.imageSource) : null,
       ...((node.kind === 'textbox' || node.kind === 'textwindow') ? {
         text: node.text ?? '',
@@ -102,7 +109,7 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       } : {}),
     }
     const childParent = node.kind === 'server-container' ? parentBox : box
-    for (const child of node.children || []) rec(child, childParent, matrix)
+    for (const child of node.children || []) rec(child, childParent, matrix, visibleInHierarchy, nextMasks)
   }
   rec(root, canvas, identityMatrix())
   return { canvas, boxes }
@@ -350,7 +357,7 @@ export function hitTest(boxes, x, y) {
     .filter((b) => b.kind !== 'server-container')
   for (let index = list.length - 1; index >= 0; index -= 1) {
     const b = list[index]
-    if (!b.visible || !b.active) continue
+    if (!b.visible || b.visibleInHierarchy === false || !b.active) continue
     const inverse = b.renderMatrix && invertMatrix(b.renderMatrix)
     const local = inverse && applyMatrix(inverse, x, y)
     if (local && local.x >= b.left && local.x <= b.right && local.y >= b.bottom && local.y <= b.top) return b.id

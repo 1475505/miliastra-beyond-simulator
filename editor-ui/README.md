@@ -18,6 +18,8 @@
 
 图片源可选「静态引用 / 元件」；元件来源的编辑预览、纹理与刷新使用 `imageSource + imageId` 作为资源身份。`image-refresh` body 接收 `imageSource`，省略时兼容静态来源；Prefab 请求 `/qxqy-assets/prefab-v1/<id>.png`。
 
+编辑画布与编辑器截图支持图片矩形遮罩和羽化。`mask-preview.js` 按快照遮罩链分组，复用试玩覆盖率处理重叠与嵌套；选框保留在效果层外。属性提交后直接更新，支持范围与验证见 [编辑遮罩预览](../studio/docs/control-support.md#编辑画布遮罩与羽化2026-10-20)。
+
 ## 试玩窗口与内嵌兜底
 
 `play-launcher.js` 同步尝试打开新标签页；宿主拒绝窗口（`window.open` 返回 `null`）时，保存脚本和服务端逻辑后，在顶层 modal dialog 中嵌入同源试玩页 `?embedded=1#<sessionId>`。底下的编辑器保持挂载。正常浏览器继续使用新标签页。

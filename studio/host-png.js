@@ -428,16 +428,16 @@ function compositeMaskedGroup(target, layer, mask, size) {
   target.ctx.restore()
 }
 
-function drawPaintGroups(target, entries, size, assets) {
+function drawPaintGroups(target, entries, size, assets, drawItem = drawPaintItem) {
   for (const entry of entries) {
-    if (entry.item) { drawPaintItem(target.ctx, entry.item, size.height, assets); continue }
+    if (entry.item) { drawItem(target.ctx, entry.item, size.height, assets); continue }
     const bounds = maskPixelBounds(entry.mask, target, size)
     if (!bounds) continue // Enabled empty/singular mask means empty coverage.
     const canvas = loadCanvas().createCanvas(bounds.width, bounds.height)
     const ctx = canvas.getContext('2d')
     ctx.setTransform(size.pixelRatio, 0, 0, size.pixelRatio, -bounds.x, -bounds.y)
     const layer = { canvas, ctx, x: bounds.x, y: bounds.y }
-    drawPaintGroups(layer, entry.children, size, assets)
+    drawPaintGroups(layer, entry.children, size, assets, drawItem)
     compositeMaskedGroup(target, layer, entry.mask, size)
   }
 }
@@ -492,7 +492,7 @@ function drawEditorLabel(ctx, text, width) {
   ctx.fillText(label, 0, 0)
 }
 
-function drawEditorItem(ctx, item, canvasHeight, selectedId, assets) {
+function drawEditorItem(ctx, item, canvasHeight, assets) {
   const box = editorBoxStyle(item)
   if (box.width <= 0 || box.height <= 0) return
   ctx.save()
@@ -543,12 +543,6 @@ function drawEditorItem(ctx, item, canvasHeight, selectedId, assets) {
     ctx.strokeStyle = 'rgba(78,165,230,0.42)'
     ctx.strokeRect(x, y, box.width, box.height)
   }
-  if (item.id === selectedId && item.kind !== 'container' && item.kind !== 'server-container') {
-    ctx.setLineDash([])
-    ctx.strokeStyle = '#61b9ff'
-    ctx.lineWidth = 2
-    ctx.strokeRect(x, y, box.width, box.height)
-  }
   ctx.restore()
 }
 
@@ -560,12 +554,20 @@ export function renderEditorPng(snapshot, options = {}) {
   const ctx = canvas.getContext('2d')
   ctx.scale(size.pixelRatio, size.pixelRatio)
   drawStageBackground(ctx, size.width, size.height, { checker: true })
-  const boxes = Array.isArray(snapshot?.boxes) ? snapshot.boxes : []
+  const boxes = (Array.isArray(snapshot?.boxes) ? snapshot.boxes : [])
+    .filter(item => item && item.kind !== 'server-container' && item.visible !== false && item.visibleInHierarchy !== false)
   const selectedId = snapshot?.selectedId
   const assets = { images: options.images, imageMetadata: options.imageMetadata, tints: new Map() }
-  for (const item of boxes) {
-    if (!item || item.kind === 'server-container' || item.visible === false) continue
-    drawEditorItem(ctx, item, size.height, selectedId, assets)
+  drawPaintGroups({ canvas, ctx, x: 0, y: 0 }, groupMaskedPaint(boxes), size, assets, drawEditorItem)
+  const selected = boxes.find(item => item.id === selectedId)
+  if (selected && selected.kind !== 'container') {
+    const box = editorBoxStyle(selected)
+    ctx.save()
+    applyItemTransform(ctx, box, size.height)
+    ctx.strokeStyle = '#61b9ff'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-box.width / 2, -box.height / 2, box.width, box.height)
+    ctx.restore()
   }
   return {
     data: toPng(canvas),

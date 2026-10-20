@@ -1,3 +1,7 @@
+import { createDefaultProject, createNode } from '../../ui/authoring.js'
+import { createRectTransform } from '../../ui/layout.js'
+import { PLATFORMS } from '../../constants.js'
+
 const matrix = (tx = 0, ty = 0) => ({ a: 1, b: 0, c: 0, d: 1, tx, ty })
 const node = (id, parent, kind, width, height, extra = {}) => ({
   id, parent, z: 0, kind, name: id, sourceWidth: width, sourceHeight: height, group: false,
@@ -34,4 +38,22 @@ export const maskAlphas = {
   single: [0, 134, 255, 255, 249], opaqueParent: [0, 134, 255, 255, 249], overlap: [0, 134, 255, 255, 249], renderGroup: [0, 134, 255, 255, 249],
   nested: [0, 70, 255, 255, 243], siblings: [0, 198, 255, 255, 255],
   zeroWidth: [0, 0, 0, 0, 0], zeroHeight: [0, 0, 0, 0, 0], grid: [0, 0, 255, 255, 0],
+}
+
+export function editorMaskProject({ nested = false } = {}) {
+  const project = createDefaultProject()
+  const image = (id, width, height, extra = {}) => createNode('image', {
+    id, name: id, imageId: 100001, imageColor: 0xffff0000,
+    transformByPlatform: Object.fromEntries(PLATFORMS.map(platform => [platform, createRectTransform({ size: [width, height] })])),
+    ...extra,
+  })
+  const mask = image('mask', 100, 60, { imageColor: 0, enableMask: true, enableSoftEdge: true,
+    softEdgeMode: 'Pixel', softEdgeWidthX: 20, softEdgeWidthY: 0 })
+  mask.children = [image('red', 180, 60), image('red-behind', 180, 60)]
+  if (nested) mask.children = [createNode('image', { ...mask, id: 'inner', name: 'inner', children: mask.children })]
+  const sibling = image('sibling', 20, 20, { imageColor: 0xff0000ff })
+  for (const transform of Object.values(sibling.transformByPlatform)) transform.offset.x = 110
+  project.root.children[0].children = [sibling, mask]
+  project.selectedId = 'n1'
+  return project
 }
