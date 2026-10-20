@@ -4,7 +4,7 @@ import { createPlayLauncher } from './play-launcher.js'
 import { createImagePreview, createImageTypeField } from './image-preview.js'
 import { createColorField } from './color-field.js'
 import { controlTransformStyle } from './control-transform.js'
-import { textPreviewStyle } from './text-preview.js'
+import { textPreviewContent, textPreviewStyle } from './text-preview.js'
 import { isRemoteImage, imageAssetKey } from '../studio/assets/catalog.js'
 import { refreshBrowserImage } from '../studio/assets/browser.js'
 import { loadBrowserFont } from '../studio/play/browser-font.js'
@@ -524,7 +524,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       else if (textKind) { style.background = argb(item.bgColor, 0x00ffffff); style.justifyContent = item.horizontalAlignment === 'Right' ? 'flex-end' : item.horizontalAlignment === 'Middle' ? 'center' : 'flex-start'; style.alignItems = item.verticalAlignment === 'Bottom' ? 'flex-end' : item.verticalAlignment === 'Middle' ? 'center' : 'flex-start'; style.textShadow = item.enableOutline === false ? 'none' : `0 0 2px ${argb(item.outlineColor, 0xff000000)}` }
       else if (kind === 'container') style.background = 'transparent'
       const selected = item.id === snap.selectedId
-      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: imageAssetKey(item.imageId, item.imageSource), item }) : textKind ? e('span', { style: textPreviewStyle(item, zoom, fontFamily) }, item.textLayout?.lines.join('\n') ?? item.text ?? '') : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, t`缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || t(KIND_META[kind]?.[1]) || kind) : null
+      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: imageAssetKey(item.imageId, item.imageSource), item }) : textKind ? e('span', { style: textPreviewStyle(item, zoom, fontFamily) }, textPreviewContent(item)) : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, t`缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || t(KIND_META[kind]?.[1]) || kind) : null
       return e('div', { key: item.id, className: `qxsim-box ${kind}${selected ? ' selected' : ''}${item.instantiated ? ' dynamic' : ''}${item.pressed ? ' pressed' : ''}`, style }, content, selected && kind !== 'container' ? ['tl', 'tr', 'bl', 'br'].map((pos) => e('i', { key: pos, className: `qxsim-handle ${pos}` })) : null)
     }
 

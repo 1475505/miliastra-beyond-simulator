@@ -65,7 +65,7 @@ function textVisual(item, width, height, family) {
     lineHeight: layout?.lineHeight ?? font * 1.2,
   }
   return {
-    text: slice ? slice.text : layout ? layout.lines.join('\n') : String(item.text || ''),
+    text: slice ? slice.text : layout ? layout.lines.slice(0, layout.visibleLineCount ?? layout.lines.length).join('\n') : String(item.text || ''),
     style,
     anchorX: anchor.x,
     anchorY: scroll ? 0 : anchor.y,

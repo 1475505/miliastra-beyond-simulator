@@ -58,6 +58,24 @@ export function textLayout(item, width, height) {
   if (item.kind === 'textwindow' && item.showScrollBar !== false && value.contentHeight > height) {
     value = wrap(value.fontSize, Math.max(0, available - 12))
   }
+  // #19's reported textbox rule also governs drawing, not only autosizing:
+  // keep the longest prefix of complete lines that fits with the block inset.
+  // Retain full metrics for fitting/inspection; scroll windows still clip their
+  // full content continuously. Rich lines use their measured individual heights
+  // and the existing largest-size inset (a simulator extension of that rule).
+  let visibleLineCount = value.lines.length, visibleContentHeight = value.contentHeight
+  if (item.kind === 'textbox') {
+    visibleLineCount = 0
+    visibleContentHeight = 0
+    if (value.lines.join('\n')) for (let i = 0; i < value.lines.length; i++) {
+      const line = value.richLines?.[i]
+      const bottom = line ? line.top + line.height : (i + 1) * value.lineHeight
+      if (bottom + value.blockInset > height + 1e-6) break
+      visibleLineCount = i + 1
+      visibleContentHeight = bottom
+    }
+  }
+  value = { ...value, visibleLineCount, visibleContentHeight }
   layouts.set(item, { key, value })
   return value
 }

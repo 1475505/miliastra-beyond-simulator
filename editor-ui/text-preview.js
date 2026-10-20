@@ -1,5 +1,10 @@
 import { DEFAULT_FONT } from '../studio/fonts.js'
 
+export function textPreviewContent(item) {
+  const layout = item.textLayout
+  return layout ? layout.lines.slice(0, layout.visibleLineCount ?? layout.lines.length).join('\n') : item.text ?? ''
+}
+
 export function textPreviewStyle(item, zoom, fontFamily) {
   const layout = item.textLayout
   return {

@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { Container, Matrix, Text } from 'pixi.js'
 import { createRuntime } from '../../client/lua-runtime/src/index.js'
 import { createStudio } from '../index.js'
@@ -8,7 +9,7 @@ import { renderPaintPng, renderScenePng } from '../host-png.js'
 import { layoutTree } from '../ui/inspector.js'
 import { walk } from '../ui/authoring.js'
 import { textLayout } from '../play/text-layout.js'
-import { textPreviewStyle } from '../../editor-ui/text-preview.js'
+import { textPreviewContent, textPreviewStyle } from '../../editor-ui/text-preview.js'
 
 function fixture(t, kind = 'textbox', extra = {}) {
   const runtime = createRuntime({ canvasWidth: 240, canvasHeight: 160 })
@@ -51,19 +52,21 @@ test('Lua autosize/minimum/size-only changes refresh both scene and Pixi visuals
   t.after(() => renderer.clearNodes())
   let scene = playSnapshot(session, { view: true }).scene
   await renderer.applyScene(scene, 240, 160)
-  const font = () => renderer.nodes.get(label.Id).__visual.children.find(n => n instanceof Text).style.fontSize
-  assert.equal(font(), 13)
-  for (const [code, expected] of [
-    ['script.object.adaptiveFontSize = false', 40],
-    ['script.object.adaptiveFontSize = true; script.object.minimumFontSize = 24', 24],
-    ['script.object:SetSizeDelta(160, 120)', 40],
+  const text = () => renderer.nodes.get(label.Id).__visual.children.find(n => n instanceof Text)
+  assert.equal(text().style.fontSize, 13)
+  for (const [code, expected, visible] of [
+    ['script.object.adaptiveFontSize = false', 40, ''],
+    ['script.object.adaptiveFontSize = true; script.object.minimumFontSize = 24', 24, 'A'],
+    ['script.object:SetSizeDelta(160, 120)', 40, 'A\nB'],
+    ['script.object:SetSizeDelta(160, 40)', 24, 'A'],
   ]) {
     runtime.mountScript({ path: `autosize-${expected}-${scene.revision}`, control: label, source: `function OnStart() ${code} end` })
     const patch = playSnapshot(session, { view: true, sceneRev: scene.revision }).scene
     assert.equal(patch.reset, false)
     assert.equal(patch.changed.find(n => n.id === label.Id).textLayout.fontSize, expected)
     await renderer.applyScene(patch, 240, 160)
-    assert.equal(font(), expected)
+    assert.equal(text().style.fontSize, expected)
+    assert.equal(text().text, visible)
     scene = patch
   }
   assert.deepEqual(runtime.mountErrors, [])
@@ -101,6 +104,9 @@ test('editor layout includes autosize without mutating the saved font setting', 
   assert.equal(textPreviewStyle(boxes.n2, 0.5).fontSize, '6.5px')
   assert.equal(textPreviewStyle(boxes.n2, 2).fontSize, '26px')
   assert.equal(textPreviewStyle(boxes.n2, 1).whiteSpace, 'pre')
+  assert.equal(textPreviewContent(boxes.n2), 'A\nB')
+  studio.patch({ op: 'set', id: 'n2', key: 'adaptiveFontSize', value: false })
+  assert.equal(textPreviewContent(studio.get().boxes.find(box => box.id === 'n2')), '')
 })
 
 test('size bounds, width wrapping, text changes and local scale behave consistently', () => {
@@ -139,7 +145,7 @@ test('autosize-only edits keep an inactive asset in the GIA package', () => {
 
 test('textbox occupancy follows the accepted measurement points without imposing it on scroll windows', () => {
   // Independent heights transcribed/calculated from the #19 report. Font ink
-  // bounds are not these heights; the extra occupancy only governs fitting.
+  // bounds are not these heights; occupancy governs fitting and complete lines.
   for (const [fontSize, text, fitsAt, tooShort] of [
     [16, 'A', 28, 26], [16, 'A\nB', 47, 46], [20, 'A\nB', 57, 56],
     [24, 'A', 41, 36], [40, 'A', 64, 50], [60, 'A', 96, 70],
@@ -147,14 +153,43 @@ test('textbox occupancy follows the accepted measurement points without imposing
     const item = { kind: 'textbox', fontSize, text }
     assert.equal(textLayout(item, 300, tooShort).fits, false, `${fontSize}/${tooShort}`)
     assert.equal(textLayout(item, 300, fitsAt).fits, true, `${fontSize}/${fitsAt}`)
+    assert.equal(textLayout(item, 300, tooShort).visibleLineCount, text.split('\n').length - 1)
+    assert.equal(textLayout(item, 300, fitsAt).visibleLineCount, text.split('\n').length)
   }
   const textbox = { kind: 'textbox', fontSize: 16, text: 'A' }
   assert.equal(textLayout(textbox, 160, 27.2).fits, true, 'inclusive fractional boundary')
+  assert.equal(textLayout(textbox, 160, 27.2).visibleLineCount, 1)
+  assert.equal(textLayout(textbox, 160, 27.1).visibleLineCount, 0)
   const window = textLayout({ ...textbox, kind: 'textwindow' }, 160, 20)
   assert.equal(window.blockInset, 0)
   assert.equal(window.requiredHeight, 19.2)
   assert.equal(window.fits, true)
+  assert.equal(textLayout({ ...textbox, kind: 'textwindow', text: 'A\nB' }, 160, 20).visibleLineCount, 2)
   const empty = textLayout({ kind: 'textbox', fontSize: 40, minimumFontSize: 10, adaptiveFontSize: true, text: '' }, 0, 0)
   assert.equal(empty.requiredHeight, 0)
   assert.equal(empty.fontSize, 40, 'empty content has no fitting requirement')
+  assert.equal(empty.visibleLineCount, 0)
+})
+
+test('textbox PNG retains complete prefix lines, their alignment and background without changing Lua text', async t => {
+  for (const [height, visible] of [[26, ''], [45, 'A'], [47, 'A\nB']]) {
+    const { label, session } = fixture(t, 'textbox', { text: 'A\nB\nC', fontSize: 16,
+      adaptiveFontSize: false, sizeDeltaY: height, bgColor: 0xff204060, verticalAlignment: 'Middle',
+      enableOutline: true, outlineColor: 0xffffffff })
+    const png = renderScenePng(playSnapshot(session, { view: true }).scene, 240, 160).data
+    assert.deepEqual(png, renderPaintPng(paintList(session), 240, 160).data)
+    assert.equal(label.text, 'A\nB\nC')
+    label.text = visible
+    assert.deepEqual(png, renderScenePng(playSnapshot(session, { view: true }).scene, 240, 160).data)
+    const context = createCanvas(240, 160).getContext('2d')
+    context.drawImage(await loadImage(png), 0, 0)
+    const pixels = context.getImageData(40, 80 - height / 2, 160, height).data
+    let white = 0
+    for (let i = 0; i < pixels.length; i += 4) if (pixels[i] > 220 && pixels[i + 1] > 220 && pixels[i + 2] > 220) white++
+    if (visible) assert.ok(white > 10, 'fitting lines must actually render')
+    else {
+      assert.equal(white, 0, 'neither glyphs nor outline may render')
+      assert.deepEqual([...context.getImageData(120, 80, 1, 1).data], [32, 64, 96, 255])
+    }
+  }
 })

@@ -89,7 +89,7 @@ test('Web local font authentication, privacy, export boundary and real browser r
       await fontRenderer.ready;
     })()`)
     let revision
-    for (const [adaptive, minimum, expected] of [[true, 10, 13], [false, 10, 40], [true, 24, 24]]) {
+    for (const [adaptive, minimum, expected, visible] of [[true, 10, 13, 'A\nB'], [false, 10, 40, ''], [true, 24, 24, 'A'], [true, 10, 13, 'A\nB']]) {
       label.adaptiveFontSize = adaptive
       label.minimumFontSize = minimum
       label.markPlayDirty()
@@ -101,15 +101,17 @@ test('Web local font authentication, privacy, export boundary and real browser r
         const cv=fontRenderer.app.renderer.extract.canvas({target:fontRenderer.app.stage,resolution:1});
         const data=cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data;
         let white=0;for(let i=0;i<data.length;i+=4)if(data[i+3]>100&&data[i]>240&&data[i+1]>240&&data[i+2]>240)white++;
-        return {family:text.style.fontFamily,width:ctx.measureText('AB').width,white,font:text.style.fontSize,wrap:text.style.wordWrap};
+        return {family:text.style.fontFamily,width:ctx.measureText('AB').width,white,font:text.style.fontSize,wrap:text.style.wordWrap,text:text.text};
       })()`)
       assert.ok(metrics.family.includes(family))
       assert.ok(Math.abs(metrics.width - 28) < 0.2, JSON.stringify(metrics))
       assert.equal(metrics.font, expected)
+      assert.equal(metrics.text, visible)
       assert.equal(metrics.wrap, false, 'Pixi must consume the host line breaks without wrapping a second time')
       // The synthetic A alone covers 0.6 * 0.7 * size²; allow edge
       // antialiasing while scaling the lower bound with the fitted size.
-      assert.ok(metrics.white > expected * expected * 0.25, JSON.stringify(metrics))
+      if (visible) assert.ok(metrics.white > expected * expected * 0.25, JSON.stringify(metrics))
+      else assert.equal(metrics.white, 0, 'insufficient textbox height must erase previously uploaded glyphs')
       revision = scene.revision
     }
     await evaluate('fontRenderer.destroy()')

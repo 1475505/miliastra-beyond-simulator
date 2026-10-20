@@ -156,7 +156,7 @@ function drawTextItem(ctx, item, width, height) {
   }
   const x = scroll ? -width / 2 + 2 + horizontal * scroll.textWidth : horizontal === 0 ? -width / 2 + 2 : horizontal === 1 ? width / 2 - 2 : 0
   const y = vertical === 0 ? -height / 2 : vertical === 1 ? height / 2 : 0
-  const lines = scroll?.lines || layout.lines
+  const lines = scroll?.lines || layout.lines.slice(0, layout.visibleLineCount ?? layout.lines.length)
   const lineHeight = scroll?.lineHeight || layout.lineHeight
   const startY = scroll ? -height / 2 - scroll.offset + (scroll.max > 0 ? 0 : vertical * (height - scroll.contentLength))
     : vertical === 0.5 ? y - (lines.length - 1) * lineHeight / 2 : vertical === 1 ? y - (lines.length - 1) * lineHeight : y
