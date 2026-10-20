@@ -19,7 +19,7 @@ import {
   HEADER_BYTES, TAIL_BYTES, HEAD_TAG, TAIL_TAG, VERSION,
   V2_PREFAB,
   writeVarint, readVarint, parseHeader,
-  decodeGilV2, encodeGilV2,
+  decodeGilV2, encodeGilV2, findLuaRange,
 } from './codec.js'
 
 // ===== 构造 v2 .gil 测试样本 (支持 byte-level round-trip: encode 知道怎么写每个字段) =====
@@ -426,4 +426,34 @@ test('真 .gil 样本: 字段提取 + round-trip 字段保真', (t) => {
     }
   }
   t.skip('未找到真 .gil 样本; 合成样本测试不依赖外部文件')
+})
+
+// ===== 9. findLuaRange: 兼容无 'local PREFAB' 标记的模板 (如魔塔) =====
+test('findLuaRange: 有 local PREFAB 标记时用它', () => {
+  const lua = 'local PREFAB = { container = 1 }\nlocal function x() end\n'
+  const buf = makeSampleGil({ luaSource: lua })
+  const range = findLuaRange(buf, buf.length - TAIL_BYTES)
+  assert.ok(range, '应能找到 LUA 区域')
+  assert.equal(buf.subarray(range.start, range.end).toString('utf-8'), lua)
+})
+
+test('findLuaRange: 无 local PREFAB 时扫最长可打印区 (魔塔式脚本)', () => {
+  // 造一个魔塔式 LUA: 行注释 + 模块加载器 (>= 1KB 触发慢路径)
+  let lua = '-- Frozen original 50-floor candidate.\n' +
+    'local modules,loaders={},{}\n' +
+    "loaders['board_data']=function()\nreturn { width = 13 }\nend\n" +
+    'local client=require("board_client")\n'
+  // 填充到 > 1KB (模拟真实脚本规模)
+  while (Buffer.byteLength(lua, 'utf-8') < 2048) {
+    lua += '-- padding line to reach 1KB threshold\n'
+  }
+  const buf = makeSampleGil({ luaSource: lua, metadata: [] })
+  const range = findLuaRange(buf, buf.length - TAIL_BYTES)
+  assert.ok(range, '应能找到 LUA 区域')
+  assert.equal(buf.subarray(range.start, range.end).toString('utf-8'), lua)
+})
+
+test('findLuaRange: 无 LUA 时返回 -1', () => {
+  const buf = Buffer.alloc(2048, 0xff)  // 全非打印
+  assert.equal(findLuaRange(buf, buf.length), null)
 })

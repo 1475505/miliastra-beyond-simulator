@@ -182,25 +182,100 @@ export function decodeGilV2(buf) {
   }
   result.controls = deduped
 
-  // 3. LUA 段: regex 'local PREFAB = {' 定位, 到 4B tail 前
+  // 3. LUA 段定位
   //    关键: tail 在文件最后 4B, 不是 payload 末尾 4B (payload 和 tail 之间还有 LUA 段)
   const tailOffset = buf.length - TAIL_BYTES
   const tailTag = buf.readUInt32BE(tailOffset)
   if (tailTag !== TAIL_TAG) {
     throw new Error(`TAIL_TAG 不匹配: 0x${tailTag.toString(16)} (期望 0x${TAIL_TAG.toString(16)})`)
   }
-  const luaStart = buf.indexOf('local PREFAB = {')
-  if (luaStart >= 0 && luaStart < tailOffset) {
-    const luaBytes = buf.subarray(luaStart, tailOffset)
+  const luaRange = findLuaRange(buf, tailOffset)
+  if (luaRange) {
+    const luaBytes = buf.subarray(luaRange.start, luaRange.end)
     const luaText = luaBytes.toString('utf-8')
-    const funcMatches = luaText.matchAll(/local\s+function\s+(\w+)/g)
+    const funcMatches = luaText.matchAll(/(?:local\s+)?function\s+(\w+)/g)
     result.luaSegment = luaText
-    result.luaSizeBytes = tailOffset - luaStart
-    result.luaTextOffset = luaStart
+    result.luaSizeBytes = luaRange.end - luaRange.start
+    result.luaTextOffset = luaRange.start
     result.luaFuncNames = [...funcMatches].map(m => m[1])
   }
 
   return result
+}
+
+// 从 LUA 字节段末尾剥掉 protobuf 尾部 (如 0x10 0x01 varint 字段 / 非打印控制符)
+// 只在末尾连续非 LUA 字节时生效, 避免误切代码
+function trimLuaTail(buf, start, end) {
+  let e = end
+  // 反向跳过非打印字节; 但保留 \n \r \t 和 UTF-8 合法字节
+  while (e > start) {
+    const b = buf[e - 1]
+    const printable = b === 9 || b === 10 || b === 13 || (b >= 32 && b < 127) || (b >= 0x80 && b <= 0xf4)
+    if (printable) break
+    e--
+  }
+  return e
+}
+//   1. 客户端 UI 脚本模板 (如 纯2D游戏模板.gil): 以 'local PREFAB = {' 开头
+//   2. 完整游戏脚本 (如 魔塔50层.gil): protobuf 字段 5 (tag 0x2a) 包裹, 前面有
+//      'MagicTower44.lua' 名字标记, 长度由 varint 精确给出 — 走精确路径
+//   3. 其它: 扫描最长连续可打印 UTF-8 区域 (>= 1KB) 兜底
+//
+// 返回 { start, end } 字节偏移; end 为 exclusive.
+export function findLuaRange(buf, endOffset) {
+  // 快路径 1: 'local PREFAB = {' 到文件尾 (tail 前)
+  const known = buf.indexOf('local PREFAB = {')
+  if (known >= 0 && known < endOffset) {
+    return { start: known, end: trimLuaTail(buf, known, endOffset) }
+  }
+
+  // 快路径 2: protobuf field 5 (tag 0x2a) + name 标记 + varint 长度
+  //   形如: <len>'MagicTower44.lua' 0x2a <varint(len)> <LUA bytes>
+  //   扫描 '*.lua' 名字后紧跟 0x2a 的位置, 用 varint 精确取范围
+  const luaTagRe = /[A-Za-z0-9_.\-]{1,80}\.lua/
+  const head = buf.subarray(0, Math.min(endOffset, 2 * 1024 * 1024))
+  const headText = head.toString('latin1')  // latin1 保证 1:1 字节映射, 偏移不漂移
+  const re = new RegExp(luaTagRe.source, 'g')
+  let m
+  while ((m = re.exec(headText)) !== null) {
+    const nameEnd = m.index + m[0].length
+    if (nameEnd >= endOffset) break
+    if (buf[nameEnd] !== 0x2a) continue  // field 5 wire 2
+    // 解 varint 长度
+    let i = nameEnd + 1
+    let len = 0, shift = 0
+    while (i < buf.length) {
+      const b = buf[i]; i++
+      len += (b & 0x7f) * Math.pow(2, shift)
+      if ((b & 0x80) === 0) break
+      shift += 7
+      if (shift > 35) { len = -1; break }
+    }
+    if (len > 0 && i + len <= endOffset) {
+      return { start: i, end: i + len }
+    }
+  }
+
+  // 慢路径: 扫最长连续可打印区域, 兜底
+  let bestStart = -1
+  let bestLen = 0
+  let runStart = -1
+  let runLen = 0
+  for (let i = 0; i < endOffset; i++) {
+    const b = buf[i]
+    const printable = b === 9 || b === 10 || b === 13 || (b >= 32 && b < 127) || (b >= 0x80 && b <= 0xf4)
+    if (printable) {
+      if (runStart < 0) runStart = i
+      runLen++
+    } else {
+      if (runLen > bestLen) { bestLen = runLen; bestStart = runStart }
+      runStart = -1
+      runLen = 0
+    }
+  }
+  if (runLen > bestLen) { bestLen = runLen; bestStart = runStart }
+  if (bestLen >= 1024) return { start: bestStart, end: bestStart + bestLen }
+  return null
 }
 
 // ===== 主编码 (用于 round-trip 测试) =====
