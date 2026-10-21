@@ -1,9 +1,15 @@
+// 真机控件 / 脚本索引是 32 位类型 ID：0x40000000 为基址，bit22~28 为类型
+// （UI 控件与客户端脚本为 0），bit16~21 为协作位，bit0~15 为递增位。
+// 因此合法区间是 0x40000000~0x403FFFFF；低于基址的值（如 1001）在真机会被判为
+// 「控件值索引非法」，高于上界的值会落到其他类型。
+export const GUID_MIN = 0x40000000 // 1073741824
+export const GUID_MAX = 0x403fffff // 1077936127
 // 新分配的 GraphUnit / ScriptAsset id.id 从 1073741850 起递增；已有合法编号原样保留。
 export const GUID_BASE = 1073741850
 
 export function isValidGuid(value) {
   const guid = Number(value)
-  return Number.isSafeInteger(guid) && guid > 0 && guid <= 0x7fffffff
+  return Number.isSafeInteger(guid) && guid >= GUID_MIN && guid <= GUID_MAX
 }
 
 function walk(node, fn) {
@@ -27,7 +33,7 @@ export function nextFreeGuid(used, start = GUID_BASE) {
     if (isValidGuid(guid) && guid >= next) next = Number(guid) + 1
   }
   while (used.has(next)) next += 1
-  if (next > 0x7fffffff) throw new Error('GUID space exhausted')
+  if (next > GUID_MAX) throw new Error('GUID space exhausted')
   return next
 }
 

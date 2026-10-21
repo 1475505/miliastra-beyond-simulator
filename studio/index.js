@@ -27,7 +27,7 @@ import { filterLogs } from './log/collect.js'
 import { CANVAS_PRESETS } from './constants.js'
 import { MAX_PLAYERS, PLAYER_SLOTS, normalizePlayerCount, normalizePlayerIndex, normalizeServerLogic } from 'qxqy-server'
 import { exportGia, exportCombinedGia, importGia, inspectGia, validateGiaCompatibility, validateServerGiaCompatibility, exportScriptGia, importScriptGia, isScriptGia } from './gia/codec.js'
-import { collectUsedGuids, isValidGuid, nextFreeGuid } from './gia/guid.js'
+import { GUID_MAX, GUID_MIN, collectUsedGuids, isValidGuid, nextFreeGuid } from './gia/guid.js'
 import { collectClientNodes } from './gia/client-order.js'
 import { scriptGuidSignature } from './control-guid-lua.js'
 
@@ -83,8 +83,20 @@ function assetKey(assetType) {
 
 function controlGuid(value) {
   const numeric = typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value.trim()))
-  if (!numeric || !isValidGuid(value)) throw new Error('控件索引必须是 1–2147483647 范围内的整数')
+  if (!numeric || !isValidGuid(value)) {
+    throw new Error(`控件索引必须是 ${GUID_MIN}–${GUID_MAX}（0x40000000–0x403FFFFF）范围内的整数`)
+  }
   return Number(value)
+}
+
+// 旧存档/旧变更记录里的索引可能低于真机基址；读取时放宽，以便自动重编号修复。
+function legacyControlGuid(value) {
+  const numeric = typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value.trim()))
+  const guid = Number(value)
+  if (!numeric || !Number.isSafeInteger(guid) || guid <= 0 || guid > 0x7fffffff) {
+    throw new Error('控件索引必须是 1–2147483647 范围内的整数')
+  }
+  return guid
 }
 
 function readControlGuidChanges(raw = []) {
@@ -105,7 +117,7 @@ function readControlGuidChanges(raw = []) {
     }
     return {
       id: entry.id, controlAsset: entry.controlAsset, controlId: entry.controlId, controlName: entry.controlName,
-      oldGuid: controlGuid(entry.oldGuid), newGuid: controlGuid(entry.newGuid),
+      oldGuid: legacyControlGuid(entry.oldGuid), newGuid: controlGuid(entry.newGuid),
       ...(entry.batchId ? { batchId: entry.batchId } : {}),
       ...(entry.scriptSignature ? { scriptSignature: entry.scriptSignature } : {}),
     }
@@ -519,7 +531,7 @@ export function createStudio(seed, options = {}) {
     const node = findNode(project.root, op.id ?? project.selectedId)
     if (!node || node.kind === 'server-container') throw new Error('仅客户端控件或客户端控件模板允许修改索引')
     const guid = controlGuid(op.guid)
-    controlGuid(node.guid)
+    legacyControlGuid(node.guid)
     if (op.autoFillClientGuids !== undefined && typeof op.autoFillClientGuids !== 'boolean') {
       throw new Error('autoFillClientGuids 必须是布尔值')
     }
@@ -530,7 +542,7 @@ export function createStudio(seed, options = {}) {
     const targets = automatic ? collectClientNodes(project, true).map(({ node }) => node) : [node]
     const base = guid - targets.indexOf(node)
     const mappings = targets.map((target, offset) => ({
-      node: target, oldGuid: controlGuid(target.guid), newGuid: controlGuid(base + offset),
+      node: target, oldGuid: legacyControlGuid(target.guid), newGuid: controlGuid(base + offset),
     }))
     const changes = mappings.filter(({ oldGuid, newGuid }) => oldGuid !== newGuid)
     if (!changes.length) return get()

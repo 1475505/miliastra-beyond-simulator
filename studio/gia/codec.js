@@ -1269,7 +1269,7 @@ export function validateGiaCompatibility(input) {
     const kind = detectKind(unit)
     const isTemplate = graphs.includes(unit) && unit.which === 70
     const prefix = `${unit.name || '<unnamed>'}(${guid || '<missing-guid>'})`
-    if (!Number.isSafeInteger(guid) || guid <= 0 || guid > 0x7fffffff) errors.push(`${prefix}: GraphUnit GUID 非法`)
+    if (!isValidGuid(guid)) errors.push(`${prefix}: GraphUnit GUID 非法（允许 0x40000000–0x403FFFFF）`)
     else if (unitByGuid.has(guid)) errors.push(`${prefix}: GUID 与 ${unitByGuid.get(guid).name || '<unnamed>'} 重复`)
     else unitByGuid.set(guid, unit)
     if (unit.id?.class !== 1 || unit.id?.type !== 8) errors.push(`${prefix}: GraphUnit.id 必须为 class=1,type=8`)
@@ -1402,7 +1402,7 @@ export function validateServerGiaCompatibility(input) {
   for (const unit of allUnits) {
     const guid = unit.id?.id || 0
     const prefix = `${unit.name || '<unnamed>'}(${guid || '<missing-guid>'})`
-    if (!Number.isSafeInteger(guid) || guid <= 0 || guid > 0x7fffffff) errors.push(`${prefix}: GraphUnit GUID 非法`)
+    if (!isValidGuid(guid)) errors.push(`${prefix}: GraphUnit GUID 非法（允许 0x40000000–0x403FFFFF）`)
     else if (unitByGuid.has(guid)) errors.push(`${prefix}: GUID 重复`)
     else unitByGuid.set(guid, unit)
     if (unit.id?.class !== 1 || unit.id?.type !== 8) errors.push(`${prefix}: GraphUnit.id 必须为 class=1,type=8`)

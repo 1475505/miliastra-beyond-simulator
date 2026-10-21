@@ -86,7 +86,7 @@ test('pending GUID references block copy; invalid paths and duplicate targets ar
   add('game/../escape.lua', '-- bad')
   add('game/MAIN.lua', '-- duplicate')
   add('game/con.lua', '-- invalid Windows path')
-  controller.patch({ op: 'setControlGuid', id: 'n2', guid: 19001 })
+  controller.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741901 })
   controller.saveArchive('game.save.json')
   const plan = controller.scriptSync.preview()
   assert.equal(plan.rows.filter(row => row.error).length, 4)
