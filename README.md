@@ -128,7 +128,7 @@ dsh web
 
 将资产和脚本导入千星沙箱后，核对实际控件 / 模板索引，并同步 Lua 引用。
 
-后续通过「Lua 脚本 → 实机脚本同步」绑定脚本目录、预览差异并确认复制，再到千星沙箱保存并重新试玩。新增脚本仍需建立映射和挂载；无法直接访问游戏目录时可手动更新。
+后续可让 AI 更新已绑定的脚本目录，也可通过「Lua 脚本 → 实机脚本同步」绑定目录、预览差异并确认复制，再到千星沙箱保存并重新试玩。新增脚本仍需建立映射和挂载；无法直接访问游戏目录时可手动更新。
 
 详见 [真机交付与验证](agent/wonderland-lua-builder/skills/qxqy-game-studio/references/07-device-validation.md)和 [实机脚本同步](studio/docs/script-sync.md)。
 

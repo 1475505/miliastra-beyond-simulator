@@ -19,6 +19,17 @@ WOO 的 `TemplateGuids` 配置表可使用全量替换。希望保留非索引�
 
 `controlGuidChanges[].scriptSignature` 继续作为修改索引当时的源码摘要保留，供 AI 核对；全量替换针对点击时的当前源码，不要求旧存档带此字段。已经手动更新过部分代码时，同值的新编号也可能被再次当作旧编号处理，需检查结果或使用 AI 语义同步。
 
+## 索引范围与旧数据（#23，2026-10-21）
+
+新填写/分配及GIA导出采用 `1073741824–1077936127`（`0x40000000–0x403FFFFF`）。范围及类型位解释来自 [PR #23](https://github.com/1475505/miliastra-beyond-simulator/pull/23) 作者报告，`evidence_source=provided_unverified`、运行端 `device`、`device_status=pending`；原始真机文件、客户端版本和截图未随MR提供，不把位段解释升级为独立确认的官方契约。
+
+- `gia/guid.js` 集中定义新索引合法性与旧存储ID合法性。编辑器和服务端写入口共用新区间；分配器保留原有高水位递增策略，到上界明确失败，不偷偷回收空洞。
+- 正整数旧控件/脚本ID及历史映射的两端仍可读取、JSON保存和检查。读取快照不因新增区间限制自动改掉旧ID；GIA导出遇到范围外已有ID明确失败，保留原值。没有索引的节点继续分配新区间编号。
+- 控件用已有 `setControlGuid` 显式校准：一次性更新已知模板引用，记录 `controlGuidChanges`，Lua保留原文等待语义同步。脚本旧ID和GenericSlot挂载也原样保留；旧脚本索引修复需结合真实脚本映射及代码引用处理，当前没有脚本索引校准UI，不能把自动分配新号当成完整迁移。
+- 最小回归：#23初版对旧模板1001执行 `get` 后改为1073742105，引用仍是1001、无变更记录且revision未变；旧记录 `newGuid=19001` 无法读取；仅槽位挂载的脚本1500000000被分配新号后脱挂。审查后采用“读旧值、严校验新值、显式校准、导出只验证”的边界，避免这些静默变化。
+- 长期测试合并至 `control-guid.test.mjs` / `control-guid-autofill.test.mjs`，删除重复的 `control-guid-range.test.mjs`。覆盖上下边界、分配耗尽、旧ID/记录/挂载保留、导出拒绝原子性、显式修复及Lua映射；恢复MR改夹具时丢失的重叠置换和外部脚本碰撞条件。脚本GIA范围校验沿用 `gia-reference.test.mjs` 的独立wire夹具，Web端到端夹具使用合法新索引。
+- 验证：Windows / Node 22.23.2，冻结锁文件安装、全仓 `pnpm test` 402通过、15环境相关跳过、0失败，Web/DSH/MCP构建与 `git diff --check` 通过。一次性Edge验收索引1001被前端拒绝且revision不变、1073745100成功并生成映射，验收脚本已清理。结果为 `observed / simulator`，不新增真机验证。
+
 ## 宿主与文件事务
 
 共享 Host 提供两个 patch：

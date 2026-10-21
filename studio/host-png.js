@@ -8,6 +8,7 @@ import { imageAssetKey } from './assets/catalog.js'
 import { scrollBarGeometry } from './play/scroll-geometry.js'
 import { localFontStack } from './host/local-font.js'
 import { textLayout } from './play/text-layout.js'
+import { drawRichText } from './play/rich-text-paint.js'
 
 const require = createRequire(import.meta.url)
 
@@ -135,6 +136,13 @@ function drawTextItem(ctx, item, width, height) {
   ctx.fillStyle = cssColor(bg)
   ctx.fillRect(-width / 2, -height / 2, width, height)
   const layout = item.textLayout || textLayout(item, width, height)
+  if (layout.richLines) {
+    ctx.save()
+    ctx.translate(-width / 2, -height / 2)
+    drawRichText(ctx, { ...item, textLayout: layout }, width, height, localFontStack())
+    ctx.restore()
+    return
+  }
   const font = layout.fontSize
   const color = argb(item.fontColor, 0xffffffff)
   const horizontal = item.horizontalAlignment === 'Right' ? 1 : item.horizontalAlignment === 'Middle' ? 0.5 : 0

@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { basename, join } from 'node:path'
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { SimulatorController, apply, headerWorkspace, jsonParam, lookupSessionWorkspace, sessionWorkspace } from '../lib/index.js'
 
@@ -402,6 +403,53 @@ test('plugin registers screenshot capture, API and standalone Pixi play routes, 
   assert.match(rendererHeaders['content-type'], /text\/javascript/)
   assert.match(rendererBody, /WebGL/)
   assert.equal(effects.length, 7)
+})
+
+test('Harness AI tools save and copy selected scripts without requiring editor actions', async t => {
+  const temp = mkdtempSync(join(tmpdir(), 'qxqy-dsh-sync-'))
+  const workspace = join(temp, 'workspace')
+  const target = join(temp, 'default_import_file')
+  mkdirSync(join(workspace, 'game'), { recursive: true })
+  mkdirSync(join(target, 'game'), { recursive: true })
+  writeFileSync(join(target, 'game/main.lua'), '-- original')
+  writeFileSync(join(target, 'keep.lua'), '-- untouched')
+  const tools = []
+  const effects = []
+  apply({
+    tools: { register(tool) { tools.push(tool) } },
+    webServer: { register() {} },
+    effect(factory) { effects.push(factory()) },
+  })
+  t.after(async () => { await Promise.all(effects.map(dispose => dispose?.())); rmSync(temp, { recursive: true, force: true }) })
+  const exec = { agent: { id: 'script-sync-session', session: { header: { cwd: workspace } } } }
+  const call = (name, args = {}, context = exec) => tools.find(tool => tool.name === name).execute(args, context)
+  const sync = (action, args) => call('qxqy_script_sync', { action, ...(args === undefined ? {} : { args: JSON.stringify(args) }) })
+  const actions = tools.find(tool => tool.name === 'qxqy_script_sync').parameters.properties.action.enum
+  assert.ok(actions.includes('save'))
+  assert.ok(actions.includes('apply'))
+  let snapshot = await call('qxqy_studio_get')
+  for (const path of ['game/main.lua', 'game/unselected.lua']) {
+    snapshot = await call('qxqy_studio_patch', { op: JSON.stringify({ op: 'addScript', path, source: '-- updated', expectedRevision: snapshot.version }) })
+  }
+  snapshot = await sync('configure', { config: { version: 1, workspaceDir: 'game', clientImportRoot: target, clientSubdir: 'game' }, expectedRevision: snapshot.version })
+  const saved = await sync('save', { path: 'game.save.json', expectedRevision: snapshot.version })
+  assert.equal(saved.path, 'game.save.json')
+  assert.equal(JSON.parse(readFileSync(join(workspace, saved.path), 'utf8')).assets.scripts.length, 2)
+  const plan = await sync('preview')
+  const main = plan.rows.find(row => row.path === 'game/main.lua')
+  assert.equal(readFileSync(main.target, 'utf8'), '-- original')
+  await assert.rejects(() => sync('apply', { planId: plan.id, scriptIds: [main.id] }), /确认/)
+  const other = { agent: { id: 'another-session', session: { header: { cwd: workspace } } } }
+  await assert.rejects(() => call('qxqy_script_sync', { action: 'apply', args: { planId: plan.id, scriptIds: [main.id], confirmed: true } }, other), /确认/)
+  const result = await sync('apply', { planId: plan.id, scriptIds: [main.id], confirmed: true })
+  assert.equal(result.completed, true, JSON.stringify(result))
+  assert.equal(result.results.length, 1)
+  assert.equal(readFileSync(main.target, 'utf8'), '-- updated')
+  assert.equal(readFileSync(join(result.backupRoot, main.targetRelative), 'utf8'), '-- original')
+  assert.equal(existsSync(join(target, 'game/unselected.lua')), false)
+  assert.equal(readFileSync(join(target, 'keep.lua'), 'utf8'), '-- untouched')
+  assert.deepEqual((await sync('status')).lastResult, result)
+  await assert.rejects(() => sync('apply', { planId: plan.id, scriptIds: [main.id], confirmed: true }), /确认/)
 })
 
 test('client bundle loads through Harness ModuleLoader and exposes the slot plugin', () => {

@@ -134,7 +134,7 @@ function visibleBoxesForProject(project, boxes) {
 
 export function snapshotProject(project) {
   const { canvas, boxes } = layoutTree(project.root, project.canvasId)
-  const guidById = assignGuids(project)
+  const guidById = assignGuids(project, new Set(), { preserveLegacy: true })
   const selected = findNode(project.root, project.selectedId)
   const selectedBox = selected ? boxes[selected.id] : null
   return toJson({

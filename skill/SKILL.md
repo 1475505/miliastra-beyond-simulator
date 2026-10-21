@@ -101,9 +101,16 @@ qxqy_studio_play { "action": "view",  "args": { "playerIndex": 2 } }     ← 切
 
 ### 6. 已导入 GIA 后，显式复制脚本更改到实机
 
-使用 `qxqy_script_sync` 的 `discover/status/configure/preview` 配置或检查实机脚本目录。configure 的 args 为 `{ config: { version: 1, workspaceDir, clientImportRoot, clientSubdir }, expectedRevision }`；MCP 另带 handle。路径位于宿主机器，配置随完整存档保存。`workspaceDir` 与 `clientSubdir` 通常同值，以保留 GIA 映射的相对路径；不要按文件名平铺。
+使用 `qxqy_script_sync` 的 `discover/status/configure/save/preview/apply` 更新实机脚本目录。configure 的 args 为 `{ config: { version: 1, workspaceDir, clientImportRoot, clientSubdir }, expectedRevision }`；MCP 另带 handle。路径位于宿主机器，配置随完整存档保存。`workspaceDir` 与 `clientSubdir` 通常同值，以保留 GIA 映射的相对路径；不要按文件名平铺。
 
-先完成 `controlGuidChanges` 的语义引用修复和确认，再准备复制。内容沿用非空白内联 source 优先、否则 path 文件；两者不同须核对，不能只改磁盘后默认复制新内容。保存完整存档后，请用户在 Web/DSH「Lua 脚本 → 实机脚本同步」检查差异并点击「确认复制」。MCP 与 Web 各有会话，需先在 Web 编辑器加载 AI 保存的存档。AI 不调用人工复制端点或用 shell 绕过本次确认；不得建立目录联接替代复制。
+先完成 `controlGuidChanges` 的语义引用修复和确认，再准备复制。内容沿用非空白内联 source 优先、否则 path 文件；两者不同须核对，不能只改磁盘后默认复制新内容。用户已要求更新到明确的目录时，直接在该授权范围内同步，无需重复要求用户点击编辑器；仅绑定目录或查看差异不构成复制授权。目标账号 / 关卡或更新范围不明确时，只询问缺项。
+
+1. `save` 的 args 为 `{ path, expectedRevision }`，保存当前完整存档；首次指定工作区相对 path，后续可省略并沿用已加载 / 保存的路径。MCP 也可用 `qxqy_project_save`。
+2. `preview` 检查来源、目标、新旧源码和 `sourceMismatch`；选择无错误且有变化的 `rows[].id`。
+3. `apply` 的 args 为 `{ planId: preview.id, scriptIds: [...], confirmed: true }`，只复制本次选中的脚本。MCP 使用同一 handle，Harness 使用同一会话；计划失效后重新预览，不跨进程复用。
+4. 读取 `completed`、逐文件 `results` 和 `backupRoot`；有失败时按回执处理，不能把部分成功说成全部完成。不要用 shell 或目录联接替代接口的检查和备份。
+
+用户也可在 Web/DSH 编辑器自行确认；MCP 与 Web 各有会话，改由 Web 操作时需加载 AI 保存的存档并重新生成计划。
 
 已有脚本内容变更复制后，在千星沙箱保存并重新试玩；新增脚本仍需建立映射和必要挂载。工具成功只表示复制到磁盘，不能声称真机通过。覆盖前备份、过期计划拒绝、文件选择等见 [脚本同步](../studio/docs/script-sync.md)。
 

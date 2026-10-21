@@ -2,12 +2,13 @@
 
 独立的 MCP stdio server，让 Codex 或其他 MCP client 直接驱动千星沙箱模拟器。它不依赖 DSH；编辑和试玩仍复用 `../studio`、`../client/lua-runtime` 与 `../server`。
 
-## 0.5.0 更新
+## 0.5.1 更新
 
-- 同步本机字体配置，改善文字测量、自动字号和截图。
-- 修复部分模板引用 GIA 导入、脚本挂载及 `SetVisible` 参数校验。
+- 截图支持基础富文本、文本框整行容纳和编辑器图片遮罩与羽化。
+- AI 可通过 `save → preview → apply` 更新已绑定的游戏脚本目录，覆盖前自动备份。
+- 完善索引范围校验及旧存档编号、历史映射和脚本挂载兼容。
 
-更新或修改字体后重启 MCP 服务；配套 Web 请同步升级至 0.5.0。
+更新或修改字体后重启 MCP 服务；配套 Web 请同步升级至 0.5.1。
 
 ## 安装与自检
 
@@ -127,7 +128,7 @@ Web 的 `/` 预览页会监听磁盘：启动时还没有存档，会在 Codex �
 
 ### 实机脚本复制同步
 
-`qxqy_script_sync({ handle, action, args })` 支持 `discover`、`status`、`configure`、`preview`。配置示例：
+`qxqy_script_sync({ handle, action, args })` 支持 `discover`、`status`、`configure`、`save`、`preview`、`apply`。配置示例：
 
 ```json
 { "handle": "project-1", "action": "configure", "args": {
@@ -136,7 +137,25 @@ Web 的 `/` 预览页会监听磁盘：启动时还没有存档，会在 Codex �
 } }
 ```
 
-配置保存在完整存档；调用 `qxqy_project_save` 后，用户在 Web `/editor` 加载同一存档，在「Lua 脚本 → 实机脚本同步」保存并检查差异、确认复制。AI 工具不开放执行复制，MCP 预览计划不跨进程传给 Web。复制内容采用内联源码优先、否则工作区文件；若有待处理 `controlGuidChanges`，先完成索引引用核对。见 [完整流程与验证](../studio/docs/script-sync.md)。
+用户授权更新后，AI 可以直接完成保存、预览与复制：
+
+```json
+{ "handle": "project-1", "action": "save", "args": { "path": "game.save.json", "expectedRevision": 13 } }
+```
+
+```json
+{ "handle": "project-1", "action": "preview" }
+```
+
+核对返回的来源、目标和新旧源码，再提交本次选择：
+
+```json
+{ "handle": "project-1", "action": "apply", "args": {
+  "planId": "预览返回的 id", "scriptIds": ["选定的 rows[].id"], "confirmed": true
+} }
+```
+
+`save` 后续可省略 path 沿用已加载 / 保存的路径，也可使用已有 `qxqy_project_save`。计划仅在当前 handle 有效，变化或使用后需重新预览。复制前自动备份，回执包含逐文件结果与备份位置；用户无需另到 Web 点击确认。复制内容采用内联源码优先、否则工作区文件；有待处理 `controlGuidChanges` 时，先完成索引引用核对。若改由 Web 操作，仍需加载同一存档并生成自己的计划。见 [完整流程与验证](../studio/docs/script-sync.md)。
 
 ### 客户端控件索引校准
 

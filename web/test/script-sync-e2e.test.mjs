@@ -23,7 +23,7 @@ test('GIA import → real index calibration → Lua correction → saved directo
   const save = async () => { const current = await call('get'); return call('save', { path: 'game/game.save.json', expectedRevision: current.version }) }
   const seed = createStudio()
   const template = seed.archiveData().assets.client.root.children[0]
-  const newIndex = 190123
+  const newIndex = 1073745123
   const source = index => `local TEMPLATE_INDEX = ${index}\nlocal unrelatedImage = ${template.guid}\nfunction OnStart()\n local panel = game.InstantiateClientUIControl(TEMPLATE_INDEX, script.object)\n print("copy-ready", panel.prefabIndex, unrelatedImage)\nend`
   seed.patch({ op: 'addScript', path: 'game/main.lua', source: source(template.guid), controlId: 'n1', controlAsset: 'server-control-template' })
   seed.patch({ op: 'addScript', path: 'game/src/module.lua', source: 'return { version = 1 }' })

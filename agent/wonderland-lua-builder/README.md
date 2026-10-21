@@ -50,6 +50,6 @@ DSH 0.1.7-rc.1 起，本仓库根包 `dsh-plugin-beyond-simulator` 在构建时�
 
 启动前先检查工作区指引、本地知识目录，以及当前 AI 宿主的插件/MCP/Skill 配置和可见能力，寻找 `miliastra-toolbox` 系列或其他知识来源。确认当前能读到官方客户端 2D/Lua API 与使用指南，记录来源、版本和缺项；已有资料直接复用，仅询问仍缺少的内容。详见 [知识库发现与可用性核验](skills/qxqy-game-studio/references/workflow.md#知识库发现与可用性核验)。本工作流不捆绑官方知识库，不能从普通 Lua/UI 或 3D 节点经验猜接口。
 
-步骤 7 同时负责交付后的协作：引导用户完成导入/挂载、核对真实索引、选择脚本更新方式；需要时绑定导入后的脚本目录。AI 准备修改、保存和差异预览，用户在编辑器确认复制并在千星沙箱保存试玩；手动修改也要同步回项目。详见 [真机交付步骤](skills/qxqy-game-studio/references/07-device-validation.md)及[实机脚本同步能力](../../studio/docs/script-sync.md)。
+步骤 7 同时负责交付后的协作：引导用户完成导入/挂载、核对真实索引并绑定脚本目录。AI 可按用户授权保存、预览并同步脚本，返回逐文件结果和备份位置；用户随后在千星沙箱保存试玩。手动修改也要同步回项目。详见 [真机交付步骤](skills/qxqy-game-studio/references/07-device-validation.md)及[实机脚本同步能力](../../studio/docs/script-sync.md)。
 
 模拟器只预览 `100001–100006` 六种基础图元，其他官方图片 ID 显示缺失框，需真机确认。行为评估见 [agent-behavior.md](evals/agent-behavior.md)；模拟器通过不等于真机通过。

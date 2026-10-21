@@ -128,7 +128,7 @@ Editing and playtesting do not automatically write a complete save to disk. Save
 
 After importing assets and scripts into Miliastra Sandbox, check the actual control/template indices and update Lua references.
 
-For later changes, use **Lua Scripts → Sync Scripts to Game** to bind the script folder, preview changes, and confirm copying. Then save the stage in Miliastra Sandbox and playtest again. New scripts still need mappings and attachments. Update files manually if the game folder is inaccessible.
+For later changes, ask AI to update the bound script folder, or use **Lua Scripts → Sync Scripts to Game** to bind a folder, preview changes, and confirm copying. Then save the stage in Miliastra Sandbox and playtest again. New scripts still need mappings and attachments. Update files manually if the game folder is inaccessible.
 
 See [in-game delivery and validation](agent/wonderland-lua-builder/skills/qxqy-game-studio/references/07-device-validation.md) and [script synchronization](studio/docs/script-sync.md).
 

@@ -73,8 +73,15 @@ export class SimulatorController {
       if (!Number.isInteger(args.expectedRevision)) throw new Error('expectedRevision is required')
       return this.patch({ op: 'setScriptSync', config: args.config, expectedRevision: args.expectedRevision })
     }
+    if (action === 'save') {
+      if (!Number.isInteger(args.expectedRevision)) throw new Error('expectedRevision is required')
+      const path = args.path ?? this.archivePath
+      if (typeof path !== 'string' || !path.trim()) throw new Error('script sync save requires a workspace-relative path for a new archive')
+      return this.saveForScriptSync(path, args.expectedRevision)
+    }
     if (action === 'preview') return this.scriptSync.preview()
-    throw new Error('unknown script sync action (AI 可配置和预览；复制需在编辑器中确认)')
+    if (action === 'apply') return this.scriptSync.apply(args)
+    throw new Error(`unknown script sync action: ${action}`)
   }
 
   assertSavedArchive() {

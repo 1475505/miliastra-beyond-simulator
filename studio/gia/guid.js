@@ -1,7 +1,5 @@
-// 真机控件 / 脚本索引是 32 位类型 ID：0x40000000 为基址，bit22~28 为类型
-// （UI 控件与客户端脚本为 0），bit16~21 为协作位，bit0~15 为递增位。
-// 因此合法区间是 0x40000000~0x403FFFFF；低于基址的值（如 1001）在真机会被判为
-// 「控件值索引非法」，高于上界的值会落到其他类型。
+// Export/new-ID range adopted from PR #23's device report. Its bit-field
+// interpretation is provided_unverified, not an independently verified contract.
 export const GUID_MIN = 0x40000000 // 1073741824
 export const GUID_MAX = 0x403fffff // 1077936127
 // 新分配的 GraphUnit / ScriptAsset id.id 从 1073741850 起递增；已有合法编号原样保留。
@@ -10,6 +8,19 @@ export const GUID_BASE = 1073741850
 export function isValidGuid(value) {
   const guid = Number(value)
   return Number.isSafeInteger(guid) && guid >= GUID_MIN && guid <= GUID_MAX
+}
+
+// Legacy authoring IDs and ledger endpoints must survive reads so explicit
+// calibration can preserve references and record the pending Lua mapping.
+export function isStoredGuid(value) {
+  const guid = Number(value)
+  return Number.isSafeInteger(guid) && guid > 0 && guid <= 0x7fffffff
+}
+
+export function assertExportGuid(value, name) {
+  if (isStoredGuid(value) && !isValidGuid(value)) {
+    throw new Error(`${name || '资产'}: 索引 ${value} 超出 ${GUID_MIN}–${GUID_MAX}；请先校准索引并核对 Lua 引用，导出不会自动重编号。`)
+  }
 }
 
 function walk(node, fn) {

@@ -27,7 +27,7 @@ import { filterLogs } from './log/collect.js'
 import { CANVAS_PRESETS } from './constants.js'
 import { MAX_PLAYERS, PLAYER_SLOTS, normalizePlayerCount, normalizePlayerIndex, normalizeServerLogic } from 'qxqy-server'
 import { exportGia, exportCombinedGia, importGia, inspectGia, validateGiaCompatibility, validateServerGiaCompatibility, exportScriptGia, importScriptGia, isScriptGia } from './gia/codec.js'
-import { GUID_MAX, GUID_MIN, collectUsedGuids, isValidGuid, nextFreeGuid } from './gia/guid.js'
+import { GUID_MAX, GUID_MIN, collectUsedGuids, isStoredGuid, isValidGuid, nextFreeGuid } from './gia/guid.js'
 import { collectClientNodes } from './gia/client-order.js'
 import { scriptGuidSignature } from './control-guid-lua.js'
 
@@ -89,11 +89,11 @@ function controlGuid(value) {
   return Number(value)
 }
 
-// 旧存档/旧变更记录里的索引可能低于真机基址；读取时放宽，以便自动重编号修复。
+// Both ends of historical changes may predate the export range constraint.
 function legacyControlGuid(value) {
   const numeric = typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value.trim()))
   const guid = Number(value)
-  if (!numeric || !Number.isSafeInteger(guid) || guid <= 0 || guid > 0x7fffffff) {
+  if (!numeric || !isStoredGuid(guid)) {
     throw new Error('控件索引必须是 1–2147483647 范围内的整数')
   }
   return guid
@@ -117,7 +117,7 @@ function readControlGuidChanges(raw = []) {
     }
     return {
       id: entry.id, controlAsset: entry.controlAsset, controlId: entry.controlId, controlName: entry.controlName,
-      oldGuid: legacyControlGuid(entry.oldGuid), newGuid: controlGuid(entry.newGuid),
+      oldGuid: legacyControlGuid(entry.oldGuid), newGuid: legacyControlGuid(entry.newGuid),
       ...(entry.batchId ? { batchId: entry.batchId } : {}),
       ...(entry.scriptSignature ? { scriptSignature: entry.scriptSignature } : {}),
     }
@@ -128,7 +128,7 @@ function normalizeScriptGuid(raw) {
   const candidates = [raw?.guid, raw?.id]
   for (const value of candidates) {
     const guid = Number(value)
-    if (Number.isSafeInteger(guid) && guid > 0 && guid <= 0x7fffffff) return guid
+    if (isStoredGuid(guid)) return guid
   }
   return 0
 }
@@ -243,12 +243,12 @@ export function createStudio(seed, options = {}) {
     collectUsedGuids(projects.server.root, usedScriptGuids)
     collectUsedGuids(projects.client.root, usedScriptGuids, { skipServerContainer: true })
     for (const script of scripts) {
-      if (isValidGuid(script.guid)) usedScriptGuids.add(Number(script.guid))
+      if (isStoredGuid(script.guid)) usedScriptGuids.add(Number(script.guid))
     }
   }
   function allocateScriptGuid(preferred = 0) {
     refreshUsedGuids()
-    const guid = isValidGuid(preferred) && !usedScriptGuids.has(Number(preferred))
+    const guid = isStoredGuid(preferred) && !usedScriptGuids.has(Number(preferred))
       ? Number(preferred)
       : nextFreeGuid(usedScriptGuids)
     usedScriptGuids.add(guid)
@@ -308,7 +308,7 @@ export function createStudio(seed, options = {}) {
   }
 
   function scriptMountFromGenericSlot(guid) {
-    if (!isValidGuid(guid)) return null
+    if (!isStoredGuid(guid)) return null
     for (const [assetType, project] of [[SERVER_ASSET, projects.server], [CLIENT_ASSET, projects.client]]) {
       let controlId = ''
       walk(project.root, (node) => {

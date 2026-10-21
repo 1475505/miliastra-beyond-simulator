@@ -4,8 +4,9 @@ import { createPlayLauncher } from './play-launcher.js'
 import { createImagePreview, createImageTypeField } from './image-preview.js'
 import { createColorField } from './color-field.js'
 import { controlTransformStyle } from './control-transform.js'
-import { textPreviewContent, textPreviewStyle } from './text-preview.js'
+import { createTextPreview } from './text-preview.js'
 import { createMaskedControls } from './mask-preview.js'
+import { GUID_MIN, GUID_MAX, isValidGuid } from '../studio/gia/guid.js'
 import { isRemoteImage, imageAssetKey } from '../studio/assets/catalog.js'
 import { refreshBrowserImage } from '../studio/assets/browser.js'
 import { loadBrowserFont } from '../studio/play/browser-font.js'
@@ -19,6 +20,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
     const ControlGuidSyncPanel = createControlGuidSyncPanel(React)
     const usePlayLauncher = createPlayLauncher(React)
     const ImagePreview = createImagePreview(React)
+    const TextPreview = createTextPreview(React)
     const MaskedControls = createMaskedControls(React)
     const ImageTypeField = createImageTypeField(React)
     const ColorField = createColorField(React)
@@ -449,12 +451,12 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       const canAutofill = autofill?.count > 1 && autofill.selectedOffset >= 0
       const firstGuid = /^[0-9]+$/.test(draft.trim()) ? Number(draft) - (autofill?.selectedOffset || 0) : NaN
       const lastGuid = firstGuid + (autofill?.count || 0) - 1
-      const validRange = Number.isSafeInteger(firstGuid) && firstGuid >= 1 && lastGuid <= 2147483647
+      const validRange = isValidGuid(firstGuid) && isValidGuid(lastGuid)
       async function submit(event) {
         event.preventDefault()
         const value = draft.trim()
-        if (!/^[0-9]+$/.test(value) || Number(value) < 1 || Number(value) > 2147483647) {
-          setError(t('请输入 1–2147483647 之间的整数索引。'))
+        if (!/^[0-9]+$/.test(value) || !isValidGuid(value)) {
+          setError(t`索引范围：${GUID_MIN}–${GUID_MAX}`)
           return
         }
         setBusy(true); setError('')
@@ -528,7 +530,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       if (kind === 'image') Object.assign(style, shape(item.primitive, argb(item.imageColor, 0xffffffff)))
       else if (textKind) { style.background = argb(item.bgColor, 0x00ffffff); style.justifyContent = item.horizontalAlignment === 'Right' ? 'flex-end' : item.horizontalAlignment === 'Middle' ? 'center' : 'flex-start'; style.alignItems = item.verticalAlignment === 'Bottom' ? 'flex-end' : item.verticalAlignment === 'Middle' ? 'center' : 'flex-start'; style.textShadow = item.enableOutline === false ? 'none' : `0 0 2px ${argb(item.outlineColor, 0xff000000)}` }
       else if (kind === 'container') style.background = 'transparent'
-      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: imageAssetKey(item.imageId, item.imageSource), item }) : textKind ? e('span', { style: textPreviewStyle(item, zoom, fontFamily) }, textPreviewContent(item)) : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, t`缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || t(KIND_META[kind]?.[1]) || kind) : null
+      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: imageAssetKey(item.imageId, item.imageSource), item }) : textKind ? e(TextPreview, { item, zoom, fontFamily }) : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, t`缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || t(KIND_META[kind]?.[1]) || kind) : null
       return e('div', { key: item.id, 'data-control-id': item.id, className: `qxsim-box ${kind}${item.instantiated ? ' dynamic' : ''}${item.pressed ? ' pressed' : ''}`, style }, content)
     }
 

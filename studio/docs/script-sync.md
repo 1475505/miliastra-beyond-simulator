@@ -36,12 +36,44 @@ Host 保存一个进程内同步计划，指纹包含完整存档、源文件、
 
 配置持久化在存档；待确认计划和最近回执仅属于当前宿主会话，重启后重新检查差异。
 
+## AI 更新接口
+
+MCP 与 Harness 共用 `qxqy_script_sync({ action, args })`，MCP 另带工程 `handle`。支持：
+
+| action | args | 作用 |
+|---|---|---|
+| `discover` | 无 | 发现宿主本机的账号 / 关卡脚本目录。 |
+| `status` | 无 | 读取配置及最近一次复制回执。 |
+| `configure` | `config`、`expectedRevision` | 设置或清除目录绑定，不复制文件。 |
+| `save` | `expectedRevision`、可选 `path` | 保存当前完整存档；首次需工作区相对路径，后续可沿用已加载 / 保存的路径。拒绝覆盖外部已修改的存档或未加载的已有文件。 |
+| `preview` | 无 | 返回计划 `id` 和逐脚本 `rows`，包含来源、目标、新旧源码、差异状态与错误。 |
+| `apply` | `planId`、`scriptIds`、`confirmed: true` | 复制本次选择的脚本，返回 `completed`、`results` 和 `backupRoot`。 |
+
+用户要求更新已绑定目录时，AI 可在授权范围内完成「保存 → 预览 → 复制」，无需用户再到编辑器点击。仅绑定目录或查看差异不会触发复制。先核对控件索引引用和源码差异；非空白内联 `source` 优先于工作区文件，不能只改磁盘文件后就复制旧内联代码。
+
+例如已配置目录后，先读取最新 revision，再调用：
+
+```text
+qxqy_script_sync({ action: "save", args: { path: "game.save.json", expectedRevision: N } })
+qxqy_script_sync({ action: "preview" })
+qxqy_script_sync({ action: "apply", args: {
+  planId: "预览返回的 id", scriptIds: ["本次选中的 rows[].id"], confirmed: true
+} })
+```
+
+MCP 的每次调用使用同一个 `handle`；Harness 使用同一会话。计划不跨工程或进程复用，源文件、目标文件或存档变化后需重新预览。只选择无错误且有变化的行；保留未选择和无关文件。复制回执只表示写入磁盘，随后仍需在千星沙箱保存并重新试玩。
+
 ## 接入
 
 - 共用核心：`studio/host/script-sync.js`，存档配置校验：`studio/script-sync-config.js`。
-- 人工 API：`script-sync`（discover/status/configure/preview），`script-sync-apply`（planId/scriptIds/confirmed）。
-- AI 工具：`qxqy_script_sync`，只开放 discover/status/configure/preview。configure 的 args 需 config 与 expectedRevision。
-- MCP 与 Web 为独立进程。AI 保存后，用户在 Web 编辑器加载同一存档并生成自己的确认计划；MCP 返回的 planId 不跨进程使用。只读 `/` 预览页不执行复制。
+- 编辑器 API：`script-sync`，以及保留兼容的 `script-sync-apply`（planId/scriptIds/confirmed）。
+- AI 工具：`qxqy_script_sync`，开放 discover/status/configure/save/preview/apply，使用同一复制核心与校验。
+- MCP 与 Web 为独立进程。AI 可在 MCP 中完成同步；若改用 Web 编辑器确认，先加载 AI 保存的同一存档并重新预览，MCP 返回的 planId 不跨进程使用。只读 `/` 预览页不执行复制。
+
+## AI 接口验证（2026-10-19）
+
+- `evidence_source: observed`，运行端 `simulator`，`device_status: not_required`，Windows / Node.js 22.23.2：冻结锁文件安装通过，全仓 `pnpm test` 391 pass / 13 条件 skip / 0 fail。新增测试覆盖保存时的 revision / 磁盘变更检查、显式文件选择、布尔确认、备份及结果查询；既有过期计划、路径约束和索引引用检查继续通过。
+- MCP 经真实 stdio 子进程完成配置、保存、预览、部分复制与新增文件复制，核对备份原始字节、未选文件保留、过期和跨 handle 计划拒绝。Harness 经实际 `defineTool` 注册 / execute 与合成宿主上下文完成同一流程，覆盖 JSON 字符串参数和跨会话拒绝；不是 Desktop 窗口端到端验收。全部复制使用临时目录，未操作真实游戏脚本，真机保存与试玩仍待用户验证。
 
 ## 验证记录（2026-09-26）
 

@@ -12,7 +12,7 @@ dsh plugin --profile web add dsh-plugin-beyond-simulator
 # 或，从 GitHub 默认分支源码安装
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 # 或，从本地安装包安装
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.0.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.1.tgz
 
 dsh --profile web --dump-config
 dsh web
@@ -35,7 +35,9 @@ pnpm test:git-install
 pnpm test:harness
 ```
 
-Host Tools：`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxqy_studio_ui_screenshot`、`qxqy_studio_play_screenshot`、`qxqy_studio_load`。截图由 Host 在进程内根据 `boxes` / `paint` 渲染 PNG，不需要打开模拟器标签或试玩页。
+Host Tools：`qxqy_script_sync`、`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxqy_studio_ui_screenshot`、`qxqy_studio_play_screenshot`、`qxqy_studio_load`。截图由 Host 在进程内根据 `boxes` / `paint` 渲染 PNG，不需要打开模拟器标签或试玩页。
+
+`qxqy_script_sync` 支持目录配置、保存、差异预览和复制。用户授权更新后，AI 可通过 `save → preview → apply` 完成同步并取得文件回执与备份位置。参数与流程见 [脚本同步接口](../studio/docs/script-sync.md#ai-更新接口)。
 
 独立及内嵌试玩共用「键位响应」开关，默认按官方键鼠表派发 Down/Up，关闭不影响光标点击；输入框和日志页不驱动游戏。规则与验证见 [浏览器键位响应](../studio/docs/browser-input.md)。
 

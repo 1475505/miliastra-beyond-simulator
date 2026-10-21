@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createStudio } from '../index.js'
-import { importGia, exportGia, inspectGia } from '../gia/codec.js'
+import { importGia, exportGia, inspectGia, validateScriptGiaCompatibility } from '../gia/codec.js'
 
 // Synthetic wire cases, not a claimed native non-empty reference schema.
 // Field 77 is only known to be length-delimited; arbitrary bytes must survive
@@ -54,9 +54,9 @@ function referenceSlot(bytes) {
   const data = all(first(first(unit, 19), 1), 505).find(row => first(row, 501) === 66)
   return { outer: first(data, 76), inner: first(first(data, 503), 77) }
 }
-function scriptUnit() {
-  return cat(msg(1, cat(num(2, 30), num(4, SCRIPT_GUID))), str(3, 'dependency'), num(5, 69),
-    msg(35, msg(1, cat(num(1, SCRIPT_GUID), str(2, 'dependency'), str(3, 'dependency.lua'), str(5, 'return {}')))))
+function scriptUnit(guid = SCRIPT_GUID) {
+  return cat(msg(1, cat(num(2, 30), num(4, guid))), str(3, 'dependency'), num(5, 69),
+    msg(35, msg(1, cat(num(1, guid), str(2, 'dependency'), str(3, 'dependency.lua'), str(5, 'return {}')))))
 }
 
 test('opaque reference bytes survive import, JSON reload, ordinary edits and GIA export', () => {
@@ -95,6 +95,8 @@ test('empty and legacy textual reference slots retain their existing behavior', 
 })
 
 test('non-UI dependencies do not become controls, and attached scripts retain client mounts', () => {
+  assert.equal(validateScriptGiaCompatibility(envelope(msg(1, scriptUnit(1073744901)))).valid, true)
+  assert.equal(validateScriptGiaCompatibility(envelope(msg(1, scriptUnit()))).valid, false, 'legacy IDs remain readable but are not valid exports')
   const dependency = cat(msg(1, num(4, 1500000001)), str(3, 'unsupported resource'), num(5, 123))
   for (const scriptLocation of [1, 2]) {
     const input = envelope(cat(msg(1, reference({ mount: true })), msg(scriptLocation, scriptUnit()), msg(2, dependency)))
@@ -108,6 +110,7 @@ test('non-UI dependencies do not become controls, and attached scripts retain cl
     assert.equal(script.controlAsset, 'client-control-template')
     assert.equal(script.controlName, 'Reference')
     assert.equal(script.mounted, true)
+    assert.equal(script.guid, SCRIPT_GUID, 'keep original script identity and mount for explicit repair')
   }
 })
 

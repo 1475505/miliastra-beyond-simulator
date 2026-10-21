@@ -16,7 +16,7 @@ function setup(t) {
   t.after(async () => { await controller.dispose(); rmSync(temp, { recursive: true, force: true }) })
   controller.patch({ op: 'setScriptSync', config: { version: 1, workspaceDir: 'game', clientImportRoot: target, clientSubdir: 'game' } })
   const add = (path, source = '') => controller.patch({ op: 'addScript', path, source }).scripts.at(-1)
-  const apply = plan => controller.scriptSync.apply({ planId: plan.id, scriptIds: plan.rows.filter(row => !row.error && row.status !== '未变化').map(row => row.id), confirmed: true })
+  const apply = plan => controller.scriptSyncAction('apply', { planId: plan.id, scriptIds: plan.rows.filter(row => !row.error && row.status !== '未变化').map(row => row.id), confirmed: true })
   return { temp, workspace, target, controller, add, apply }
 }
 
@@ -36,16 +36,57 @@ test('copy is explicit, uses runtime source precedence, preserves extra files an
   assert.equal(plan.rows[0].sourceMismatch, true)
   assert.equal(plan.rows[1].sourceKind, '工作区文件')
   assert.equal(readFileSync(join(target, 'game/main.lua'), 'utf8'), '-- original')
-  assert.throws(() => controller.scriptSyncAction('apply'), /unknown/)
+  assert.throws(() => controller.scriptSyncAction('apply'), /确认/)
+  assert.throws(() => controller.scriptSyncAction('unknown'), /unknown script sync action/)
   assert.throws(() => controller.scriptSync.apply({ planId: plan.id }), /确认/)
   const result = apply(plan)
-  assert.equal(result.completed, true)
+  assert.equal(result.completed, true, JSON.stringify(result))
   assert.equal(readFileSync(join(target, 'game/main.lua'), 'utf8'), '-- inline')
   assert.equal(readFileSync(join(target, 'game/module.lua'), 'utf8'), '-- module')
   assert.equal(readFileSync(join(target, 'extra.lua'), 'utf8'), '-- untouched')
   assert.equal(readFileSync(join(result.backupRoot, 'game/main.lua'), 'utf8'), '-- original')
   assert.throws(() => apply(plan), /确认/)
   assert.ok(controller.scriptSync.preview().rows.every(row => row.status === '未变化'))
+})
+
+test('AI save checks revisions and existing files before persisting the current archive', t => {
+  const { workspace, controller, add } = setup(t)
+  const script = add('game/main.lua', '-- first')
+  let revision = controller.get().version
+  assert.throws(() => controller.scriptSyncAction('save', { path: 'game.save.json' }), /expectedRevision/)
+  assert.throws(() => controller.scriptSyncAction('save', { expectedRevision: revision }), /path/)
+  assert.throws(() => controller.scriptSyncAction('save', { path: 'game.save.json', expectedRevision: revision - 1 }), /revision conflict/)
+  assert.equal(existsSync(join(workspace, 'game.save.json')), false)
+  writeFileSync(join(workspace, 'existing.json'), '-- unrelated')
+  assert.throws(() => controller.scriptSyncAction('save', { path: 'existing.json', expectedRevision: revision }), /already exists/)
+  assert.equal(readFileSync(join(workspace, 'existing.json'), 'utf8'), '-- unrelated')
+  const saved = controller.scriptSyncAction('save', { path: 'game.save.json', expectedRevision: revision })
+  assert.equal(saved.path, 'game.save.json')
+  revision = controller.patch({ op: 'updateScript', id: script.id, source: '-- second' }).version
+  assert.equal(controller.scriptSyncAction('save', { expectedRevision: revision }).path, saved.path)
+  assert.equal(JSON.parse(readFileSync(join(workspace, saved.path), 'utf8')).assets.scripts[0].source, '-- second')
+  writeFileSync(join(workspace, saved.path), '-- external changes')
+  assert.throws(() => controller.scriptSyncAction('save', { expectedRevision: revision }), /File changed/)
+  assert.equal(readFileSync(join(workspace, saved.path), 'utf8'), '-- external changes')
+})
+
+test('AI apply requires a boolean confirmation and copies only explicitly selected scripts', t => {
+  const { target, controller, add } = setup(t)
+  const first = add('game/first.lua', '-- selected')
+  add('game/second.lua', '-- leave out')
+  controller.scriptSyncAction('save', { path: 'game.save.json', expectedRevision: controller.get().version })
+  const plan = controller.scriptSyncAction('preview')
+  const args = { planId: plan.id, scriptIds: [first.id] }
+  for (const confirmed of [undefined, false, 'true']) {
+    assert.throws(() => controller.scriptSyncAction('apply', { ...args, confirmed }), /确认/)
+    assert.equal(existsSync(join(target, 'game/first.lua')), false)
+  }
+  const result = controller.scriptSyncAction('apply', { ...args, confirmed: true })
+  assert.equal(result.completed, true, JSON.stringify(result))
+  assert.equal(result.results.length, 1)
+  assert.equal(readFileSync(join(target, 'game/first.lua'), 'utf8'), '-- selected')
+  assert.equal(existsSync(join(target, 'game/second.lua')), false)
+  assert.deepEqual(controller.scriptSyncAction('status').lastResult, result)
 })
 
 test('changed source, target, config or archive invalidates confirmation before any copy', async t => {

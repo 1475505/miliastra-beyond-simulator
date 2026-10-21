@@ -8,6 +8,7 @@ import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
 export { loadBrowserFont } from './browser-font.js'
 export { t, getLocale, getLanguagePreference, setLanguagePreference, subscribeLocale, localizePage, loadSystemLanguage, getSystemLanguage } from '../i18n.js'
 import { DEFAULT_FONT } from '../fonts.js'
+import { paintRichTextCanvas } from './rich-text-paint.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.
 import 'pixi.js/unsafe-eval'
@@ -198,9 +199,11 @@ export class PixiPlayRenderer {
     // suppresses Pixi's default context disposal and leaves old geometry in
     // the timed GC pool after animated sizes/colors replace the visual.
     const geometry = root.__visual.__sliceGeometry
+    const richTexture = root.__visual.__richText?.texture
     // Each TextStyle is owned here. Text.destroy() unloads its managed GPU
     // reference in Pixi 8.20; image/circle textures belong to shared caches.
     root.__visual.destroy({ children: true, context: true, style: true })
+    richTexture?.destroy(true)
     if (managed && uid !== undefined && managed[uid] === null) delete managed[uid]
     if (oldKey) this.retireTextKey(oldKey)
     geometry?.destroy(true)
@@ -229,6 +232,15 @@ export class PixiPlayRenderer {
 
   updateTextVisual(root, item, width, height) {
     const visual = root.__visual
+    if (item.kind !== 'textbox' && item.kind !== 'textwindow') return false
+    if (visual?.__richText) {
+      if (!item.textLayout?.richLines || visual.__textChromeKey !== textChromeKey(item, width, height)) return false
+      const sprite = visual.__richText
+      paintRichTextCanvas(sprite.texture.source.resource, item, width, height, this.fontFamily, this.app?.renderer?.resolution || 1)
+      sprite.texture.source.update()
+      return true
+    }
+    if (item.textLayout?.richLines) return false
     if (!visual?.__text || visual.__textChromeKey !== textChromeKey(item, width, height)) return false
     const text = visual.__text
     const next = textVisual(item, width, height, this.fontFamily)
@@ -324,19 +336,26 @@ export class PixiPlayRenderer {
       const bg = argb(item.bgColor, 0x00ffffff)
       background.rect(-width / 2, -height / 2, width, height).fill(bg)
       visual.addChild(background)
-      const next = textVisual(item, width, height, this.fontFamily)
-      const text = new Text({
-        text: next.text,
-        style: new TextStyle(next.style),
-      })
-      text.anchor.set(next.anchorX, next.anchorY)
-      text.position.set(next.x, next.y)
-      visual.__text = text
-      visual.__textStyleKey = JSON.stringify(next.style)
+      if (item.textLayout?.richLines) {
+        const canvas = DOMAdapter.get().createCanvas(1, 1)
+        paintRichTextCanvas(canvas, item, width, height, this.fontFamily, this.app?.renderer?.resolution || 1)
+        const sprite = new Sprite({ texture: new Texture({ source: new CanvasSource({ resource: canvas }) }), anchor: 0.5 })
+        sprite.width = width
+        sprite.height = height
+        visual.__richText = sprite
+        visual.addChild(sprite)
+      } else {
+        const next = textVisual(item, width, height, this.fontFamily)
+        const text = new Text({ text: next.text, style: new TextStyle(next.style) })
+        text.anchor.set(next.anchorX, next.anchorY)
+        text.position.set(next.x, next.y)
+        visual.__text = text
+        visual.__textStyleKey = JSON.stringify(next.style)
+        const clip = new Graphics().rect(-width / 2, -height / 2, width, height).fill({ color: 0xffffff, alpha: 1 })
+        text.mask = clip
+        visual.addChild(clip, text)
+      }
       visual.__textChromeKey = textChromeKey(item, width, height)
-      const clip = new Graphics().rect(-width / 2, -height / 2, width, height).fill({ color: 0xffffff, alpha: 1 })
-      text.mask = clip
-      visual.addChild(clip, text)
     } else if (item.kind === 'button') {
       const graphic = new Graphics()
       graphic.roundRect(-width / 2, -height / 2, width, height, 6).fill({ color: 0x3268cf, alpha: 1 })

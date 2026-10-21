@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createStudio, importGia } from '../index.js'
 import { findNode } from '../ui/authoring.js'
+import { GUID_BASE, GUID_MIN, GUID_MAX, nextFreeGuid } from '../gia/guid.js'
 
 const SERVER = 'server-control-template'
 const CLIENT = 'client-control-template'
@@ -43,7 +44,8 @@ test('invalid, occupied and stale GUID edits are atomic; unchanged index is a no
   const script = studio.patch({ op: 'addScript', path: 'main.lua', source: '-- script' }).scripts[0]
   const before = studio.archiveData()
   const revision = studio.get().version
-  for (const value of ['', ' ', true, false, null, undefined, 0, -1, 1.5, '1.5', '1e3', '0x10', NaN, Infinity, 2147483648]) {
+  for (const value of ['', ' ', true, false, null, undefined, 0, -1, 1.5, '1.5', '1e3', '0x10', NaN, Infinity,
+    1001, GUID_MIN - 1, GUID_MAX + 1, 2147483648]) {
     assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n2', guid: value }), /整数/)
     assert.deepEqual(studio.archiveData(), before)
   }
@@ -121,6 +123,9 @@ test('ordered pending mappings survive archive, constructor and full import; ack
 })
 
 test('invalid change ledger or script allocation cannot partially import a full archive', () => {
+  assert.equal(nextFreeGuid(new Set([GUID_MAX - 1])), GUID_MAX)
+  assert.throws(() => nextFreeGuid(new Set([GUID_MAX])), /GUID space exhausted/)
+  assert.equal(nextFreeGuid(new Set(), 1), GUID_BASE)
   const studio = createStudio()
   studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741906 })
   const before = studio.archiveData()
@@ -137,15 +142,52 @@ test('invalid change ledger or script allocation cannot partially import a full 
 })
 
 test('full archive preparation restores script mounts encoded only in generic slots', () => {
-  const archive = createStudio().archiveData()
-  findNode(archive.assets.server.root, 'n1').scriptMappingIds = [1073741920]
-  archive.assets.scripts = [{ guid: 1073741920, path: 'generic.lua', source: '-- mount', controlId: '' }]
-  const constructed = createStudio(archive)
-  assert.equal(constructed.get().scripts[0].controlId, 'n1')
-  assert.equal(constructed.get().scripts[0].controlAsset, SERVER)
-  const imported = createStudio().importData('json', base64(archive)).snapshot
-  assert.equal(imported.scripts[0].mounted, true)
-  assert.equal(imported.scripts[0].controlId, 'n1')
+  for (const guid of [1073741920, 1500000000]) {
+    const archive = createStudio().archiveData()
+    findNode(archive.assets.server.root, 'n1').scriptMappingIds = [guid]
+    archive.assets.scripts = [{ guid, path: 'generic.lua', source: '-- mount', controlId: '' }]
+    const constructed = createStudio(archive)
+    assert.equal(constructed.get().scripts[0].controlId, 'n1')
+    assert.equal(constructed.get().scripts[0].controlAsset, SERVER)
+    assert.equal(constructed.get().scripts[0].guid, guid, 'reading must preserve legacy script identity')
+    const imported = createStudio().importData('json', base64(archive)).snapshot
+    assert.equal(imported.scripts[0].mounted, true)
+    assert.equal(imported.scripts[0].controlId, 'n1')
+    assert.equal(imported.scripts[0].guid, guid)
+    if (guid > GUID_MAX) {
+      const before = constructed.archiveData()
+      for (const format of ['scripts-gia', 'gia-combined']) assert.throws(() => constructed.exportData(format), /校准索引/)
+      assert.deepEqual(constructed.archiveData(), before)
+    }
+  }
+})
+
+test('legacy control IDs and old ledger endpoints survive reads until explicit reference-aware calibration', () => {
+  const seed = createStudio().archiveData()
+  seed.activeAssetType = CLIENT
+  findNode(seed.assets.client.root, 'n1').guid = 1001
+  findNode(seed.assets.server.root, 'n4').referencedPrefabId = 1001
+  findNode(seed.assets.server.root, 'n4').giaRaw.templateRefSlot = '1001'
+  findNode(seed.assets.server.root, 'n5').itemPrefabId = 1001
+  findNode(seed.assets.server.root, 'n9').imageId = 1001
+  seed.assets.scripts = [{ guid: 1073745000, path: 'main.lua', source: 'local template=1001', controlId: 'n1', controlAsset: SERVER }]
+  seed.controlGuidChanges = [{ id: 'legacy', controlAsset: CLIENT, controlId: 'n1', controlName: 'template', oldGuid: 1000, newGuid: 1001 }]
+  const studio = createStudio(seed), before = studio.archiveData()
+  studio.get(); studio.get()
+  assert.deepEqual(studio.archiveData(), before, 'observation cannot silently change identities or references')
+  assert.equal(studio.get().tree.find(row => row.id === 'n1').guid, 1001)
+  for (const format of ['gia', 'gia-combined', 'save-gia']) assert.throws(() => studio.exportData(format), /校准索引/)
+  assert.deepEqual(studio.archiveData(), before)
+  const result = studio.patch({ op: 'setControlGuid', id: 'n1', guid: 1073745100 })
+  assert.deepEqual(result.controlGuidChanges.map(({ oldGuid, newGuid }) => [oldGuid, newGuid]), [[1000, 1001], [1001, 1073745100]])
+  assert.equal(node(studio, 'n4').referencedPrefabId, 1073745100)
+  assert.equal(node(studio, 'n4').giaRaw.templateRefSlot, '1073745100')
+  assert.equal(node(studio, 'n5').itemPrefabId, 1073745100)
+  assert.equal(node(studio, 'n9').imageId, 1001, 'image IDs are a different namespace')
+  assert.equal(result.scripts[0].source, 'local template=1001', 'Lua awaits semantic review')
+  const restored = createStudio(JSON.parse(Buffer.from(studio.exportData('save').data, 'base64')))
+  assert.deepEqual(restored.archiveData(), studio.archiveData())
+  assert.equal(importGia(Buffer.from(restored.exportData('gia').data, 'base64')).project.root.children[0].guid, 1073745100)
 })
 
 test('GUID-only template edits are included in a GIA package after acknowledgement', () => {

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { join } from 'node:path'
@@ -56,6 +56,80 @@ async function stopServer(server) {
   server.child.kill()
   await once(server.child, 'exit')
 }
+
+test('MCP script sync saves, previews and applies selected updates with backups and handle isolation', async () => {
+  const temp = mkdtempSync(join(tmpdir(), 'qxqy-mcp-sync-'))
+  const workspace = join(temp, 'workspace')
+  const target = join(temp, 'default_import_file')
+  mkdirSync(join(workspace, 'game'), { recursive: true })
+  mkdirSync(join(target, 'game'), { recursive: true })
+  const original = Buffer.from('-- original\r\n')
+  writeFileSync(join(target, 'game/main.lua'), original)
+  writeFileSync(join(target, 'keep.lua'), '-- other project')
+  writeFileSync(join(workspace, 'game/main.lua'), '-- updated')
+  writeFileSync(join(workspace, 'game/module.lua'), '-- module v1')
+  writeFileSync(join(workspace, 'game/unregistered.lua'), '-- not in the save')
+  const server = startServer(workspace)
+  const call = async (name, args = {}) => {
+    const response = await server.request('tools/call', { name, arguments: args })
+    assert.ok(response.result && !response.result.isError, JSON.stringify(response))
+    return response.result.structuredContent
+  }
+  try {
+    await server.request('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'script-sync-test', version: '1' } })
+    const listed = await server.request('tools/list')
+    const syncTool = listed.result.tools.find(tool => tool.name === 'qxqy_script_sync')
+    assert.ok(syncTool.inputSchema.properties.action.enum.includes('save'))
+    assert.ok(syncTool.inputSchema.properties.action.enum.includes('apply'))
+    const { handle } = await call('qxqy_project_open')
+    let snapshot = await call('qxqy_studio_get', { handle })
+    for (const [path, source] of [['game/main.lua', '-- updated'], ['game/module.lua', '']]) {
+      snapshot = await call('qxqy_studio_patch', { handle, op: { op: 'addScript', path, source, expectedRevision: snapshot.version } })
+    }
+    const config = { version: 1, workspaceDir: 'game', clientImportRoot: target, clientSubdir: 'game' }
+    snapshot = await call('qxqy_script_sync', { handle, action: 'configure', args: { config, expectedRevision: snapshot.version } })
+    const saved = await call('qxqy_script_sync', { handle, action: 'save', args: { path: 'game.save.json', expectedRevision: snapshot.version } })
+    assert.equal(saved.path, 'game.save.json')
+    assert.deepEqual(JSON.parse(readFileSync(join(workspace, saved.path), 'utf8')).scriptSync, config)
+    let plan = await call('qxqy_script_sync', { handle, action: 'preview' })
+    const main = plan.rows.find(row => row.path === 'game/main.lua')
+    const module = plan.rows.find(row => row.path === 'game/module.lua')
+    assert.equal(main.status, '覆盖')
+    assert.equal(module.status, '新增')
+    assert.deepEqual(readFileSync(join(target, 'game/main.lua')), original, 'preview must not copy')
+    const refused = await server.request('tools/call', { name: 'qxqy_script_sync', arguments: { handle, action: 'apply', args: { planId: plan.id, scriptIds: [main.id] } } })
+    assert.equal(refused.result.isError, true)
+    assert.match(refused.result.content[0].text, /确认/)
+    const other = await call('qxqy_project_open', { path: saved.path })
+    const crossHandle = await server.request('tools/call', { name: 'qxqy_script_sync', arguments: { handle: other.handle, action: 'apply', args: { planId: plan.id, scriptIds: [main.id], confirmed: true } } })
+    assert.equal(crossHandle.result.isError, true)
+    assert.deepEqual(readFileSync(join(target, 'game/main.lua')), original)
+    const copied = await call('qxqy_script_sync', { handle, action: 'apply', args: { planId: plan.id, scriptIds: [main.id], confirmed: true } })
+    assert.equal(copied.completed, true, JSON.stringify(copied))
+    assert.equal(copied.results.length, 1)
+    assert.deepEqual(readFileSync(join(copied.backupRoot, 'game/main.lua')), original)
+    assert.equal(readFileSync(join(target, 'game/main.lua'), 'utf8'), '-- updated')
+    assert.equal(existsSync(join(target, 'game/module.lua')), false)
+    assert.equal(existsSync(join(target, 'game/unregistered.lua')), false)
+    assert.equal(readFileSync(join(target, 'keep.lua'), 'utf8'), '-- other project')
+    assert.deepEqual((await call('qxqy_script_sync', { handle, action: 'status' })).lastResult, copied)
+    const reused = await server.request('tools/call', { name: 'qxqy_script_sync', arguments: { handle, action: 'apply', args: { planId: plan.id, scriptIds: [main.id], confirmed: true } } })
+    assert.equal(reused.result.isError, true)
+    plan = await call('qxqy_script_sync', { handle, action: 'preview' })
+    writeFileSync(join(workspace, 'game/module.lua'), '-- module v2')
+    const stale = await server.request('tools/call', { name: 'qxqy_script_sync', arguments: { handle, action: 'apply', args: { planId: plan.id, scriptIds: [module.id], confirmed: true } } })
+    assert.equal(stale.result.isError, true)
+    assert.match(stale.result.content[0].text, /已变化/)
+    assert.equal(existsSync(join(target, 'game/module.lua')), false)
+    plan = await call('qxqy_script_sync', { handle, action: 'preview' })
+    const added = await call('qxqy_script_sync', { handle, action: 'apply', args: { planId: plan.id, scriptIds: [module.id], confirmed: true } })
+    assert.equal(added.completed, true, JSON.stringify(added))
+    assert.equal(readFileSync(join(target, 'game/module.lua'), 'utf8'), '-- module v2')
+  } finally {
+    await stopServer(server)
+    rmSync(temp, { recursive: true, force: true })
+  }
+})
 
 test('MCP handshake exposes simulator tools and supports an edit/save round trip', async () => {
   const workspace = mkdtempSync(join(tmpdir(), 'qxqy-mcp-'))

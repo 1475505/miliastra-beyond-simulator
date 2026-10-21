@@ -50,16 +50,16 @@ test('overlapping permutation updates explicit references once; Lua and image ID
   findNode(seed.assets.server.root, 'n9').imageId = O + 5
   seed.assets.scripts = [{ guid: O + 7, id: String(O + 7), path: 'test.lua', source: `return {${O + 5},${O + 2},${O + 4}}`, controlId: 'A', controlAsset: CLIENT }]
   const studio = createStudio(seed)
-  studio.patch({ op: 'setControlGuid', id: 'A', guid: N, autoFillClientGuids: true })
-  assert.deepEqual(values(studio), [N, N + 1, N + 2, N + 3, N + 4, N + 5, N + 6])
+  studio.patch({ op: 'setControlGuid', id: 'A', guid: O, autoFillClientGuids: true })
+  assert.deepEqual(values(studio), [O, O + 1, O + 2, O + 3, O + 4, O + 5, O + 6])
   const after = studio.archiveData()
-  assert.equal(findNode(after.assets.server.root, 'n4').referencedPrefabId, String(N + 2))
-  assert.equal(findNode(after.assets.server.root, 'n4').giaRaw.templateRefSlot, String(N + 4))
-  assert.equal(findNode(after.assets.server.root, 'n5').itemPrefabId, N + 3)
+  assert.equal(findNode(after.assets.server.root, 'n4').referencedPrefabId, String(O + 2))
+  assert.equal(findNode(after.assets.server.root, 'n4').giaRaw.templateRefSlot, String(O + 4))
+  assert.equal(findNode(after.assets.server.root, 'n5').itemPrefabId, O + 3)
   assert.equal(findNode(after.assets.server.root, 'n9').imageId, O + 5)
   assert.deepEqual(after.assets.scripts, createStudio(seed).archiveData().assets.scripts)
   const revision = studio.get().version
-  studio.patch({ op: 'setControlGuid', id: 'A', guid: N, autoFillClientGuids: true })
+  studio.patch({ op: 'setControlGuid', id: 'A', guid: O, autoFillClientGuids: true })
   assert.equal(studio.get().version, revision, 'fully calibrated batch is a no-op')
 })
 
@@ -68,7 +68,7 @@ test('invalid interval, occupied external GUID, wrong asset and stale revision c
   seed.assets.scripts = [{ guid: N + 5, id: String(N + 5), path: 'collision.lua', source: '-- keep' }]
   const studio = createStudio(seed)
   const before = studio.archiveData(), revision = studio.get().version
-  for (const guid of [1, 1073741823, 1077936128, 303, seed.assets.server.root.guid + 3]) {
+  for (const guid of [1073741824, 1077936127, N + 3, seed.assets.server.root.guid + 3]) {
     assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'right', guid, autoFillClientGuids: true }), /整数|占用/)
     assert.deepEqual(studio.archiveData(), before)
   }
