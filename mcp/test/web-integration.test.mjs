@@ -73,7 +73,7 @@ async function startWeb(workspace) {
   }
 }
 
-function startMcp(workspace, webUrl) {
+function startMcp(workspace, webUrl, requestTimeoutMs = REQUEST_TIMEOUT_MS) {
   const server = startProcess('mcp/index.js', ['--workspace', workspace, '--web-url', webUrl])
   const pending = new Map()
   let sequence = 0
@@ -114,8 +114,8 @@ function startMcp(workspace, webUrl) {
         callback(value)
       }
       const timer = setTimeout(() => {
-        finish(reject, new Error(`${method} timed out after ${REQUEST_TIMEOUT_MS}ms: ${server.diagnostics()}`))
-      }, REQUEST_TIMEOUT_MS)
+        finish(reject, new Error(`${method}${params.name ? ` ${params.name}` : ''} timed out after ${requestTimeoutMs}ms: ${server.diagnostics()}`))
+      }, requestTimeoutMs)
       pending.set(id, {
         resolve: (value) => finish(resolve, value),
         reject: (error) => finish(reject, error),
@@ -298,13 +298,16 @@ test('separate MCP and Web processes discover saves, retain paths and explicitly
   }
 })
 
-test('an MCP save larger than 8 MiB is discovered by an initially empty Web process', { timeout: 60_000 }, async () => {
+test('an MCP save larger than 8 MiB is discovered by an initially empty Web process', { timeout: 120_000 }, async () => {
   const workspace = mkdtempSync(join(tmpdir(), 'qxqy-mcp-web-large-'))
   let web
   let mcp
   try {
     web = await startWeb(workspace)
-    mcp = startMcp(workspace, web.url)
+    // Full snapshots carry the 8 MiB source in both text and structuredContent.
+    // Allow CI time for this deliberate large stdio round trip; ordinary calls
+    // keep the 15-second bound, and all discovery assertions remain unchanged.
+    mcp = startMcp(workspace, web.url, 60_000)
     await initialize(mcp)
     assert.equal((await preview(web)).activePath, '')
     const opened = await callTool(mcp, 'qxqy_project_open')
