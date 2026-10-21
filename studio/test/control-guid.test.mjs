@@ -23,17 +23,17 @@ test('control GUID edit preserves internal ids, selection, parent and script/but
   const studio = createStudio(seed)
   studio.patch({ op: 'addScript', path: 'main.lua', source: `local unrelated = ${oldGuid}`, controlId: target.id, controlAsset: SERVER })
   const before = studio.get()
-  const result = studio.patch({ op: 'setControlGuid', guid: '19001', expectedRevision: before.version })
+  const result = studio.patch({ op: 'setControlGuid', guid: '1073741901', expectedRevision: before.version })
   assert.equal(result.version, before.version + 1)
   assert.equal(result.selectedId, target.id)
-  assert.equal(node(studio, target.id).guid, 19001)
+  assert.equal(node(studio, target.id).guid, 1073741901)
   assert.equal(node(studio, 'n6').pressedChildId, target.id)
   assert.equal(node(studio, 'n6').children[0].id, target.id)
   assert.equal(node(studio, 'n9').imageId, oldGuid)
   assert.deepEqual(result.scripts, before.scripts)
   assert.match(result.controlGuidChanges[0].scriptSignature, /^[a-f0-9]{64}$/)
   assert.deepEqual(result.controlGuidChanges.map(({ id, scriptSignature, ...entry }) => entry), [{
-    controlAsset: SERVER, controlId: target.id, controlName: target.name, oldGuid, newGuid: 19001,
+    controlAsset: SERVER, controlId: target.id, controlName: target.name, oldGuid, newGuid: 1073741901,
   }])
   assert.equal(typeof result.controlGuidChanges[0].id, 'string')
 })
@@ -51,14 +51,14 @@ test('invalid, occupied and stale GUID edits are atomic; unchanged index is a no
     assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n2', guid: value }), /占用/)
     assert.deepEqual(studio.archiveData(), before)
   }
-  for (const id of ['sc1', 'missing']) assert.throws(() => studio.patch({ op: 'setControlGuid', id, guid: 19001 }), /仅客户端/)
-  assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19001, expectedRevision: revision - 1 }), /revision conflict/)
+  for (const id of ['sc1', 'missing']) assert.throws(() => studio.patch({ op: 'setControlGuid', id, guid: 1073741901 }), /仅客户端/)
+  assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741901, expectedRevision: revision - 1 }), /revision conflict/)
   assert.deepEqual(studio.archiveData(), before)
   assert.equal(studio.patch({ op: 'setControlGuid', id: 'n2', guid: node(studio, 'n2').guid }).version, revision)
   assert.deepEqual(studio.archiveData(), before)
-  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1 })
-  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 2147483647 })
-  assert.equal(node(studio, 'n2').guid, 2147483647)
+  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741824 })
+  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1077936127 })
+  assert.equal(node(studio, 'n2').guid, 1077936127)
 })
 
 test('explicit numeric template references follow GUID edits across both assets', () => {
@@ -72,10 +72,10 @@ test('explicit numeric template references follow GUID edits across both assets'
   const studio = createStudio(seed)
   const serverVersion = studio.get().version
   studio.patch({ op: 'selectAsset', assetType: CLIENT })
-  studio.patch({ op: 'setControlGuid', id: 'n1', guid: 19002 })
-  assert.equal(node(studio, 'n4').referencedPrefabId, 19002)
-  assert.equal(node(studio, 'n4').giaRaw.templateRefSlot, '19002')
-  assert.equal(node(studio, 'n5').itemPrefabId, '19002')
+  studio.patch({ op: 'setControlGuid', id: 'n1', guid: 1073741902 })
+  assert.equal(node(studio, 'n4').referencedPrefabId, 1073741902)
+  assert.equal(node(studio, 'n4').giaRaw.templateRefSlot, '1073741902')
+  assert.equal(node(studio, 'n5').itemPrefabId, '1073741902')
   assert.equal(node(studio, 'n10').animationId, String(oldGuid))
   assert.equal(studio.patch({ op: 'selectAsset', assetType: SERVER }).version, serverVersion + 1)
 })
@@ -90,18 +90,18 @@ test('duplicate previous GUID with references refuses ambiguous remapping', () =
   const studio = createStudio(seed)
   studio.get()
   const before = studio.archiveData()
-  assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19003 }), /歧义/)
+  assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741903 }), /歧义/)
   assert.deepEqual(studio.archiveData(), before)
   studio.patch({ op: 'set', id: 'n4', key: 'referencedPrefabId', value: '' })
-  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19003 })
+  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741903 })
   assert.equal(node(studio, 'n1', 'client').guid, duplicate)
 })
 
 test('ordered pending mappings survive archive, constructor and full import; acknowledgement is explicit', () => {
   const studio = createStudio(createStudio().archiveData())
-  const first = studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19004 }).controlGuidChanges[0]
-  const second = studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19005 }).controlGuidChanges[1]
-  assert.equal(second.oldGuid, 19004)
+  const first = studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741904 }).controlGuidChanges[0]
+  const second = studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741905 }).controlGuidChanges[1]
+  assert.equal(second.oldGuid, 1073741904)
   assert.notEqual(second.id, first.id)
   const archive = studio.archiveData()
   assert.deepEqual(createStudio(archive).archiveData(), archive)
@@ -122,7 +122,7 @@ test('ordered pending mappings survive archive, constructor and full import; ack
 
 test('invalid change ledger or script allocation cannot partially import a full archive', () => {
   const studio = createStudio()
-  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19006 })
+  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741906 })
   const before = studio.archiveData()
   const invalid = structuredClone(before)
   invalid.assets.server.meta.name = 'must not import'
@@ -130,7 +130,7 @@ test('invalid change ledger or script allocation cannot partially import a full 
   assert.throws(() => studio.importData('json', base64(invalid)), /变更记录/)
   assert.deepEqual(studio.archiveData(), before)
   const exhausted = structuredClone(before)
-  findNode(exhausted.assets.server.root, 'n2').guid = 2147483647
+  findNode(exhausted.assets.server.root, 'n2').guid = 1077936127
   exhausted.assets.scripts.push({ id: 'unassigned', path: 'overflow.lua', source: '-- test' })
   assert.throws(() => studio.importData('json', base64(exhausted)), /GUID space exhausted/)
   assert.deepEqual(studio.archiveData(), before)
@@ -138,8 +138,8 @@ test('invalid change ledger or script allocation cannot partially import a full 
 
 test('full archive preparation restores script mounts encoded only in generic slots', () => {
   const archive = createStudio().archiveData()
-  findNode(archive.assets.server.root, 'n1').scriptMappingIds = [1500000000]
-  archive.assets.scripts = [{ guid: 1500000000, path: 'generic.lua', source: '-- mount', controlId: '' }]
+  findNode(archive.assets.server.root, 'n1').scriptMappingIds = [1073741920]
+  archive.assets.scripts = [{ guid: 1073741920, path: 'generic.lua', source: '-- mount', controlId: '' }]
   const constructed = createStudio(archive)
   assert.equal(constructed.get().scripts[0].controlId, 'n1')
   assert.equal(constructed.get().scripts[0].controlAsset, SERVER)
@@ -151,22 +151,22 @@ test('full archive preparation restores script mounts encoded only in generic sl
 test('GUID-only template edits are included in a GIA package after acknowledgement', () => {
   const studio = createStudio()
   studio.patch({ op: 'selectAsset', assetType: CLIENT })
-  const changed = studio.patch({ op: 'setControlGuid', id: 'n1', guid: 19013 })
+  const changed = studio.patch({ op: 'setControlGuid', id: 'n1', guid: 1073741913 })
   studio.patch({ op: 'acknowledgeControlGuidChanges', changeIds: changed.controlGuidChanges.map((entry) => entry.id) })
   studio.patch({ op: 'selectAsset', assetType: SERVER })
   const packed = studio.exportData('save-gia')
   const templateFile = packed.files.find((entry) => entry.filename.includes('客户端控件模板'))
   assert.ok(templateFile)
-  assert.equal(importGia(Buffer.from(templateFile.data, 'base64')).project.root.children[0].guid, 19013)
+  assert.equal(importGia(Buffer.from(templateFile.data, 'base64')).project.root.children[0].guid, 1073741913)
 })
 
 test('replacing one asset scopes pending changes; single-asset JSON carries its own mappings', () => {
   const studio = createStudio()
-  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19007 })
+  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741907 })
   const serverChange = studio.get().controlGuidChanges[0]
   const serverJson = studio.exportData('json', SERVER)
   studio.patch({ op: 'selectAsset', assetType: CLIENT })
-  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19008 })
+  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741908 })
   const clientChange = studio.get().controlGuidChanges[1]
   studio.patch({ op: 'newAsset', assetType: SERVER })
   assert.deepEqual(studio.get().controlGuidChanges, [clientChange])
@@ -181,14 +181,14 @@ test('GIA, Lua and script exports warn until semantic acknowledgement; GIA encod
   const oldGuid = node(studio, 'n2').guid
   const source = `local target = ${oldGuid}\nlocal unchanged = ${oldGuid}`
   const script = studio.patch({ op: 'addScript', path: 'main.lua', source, controlId: 'n1', controlAsset: SERVER }).scripts[0]
-  const result = studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19009 })
+  const result = studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741909 })
   for (const format of ['gia', 'gia-combined', 'save-gia', 'scripts-gia', 'scripts', 'lua']) {
     const exported = studio.exportData(format, format === 'lua' ? script.id : '')
-    assert.ok(exported.warnings.some((warning) => warning.includes('控件索引待核对 Lua 引用：') && warning.includes(`${oldGuid} → 19009`)), format)
+    assert.ok(exported.warnings.some((warning) => warning.includes('控件索引待核对 Lua 引用：') && warning.includes(`${oldGuid} → 1073741909`)), format)
   }
   assert.equal(Buffer.from(studio.exportData('lua', script.id).data, 'base64').toString(), source)
   const decoded = importGia(Buffer.from(studio.exportData('gia').data, 'base64')).project
-  assert.equal(decoded.root.children[0].children.find((entry) => entry.name === '文本框').guid, 19009)
+  assert.equal(decoded.root.children[0].children.find((entry) => entry.name === '文本框').guid, 1073741909)
   studio.patch({ op: 'acknowledgeControlGuidChanges', changeIds: result.controlGuidChanges.map((change) => change.id) })
   assert.equal(studio.exportData('lua', script.id).warnings.length, 0)
   assert.ok(!studio.exportData('gia').warnings.some((warning) => warning.includes('控件索引待核对')))
@@ -196,18 +196,18 @@ test('GIA, Lua and script exports warn until semantic acknowledgement; GIA encod
 
 test('play uses the changed prefab indexes and template script mounts', () => {
   const studio = createStudio()
-  studio.patch({ op: 'setControlGuid', id: 'n1', guid: 19010 })
+  studio.patch({ op: 'setControlGuid', id: 'n1', guid: 1073741910 })
   studio.patch({ op: 'selectAsset', assetType: CLIENT })
-  studio.patch({ op: 'setControlGuid', id: 'n1', guid: 19011 })
-  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 19012 })
+  studio.patch({ op: 'setControlGuid', id: 'n1', guid: 1073741911 })
+  studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741912 })
   studio.patch({ op: 'addScript', path: 'template.lua', controlId: 'n2', controlAsset: CLIENT, source: 'function OnStart() print("child-index", script.object.prefabIndex) end' })
-  studio.patch({ op: 'addScript', path: 'main.lua', controlId: 'n1', controlAsset: SERVER, source: 'function OnStart()\n print("root-index", script.object.prefabIndex)\n local created = game.InstantiateClientUIControl(19011, script.object)\n print("template-index", created.prefabIndex)\nend' })
+  studio.patch({ op: 'addScript', path: 'main.lua', controlId: 'n1', controlAsset: SERVER, source: 'function OnStart()\n print("root-index", script.object.prefabIndex)\n local created = game.InstantiateClientUIControl(1073741911, script.object)\n print("template-index", created.prefabIndex)\nend' })
   try {
     const play = studio.playStart()
     const output = play.logs.map((entry) => entry.text).join('\n')
-    assert.match(output, /root-index\t19010/)
-    assert.match(output, /template-index\t19011/)
-    assert.match(output, /child-index\t19012/)
+    assert.match(output, /root-index\t1073741910/)
+    assert.match(output, /template-index\t1073741911/)
+    assert.match(output, /child-index\t1073741912/)
   } finally {
     studio.playStop()
   }
