@@ -4,7 +4,8 @@ import { audioAssetUrl, audioDuration } from '../assets/audio-catalog.js'
 // and the user's autoplay consent never feed back into Lua's clock/state.
 export class BrowserAudioPlayer {
   constructor({ contextFactory = () => new (globalThis.AudioContext || globalThis.webkitAudioContext)(),
-    fetch: fetcher = (...args) => globalThis.fetch(...args), onStatus = () => {}, now = () => performance.now() } = {}) {
+    fetch: fetcher = (...args) => globalThis.fetch(...args), onStatus = () => {}, now = () => performance.now(),
+    muted = false } = {}) {
     Object.assign(this, { contextFactory, fetcher, onStatus, now })
     this.context = null
     this.output = null
@@ -13,11 +14,15 @@ export class BrowserAudioPlayer {
     this.key = ''
     this.sequence = 0
     this.paused = false
-    this.muted = false
+    this.muted = Boolean(muted)
+    // null follows the session/browser default. The sound button sets on/off
+    // and must survive later polls that still report an agent-muted session.
+    this.audioChoice = null
     this.disposed = false
     this.error = ''
     this.revision = -1
     this.unlockHandlers = []
+    if (this.muted) this.publish()
   }
 
   status() {
@@ -60,8 +65,18 @@ export class BrowserAudioPlayer {
   }
 
   toggle() {
-    if (this.context?.state !== 'running') this.unlock()
-    else this.setMuted(!this.muted)
+    if (this.muted) {
+      this.audioChoice = 'on'
+      this.setMuted(false)
+      this.unlock()
+      return
+    }
+    if (this.context?.state !== 'running') {
+      this.unlock()
+      return
+    }
+    this.audioChoice = 'off'
+    this.setMuted(true)
   }
 
   setMuted(muted) {
@@ -153,6 +168,7 @@ export class BrowserAudioPlayer {
 
   sync(snapshot, { fresh = false } = {}) {
     if (this.disposed) return
+    if (this.audioChoice == null && snapshot?.audioMuted === true) this.setMuted(true)
     if (snapshot?.running === false) { this.reset(); return }
     const audio = snapshot?.audio
     if (!audio) return

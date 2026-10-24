@@ -106,6 +106,24 @@ test('locked autoplay waits for unlock, errors do not re-fetch every poll', asyn
   assert.match(player.status().error, /offline/)
 })
 
+test('agent-muted sessions stay silent until the sound button, then ignore later mute snapshots', async t => {
+  const { player, starts } = harness(t)
+  player.sync(snap([row()], { audioMuted: true }), { fresh: true })
+  player.unlock()
+  await flush()
+  assert.equal(player.muted, true)
+  assert.equal(player.output.gain.value, 0)
+  assert.equal(starts.length, 1, 'muted voices still track the instance so unmute is not required to consume it')
+  player.toggle()
+  assert.equal(player.audioChoice, 'on')
+  assert.equal(player.muted, false)
+  assert.equal(player.output.gain.value, 1)
+  player.sync(snap([row(2)], { audioMuted: true }))
+  await flush()
+  assert.equal(player.muted, false, 'a user unmute survives polls of an agent-muted session')
+  assert.equal(starts.length, 2)
+})
+
 test('reset fences an in-flight poll so it cannot revive audio after stop', async t => {
   const synced = []
   let release

@@ -14,7 +14,7 @@ const TYPEOF = {
   reference: 'ClientUIReferenceControl',
 }
 
-const BASE_RO = ['alive', 'Id', 'prefabIndex', 'active', 'activeInHierarchy', 'visible']
+const BASE_RO = ['alive', 'id', 'Id', 'prefabIndex', 'active', 'activeInHierarchy', 'visible']
 
 /** Fields whose mutation invalidates the whole layout (anchors/pivot/size/activity). */
 export const DEEP_DIRTY_FIELDS = new Set([
@@ -398,6 +398,7 @@ export class Control {
 
   // The value a Lua read returns; rotation reads are normalised (see readbackEuler).
   luaFieldValue(key) {
+    if (key === 'id') return this.Id
     if (key === 'imageType') return this.imageType ?? 'Stretch'
     const index = ROTATION_FIELDS.indexOf(key)
     if (index < 0) return this[key]

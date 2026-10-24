@@ -9,7 +9,7 @@ import { packRgba, unpackRgba } from './color.js'
 import { buildEnumTree, makeEnumItem, canonicalEnumItem } from './enums.js'
 
 // Control fields the API documents as `integer`; other numeric fields are floats.
-const INTEGER_FIELDS = new Set(['Id', 'prefabIndex', 'imageId', 'fontSize', 'minimumFontSize', 'clickAudioId',
+const INTEGER_FIELDS = new Set(['id', 'Id', 'prefabIndex', 'imageId', 'fontSize', 'minimumFontSize', 'clickAudioId',
   'itemCount', 'itemPrefabIndex', 'animationId', 'referencedPrefabIndex'])
 const COLOR_FIELDS = new Set(['imageColor', 'fontColor', 'bgColor', 'outlineColor'])
 const ENUM_FIELDS = {

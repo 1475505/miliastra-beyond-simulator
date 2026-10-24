@@ -391,8 +391,8 @@ const play = createPlaySession({
   onStatus: (next) => { applyPlayStatus(next); updatePlayChrome() },
   onError: (error) => notify(error.message, true),
   onAudioStatus: status => {
-    elements.playAudio.textContent = !status.unlocked ? t('开启声音') : status.muted ? t('声音已关闭') : t('声音已开启')
-    elements.playAudio.title = status.error || (!status.unlocked ? t('点击或在画布内操作以解锁音效') : t('切换静音'))
+    elements.playAudio.textContent = status.muted ? t('声音已关闭') : !status.unlocked ? t('开启声音') : t('声音已开启')
+    elements.playAudio.title = status.error || (status.muted || status.unlocked ? t('切换静音') : t('点击或在画布内操作以解锁音效'))
   },
   isActive: () => mode === 'play',
 })

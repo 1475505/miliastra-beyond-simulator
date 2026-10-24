@@ -924,6 +924,36 @@ end
   assert.match(text, /changed\tGold\t9/)
 })
 
+test('control id is a read-only integer alias of Id for static and instantiated controls', (t) => {
+  const rt = createRuntime()
+  t.after(() => rt.destroy())
+  const root = rt.addRoot({ active: true, name: 'Root', kind: 'container' })
+  rt.registerTemplate(1, { kind: 'image', name: 'Img' })
+  rt.mountScript({ path: 'control-id', control: root, source: `
+function OnStart()
+  local root = script.object
+  local img = game.InstantiateClientUIControl(1, root)
+  for _, control in ipairs({root, img}) do
+    local id = control.id
+    assert(math.type(id) == 'integer')
+    assert(id == control.Id)
+    assert(game.GetClientUIControl(id).id == id)
+    for _, key in ipairs({'id', 'Id'}) do
+      assert(not pcall(function() control[key] = 99 end))
+    end
+    assert(control.id == id and control.Id == id)
+  end
+  game.DestroyClientUIControl(img)
+  assert(img.alive == false)
+  assert(not pcall(function() return img.id end))
+  assert(not pcall(function() return img.Id end))
+  print('control-id-ok')
+end
+` })
+  assert.match(logText(rt), /control-id-ok/)
+  assert.equal(rt.logs.some((entry) => entry.level === 'lua-error'), false)
+})
+
 test('control userdata is type-closed: unknown fields error on write and are nil on read', () => {
   const rt = createRuntime()
   const root = rt.addRoot({ active: true,  name: 'R', kind: 'container' })
@@ -958,7 +988,7 @@ function OnStart()
   print("script_prefab", script.prefabId)
   print("img_rid", math.type(img.Id))
   print("img_pid", img.prefabIndex)
-  print("img_id", img.id)
+  print("img_id", math.type(img.id))
   print("img_prefab", img.prefabId)
   print("et_old", script.EnableTick)
   print("et_new", script.EnableUpdate ~= nil)
@@ -986,7 +1016,7 @@ end
   assert.match(t, /script_prefab\tnil/)
   assert.match(t, /img_rid\tinteger/)
   assert.match(t, /img_pid\t1/)
-  assert.match(t, /img_id\tnil/)
+  assert.match(t, /img_id\tinteger/)
   assert.match(t, /img_prefab\tnil/)
   assert.match(t, /et_old\tnil/)
   assert.match(t, /et_new\ttrue/)

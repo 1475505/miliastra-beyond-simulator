@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { SimulatorController } from './lib/controller.js'
+import { agentPlayArgs } from 'qxqy-studio/play/audio-policy'
 import { listWorkspaceArchives, resolveWorkspaceRoot } from './lib/workspace.js'
 import { createPreviewClient } from './lib/preview.js'
 import manifest from './package.json' with { type: 'json' }
@@ -88,14 +89,14 @@ const tools = [
   },
   {
     name: 'qxqy_studio_play',
-    description: '控制指定工程的 Lua 试玩 Worker。MCP 默认 manual 时钟，仅显式 step/用例回放推进时间；等待、get 和截图不会自动推进。start 可传 clockMode="realtime" 自动运行。start 后才能输入和 step；stop 回收 Worker。',
+    description: '控制指定工程的 Lua 试玩 Worker。MCP 默认 manual 时钟，仅显式 step/用例回放推进时间；等待、get 和截图不会自动推进。start 可传 clockMode="realtime" 自动运行。start 后才能输入和 step；stop 回收 Worker。工具启动的试玩默认关闭浏览器音效，显式 muteAudio:false 可打开。',
     inputSchema: objectSchema({
       ...handleProperty,
       action: {
         type: 'string',
         enum: ['start', 'device', 'view', 'get', 'step', 'pointer', 'key', 'click', 'pause', 'resume', 'stop', 'serverGet', 'serverSet', 'serverSend', 'history', 'saveCase', 'runCase'],
       },
-      args: { type: 'object', description: '动作参数。pointer 使用 type/x/y；step 使用 dt（秒）；start/device 使用 canvasId 和可选 clockMode="manual"|"realtime"；device 省略模式时保留当前模式，start 省略时恢复 manual；pause/resume 不改变时钟模式；serverSet 使用 entityType/name/value。', additionalProperties: true },
+      args: { type: 'object', description: '动作参数。pointer 使用 type/x/y；step 使用 dt（秒）；start/device 使用 canvasId 和可选 clockMode="manual"|"realtime"；device 省略模式时保留当前模式，start 省略时恢复 manual；pause/resume 不改变时钟模式；start/device 默认 muteAudio:true，传 false 才让浏览器出声；serverSet 使用 entityType/name/value。', additionalProperties: true },
     }, ['handle', 'action']),
   },
   {
@@ -189,7 +190,7 @@ async function callTool(name, args = {}, signal) {
     if (name === 'qxqy_studio_get') return controller.get()
     if (name === 'qxqy_script_sync') return controller.scriptSyncAction(args.action, args.args || {})
     if (name === 'qxqy_studio_patch') return controller.patch(args.op)
-    if (name === 'qxqy_studio_play') return controller.play(args.action, args.args || {}, signal)
+    if (name === 'qxqy_studio_play') return controller.play(args.action, agentPlayArgs(args.action, args.args || {}), signal)
     if (name === 'qxqy_studio_ui_screenshot') return controller.uiScreenshot(signal)
     if (name === 'qxqy_studio_play_screenshot') return controller.playScreenshot(signal)
     if (name === 'qxqy_studio_load') {

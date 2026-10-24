@@ -1,4 +1,5 @@
 import { BrowserAudioPlayer } from './audio-player.js'
+import { browserAudioMutedByDefault } from './audio-policy.js'
 import { keyEventName, mouseKeyEventName } from './key-bindings.js'
 export { keyEventName } from './key-bindings.js'
 
@@ -18,8 +19,9 @@ export function stagePoint(event, rect, width, height) {
  * scene snapshots and sends light-weight input.
  */
 export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError, onAudioStatus, audio,
-  isActive, isInputActive, keyInputEnabled = true } = {}) {
-  audio ||= typeof window !== 'undefined' ? new BrowserAudioPlayer({ onStatus: onAudioStatus }) : null
+  audioMuted, isActive, isInputActive, keyInputEnabled = true } = {}) {
+  const agentMuted = audioMuted ?? (typeof window !== 'undefined' && browserAudioMutedByDefault())
+  audio ||= typeof window !== 'undefined' ? new BrowserAudioPlayer({ onStatus: onAudioStatus, muted: agentMuted }) : null
   if (typeof window !== 'undefined') audio?.bindUnlock(window)
   let generation = 0
   let snapshot = null
@@ -34,19 +36,23 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   let switchingView = false
   const inputDisposers = []
   const keyReleasers = new Set()
-  let keyQueue = Promise.resolve()
+  let inputQueue = Promise.resolve()
 
-  function sendKey(key) {
+  function sendInput(action, args, options) {
     const current = generation
-    // HTTP requests can complete out of order. Keep a quick Down→Up pair in
-    // order, and discard queued input when the Worker/session is replaced.
-    keyQueue = keyQueue.then(() => current === generation && running
-      ? act('key', { key }, { allowInactive: true }) : null)
-    return keyQueue
+    // HTTP requests can arrive out of order. Serialize pointer and key input so
+    // a quick release cannot overtake its press, including flushed drag moves.
+    // Discard queued input when the Worker/session is replaced.
+    inputQueue = inputQueue.then(() => current === generation && running
+      ? act(action, args, options) : null)
+    return inputQueue
   }
 
+  const sendKey = key => sendInput('key', { key }, { allowInactive: true })
+  const sendPointer = args => sendInput('pointer', args)
+
   function releaseKeys(send = true) {
-    return Promise.all([...keyReleasers].map(release => release(send))).then(() => keyQueue)
+    return Promise.all([...keyReleasers].map(release => release(send))).then(() => inputQueue)
   }
 
   function setKeyInputEnabled(enabled) {
@@ -121,7 +127,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   function flushMove() {
     if (!moveTimer) return
     clearMove()
-    void act('pointer', { type: 'move', ...lastMove })
+    void sendPointer({ type: 'move', ...lastMove })
   }
 
   function reset() {
@@ -153,8 +159,16 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     }
   }
 
+  function playbackArgs(args = {}) {
+    if (!audio || args.muteAudio != null) return args
+    if (audio.audioChoice === 'on') return { ...args, muteAudio: false }
+    if (audio.audioChoice === 'off' || audio.muted) return { ...args, muteAudio: true }
+    return args
+  }
+
   async function start(args = {}) {
     reset()
+    args = playbackArgs(args)
     audio?.unlock()
     const current = generation
     sceneRev = 0
@@ -186,6 +200,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
 
   async function device(args = {}) {
     reset()
+    args = playbackArgs(args)
     const current = generation
     sceneRev = 0
     stopPolling()
@@ -263,13 +278,13 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       activePointer = event.pointerId
       surface.setPointerCapture?.(event.pointerId)
       flushMove()
-      void act('pointer', { type: 'down', ...point(event, surface) })
+      void sendPointer({ type: 'down', ...point(event, surface) })
     }
     const onPointerUp = (event) => {
       if (!canInput()) return
       if (activePointer !== event.pointerId) return
       flushMove()
-      void act('pointer', { type: 'up', ...point(event, surface) })
+      void sendPointer({ type: 'up', ...point(event, surface) })
       activePointer = null
     }
     const onPointerMove = (event) => {
@@ -279,20 +294,20 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       if (moveTimer) return
       moveTimer = setTimeout(() => {
         moveTimer = null
-        if (canInput()) void act('pointer', { type: 'move', ...lastMove })
+        if (canInput()) void sendPointer({ type: 'move', ...lastMove })
       }, PLAY_MOVE_THROTTLE_MS)
     }
     const onPointerLeave = () => {
       if (activePointer !== null) return
       clearMove()
-      if (canInput()) void act('pointer', { type: 'move', x: -1, y: -1 })
+      if (canInput()) void sendPointer({ type: 'move', x: -1, y: -1 })
     }
     const onPointerCancel = (event) => {
       if (event.pointerType === 'mouse') { void release('mouse:0'); void release('mouse:2') }
       if (activePointer !== event.pointerId) return
       clearMove()
       activePointer = null
-      if (snapshot && running) void act('pointer', { type: 'cancel', ...point(event, surface) })
+      if (snapshot && running) void sendPointer({ type: 'cancel', ...point(event, surface) })
     }
     const onWheel = (event) => {
       if (!canInput()) return
@@ -302,7 +317,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       // one viewport per page, then convert to logical canvas units.
       const unitX = event.deltaMode === 2 ? rect.width : event.deltaMode === 1 ? 16 : 1
       const unitY = event.deltaMode === 2 ? rect.height : event.deltaMode === 1 ? 16 : 1
-      void act('pointer', { type: 'wheel', ...point(event, surface),
+      void sendPointer({ type: 'wheel', ...point(event, surface),
         deltaX: event.deltaX * unitX * snapshot.canvasWidth / rect.width,
         deltaY: event.deltaY * unitY * snapshot.canvasHeight / rect.height })
     }

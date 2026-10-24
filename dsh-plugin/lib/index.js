@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, relative } from 'node:path'
 import { SimulatorController as SharedSimulatorController } from 'qxqy-studio/host/controller'
+import { agentPlayArgs } from 'qxqy-studio/play/audio-policy'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { listWorkspaceArchives, resolveWorkspaceArchive } from './workspace-archives.js'
 import { serveImageAsset } from 'qxqy-studio/host/image-assets'
@@ -431,7 +432,7 @@ function registerTools(ctx, registry) {
 
   ctx.tools.register(defineTool({
     name: 'qxqy_studio_play',
-    description: '控制当前会话的千星 UI 试玩 Worker：启动、步进、输入、暂停、停止、多设备画布切换、多人视角、服务端变量/信号，以及录制回放用例。',
+    description: '控制当前会话的千星 UI 试玩 Worker：启动、步进、输入、暂停、停止、多设备画布切换、多人视角、服务端变量/信号，以及录制回放用例。工具启动默认关闭浏览器音效；用户可在试玩页打开，或 start/device 传 muteAudio:false。',
     parameters: {
       action: {
         type: 'string',
@@ -450,7 +451,7 @@ function registerTools(ctx, registry) {
     timeoutMs: 10_000,
     isConcurrencySafe: () => false,
     async execute(args, exec) {
-      const playArgs = jsonParam(args.args) || {}
+      const playArgs = agentPlayArgs(args.action, jsonParam(args.args) || {})
       return registry.get(toolSessionId(exec), sessionWorkspace(exec)).play(args.action, playArgs, exec.signal)
     },
   }))

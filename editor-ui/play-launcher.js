@@ -1,4 +1,5 @@
 import { t } from '../studio/i18n.js'
+import { browserAudioMutedByDefault } from '../studio/play/audio-policy.js'
 // Known Desktop pages use the modal directly. Other hosts can try a popup
 // synchronously while the click still has user activation.
 function closePopup(popup) {
@@ -150,6 +151,7 @@ export function createPlayLauncher(React) {
         await prepare()
         if (!scope.active) return
         const url = new URL(playUrl(sessionId), window.location.href)
+        if (browserAudioMutedByDefault()) url.searchParams.set('audio', '0')
         if (popup) {
           try {
             if (popup.closed) throw new Error('Play window closed')

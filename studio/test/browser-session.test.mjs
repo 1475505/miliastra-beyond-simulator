@@ -5,6 +5,25 @@ import { mouseKeyEventName } from '../play/key-bindings.js'
 import { buildEnumTree } from '../../client/lua-runtime/src/enums.js'
 import { createStudio } from '../index.js'
 
+test('a muted browser asks restarted play to stay silent without dropping caller args', async t => {
+  const calls = []
+  const play = createPlaySession({
+    renderer: { async applyScene() {} },
+    audio: { muted: true, audioChoice: null, sync() {}, reset() {}, unlock() {}, destroy() {} },
+    api: async (action, args) => { calls.push({ action, args }); return { running: true, frame: 1, time: 0 } },
+  })
+  t.after(() => play.destroy())
+  await play.start({ canvasId: 'mobile-16-9' })
+  await play.device({ canvasId: 'pc-16-9' })
+  assert.equal(calls[0].args.muteAudio, true)
+  assert.equal(calls[0].args.canvasId, 'mobile-16-9')
+  assert.equal(calls[1].args.muteAudio, true)
+  play.audio.audioChoice = 'on'
+  play.audio.muted = false
+  await play.start()
+  assert.equal(calls[2].args.muteAudio, false)
+})
+
 test('reloading a browser attaches to the existing paused game without a start or player change', async t => {
   const calls = [], rendered = []
   const snapshot = { running: true, paused: true, frame: 1254, time: 41.8,
@@ -187,6 +206,7 @@ end` })
   surface.handlers.mousedown(pointer)
   surface.handlers.pointerup(pointer)
   doc.handlers.mouseup(pointer)
+  await wait(0)
   assert.ok(calls.includes('pointer'), 'turning keys off must not disable cursor input')
   assert.deepEqual(events, [])
   play.setKeyInputEnabled(true)
@@ -260,7 +280,7 @@ test('slow key delivery cannot reorder Down/Up or replay queued keys into a rest
 const CURSOR_EVENTS = ['CursorDown', 'CursorUp', 'CursorClick', 'CursorBeginDrag', 'CursorDrag', 'CursorEndDrag']
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function bindStudioPlay(t) {
+async function bindStudioPlay(t, { beforePointer } = {}) {
   const studio = createStudio()
   studio.patch({ op: 'addScript', controlId: 'n1', controlAsset: 'server-control-template', path: 'main', source: `
 function OnStart()
@@ -278,6 +298,7 @@ end` })
       if (action === 'get') return studio.playGet(args)
       if (action === 'stop') return studio.playStop()
       if (action === 'pointer') {
+        await beforePointer?.(args)
         pointers.push(args)
         return studio.playPointer(args.type, args.x, args.y, { observe: false })
       }
@@ -324,6 +345,51 @@ test('browser clicks still click and throttled moves coalesce without stale repl
   assert.deepEqual(cursorLogs(), ['CursorDown', 'CursorUp', 'CursorClick', 'CursorDown', 'CursorUp', 'CursorClick'])
 })
 
+test('a delayed pointer request cannot deliver release before press or lose a real click', async t => {
+  let finishDown
+  const started = []
+  const { fire, pointers, cursorLogs } = await bindStudioPlay(t, { beforePointer: async args => {
+    started.push(args.type)
+    if (args.type === 'down') await new Promise(resolve => { finishDown = resolve })
+  } })
+  t.after(() => finishDown?.())
+  fire('pointerdown', 800, 450)
+  fire('pointermove', 802, 450)
+  fire('pointerup', 802, 450)
+  await wait(0)
+  assert.deepEqual(started, ['down'], 'the browser must wait for press delivery before sending move/release')
+  assert.deepEqual(cursorLogs(), [])
+  finishDown()
+  await wait(0)
+  assert.deepEqual(pointers.map(p => p.type), ['down', 'move', 'up'])
+  assert.deepEqual(cursorLogs(), ['CursorDown', 'CursorUp', 'CursorClick'])
+})
+
+test('queued pointer cancellation follows press and old input cannot enter a restarted Worker', async t => {
+  let finishDown
+  const { play, fire, pointers, cursorLogs } = await bindStudioPlay(t, { beforePointer: async args => {
+    if (args.type === 'down') await new Promise(resolve => { finishDown = resolve })
+  } })
+  t.after(() => finishDown?.())
+  fire('pointerdown', 800, 450)
+  fire('pointercancel', 800, 450)
+  fire('pointerup', 800, 450)
+  await wait(0)
+  assert.deepEqual(pointers, [])
+  finishDown()
+  await wait(0)
+  assert.deepEqual(pointers.map(p => p.type), ['down', 'cancel'])
+  assert.deepEqual(cursorLogs(), ['CursorDown', 'CursorUp'])
+  pointers.length = 0
+  fire('pointerdown', 800, 450)
+  fire('pointerup', 800, 450)
+  await wait(0)
+  play.reset()
+  finishDown()
+  await wait(0)
+  assert.deepEqual(pointers.map(p => p.type), ['down'], 'queued release belongs to the old generation')
+})
+
 test('pending browser moves are dropped when the play session resets', async t => {
   const { play, pointers, fire } = await bindStudioPlay(t)
   fire('pointermove', 810, 450)
@@ -351,6 +417,7 @@ test('wheel pixels/lines/pages scale into canvas units and cancellation ignores 
   const dispose = play.bindInput(surface)
   let prevented = 0
   for (const deltaMode of [0, 1, 2]) handlers.wheel({ clientX: 410, clientY: 275, deltaMode, deltaX: 1, deltaY: 2, preventDefault() { prevented++ } })
+  await wait(0)
   const wheels = calls.filter(c => c.args?.type === 'wheel').map(c => c.args)
   assert.deepEqual(wheels.map(c => [c.x, c.y, c.deltaX, c.deltaY]), [[800, 450, 2, 4], [800, 450, 32, 64], [800, 450, 1600, 1800]])
   assert.equal(prevented, 3)

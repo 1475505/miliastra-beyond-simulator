@@ -6,6 +6,7 @@ let ticking = false
 let lastTick = 0
 let accumulator = 0
 let clockMode = 'realtime'
+let audioMuted = false
 
 // Web/DSH use the 30 FPS wall clock. MCP defaults to manual: only explicit
 // step / case replay advances Lua, including between observation requests.
@@ -75,6 +76,7 @@ function run(action, args = {}) {
     if (studio) studio.playStop()
     studio = createStudio(args.archive || args.project, { workspacePath: args.workspacePath || '' })
     clockMode = requestedMode
+    audioMuted = args.muteAudio === true
     lastTick = 0
     accumulator = 0
     return studio.playStart(startOptions(args))
@@ -143,7 +145,7 @@ parentPort.on('message', (message) => {
   try {
     const value = run(action, args)
     // Include the clock on all play snapshots, including light/input responses.
-    const result = typeof value?.running === 'boolean' ? { ...value, clockMode } : value
+    const result = typeof value?.running === 'boolean' ? { ...value, clockMode, audioMuted } : value
     parentPort.postMessage({ id, ok: true, value: result, error: null })
   } catch (error) {
     parentPort.postMessage({ id, ok: false, value: null, error: error?.message || String(error) })

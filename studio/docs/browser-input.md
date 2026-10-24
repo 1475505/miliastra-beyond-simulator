@@ -28,7 +28,7 @@ Web 预览、Web 编辑器试玩及 DSH 共用试玩页提供「键位响应：�
 - 字母按实际输入的 ASCII 字母解释，兼容 Colemak/Dvorak；未支持的字母（如 C/B/N）不会回落成另一个物理键。数字、标点、左右修饰键按 `KeyboardEvent.code` 区分。组合输入期间不转发。
 - 仅试玩输入页面接收；输入框、文本域、下拉框、可编辑内容及工具栏控件保留浏览器交互，日志页不驱动游戏。Web 预览需要先聚焦画布。
 - 按住产生一次 Down，释放使用按下时记录的绑定；浏览器自动重复不生成额外 Down。关闭开关、失焦、页面隐藏、切换玩家和解绑时释放已按键，避免 Lua 留在按住状态。重建/停止 Worker 时丢弃旧输入。
-- Key 请求顺序发送，防止快速 Down/Up 的 HTTP 请求乱序。物理鼠标左右键同时映射攻击/冲刺；触屏合成的鼠标事件不映射。只有开启响应时才在画布上屏蔽右键菜单。
+- Pointer 与 Key 请求共用顺序队列，防止快速 Down/Up、补发 Move、Cancel 的 HTTP 请求乱序。物理鼠标左右键同时映射攻击/冲刺；触屏合成的鼠标事件不映射。只有开启响应时才在画布上屏蔽右键菜单。
 - 只对已接收的键阻止浏览器默认操作；操作系统或浏览器保留、未投递到页面的快捷键无法由模拟器接管。
 
 以上是模拟器宿主策略（`device_status=not_required`），不是新增官方输入时序契约。
@@ -42,3 +42,13 @@ Web 预览、Web 编辑器试玩及 DSH 共用试玩页提供「键位响应：�
 源码更新后重建 Web/DSH 并重启宿主，刷新已打开页面。模拟器测试不证明上述默认表与任意真机版本或用户改键一致。
 
 2026-10-18，Windows / Node.js 22.23.2 / Edge headless + SwiftShader：在 #12 与 `a74a873` 的独立整合工作树中，冻结锁文件安装、Web/DSH 构建、根 `pnpm test` 通过（353 pass、10 环境相关 skip、0 fail）；键位、字体与既有内嵌试玩浏览器验证 4/4。键位用例覆盖 1280px 工具栏开关/返回按钮可见。合并时将 #12 的 CJK 回退接入 #20 共用字体栈；扫描预算每次调用只读取一次，拒绝非正整数并补恢复环境的边界测试。`evidence_source=observed`、运行端 `simulator`、`device_status=not_required`。
+
+## 指针请求乱序（2026-10-24）
+
+WOO「播放花神诞祭」实际浏览器点击中，DOM 先发 pointerdown、后发 pointerup，位置都在可见命中区内；Worker history 却记录同一时刻 `up → down`，未产生 settle。旧浏览器代码对指针使用并发 `void act`，仅 Key 排队；`flushMove` 只保证调用顺序，无法保证 HTTP 到达顺序。直接串行调用 pointer API 或模拟点击曾成功，因此这类测试不能排除真实浏览器输入故障。本次复现没有层级遮挡证据。
+
+修复在共享 `play/browser-session.js`：Pointer/Key 统一排队；按下前和松开前的节流 Move、滚轮和 Cancel 都保持事件顺序；替换会话时通过 generation 丢弃旧队列。Lua 点击逻辑、按钮层级和拖动阈值沿用。更新 Web/DSH 构建后需刷新试玩页，让新模块生效。
+
+独立回归依据是实际 DOM/HTTP/Worker 时序及用户期望的按下→松开点击。`test/browser-session.test.mjs` 新增延迟 Down、微移、取消和重启队列用例，旧版两例失败，修复后全部11例通过。冻结锁文件安装、Web/DSH构建、根 `pnpm test`：405 pass、15环境相关skip、0 fail；另运行真实Edge键位、鼠标拖动、滚轮、触摸回归3/3通过。
+
+原始记录：完整工作区 `probes/browser-pointer-order-20261024/input-before.json`（含用户历史、DOM isTrusted、请求时间、Worker history），`input-fixed-user.json`为同一内置浏览器刷新后的可信点击，down/up有序且一次触发播放。WOO专项验收位于 `workspace/woo/records/simulator/finale-eyes-input-20261024/verification/`：真实Edge在实际canvas上走通30关、庆生及两次重播31项检查，包含延迟Down160ms、微移、长按和拖出取消。Windows / Node.js 22.23.2，`evidence_source=observed`、运行端`simulator`、`device_status=not_required`（仅此模拟器传输缺陷）。用户更早两次点击落在其他位置，缺当时DOM坐标，不能归为同一个已证实原因，也不能据此认定用户点错；本条不增加真机事件顺序结论。
