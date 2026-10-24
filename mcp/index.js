@@ -55,6 +55,19 @@ const handleProperty = {
 
 const tools = [
   {
+    name: 'qxqy_studio_export',
+    description: '导出 GIA/JSON/Lua。list 列出客户端控件与 revision；preview 传 controlIds 预览子树；export 默认 gia-partial，以 controlIds 勾选部分组合。父子同时选自动去重，子控件在副本中提升为独立模板，原存档不变。includeScripts 默认 true（包含挂载脚本和未挂载模块）。支持原有 gia/gia-combined/save 等 format。可选 path 写入工作区新文件，不覆盖已有文件；省略则返回 base64。',
+    inputSchema: objectSchema({ ...handleProperty,
+      action: { type: 'string', enum: ['list', 'preview', 'export'] },
+      args: { type: 'object', properties: {
+        format: { type: 'string' }, assetType: { type: 'string' },
+        controlIds: { type: 'array', items: { type: 'string' }, minItems: 1 },
+        includeScripts: { type: 'boolean' }, expectedRevision: { type: 'integer' },
+        canvasId: { type: 'string' }, path: { type: 'string' },
+      }, additionalProperties: false },
+    }, ['handle', 'action']),
+  },
+  {
     name: 'qxqy_script_sync',
     description: '实机 Lua 脚本目录同步：discover/status/configure/save/preview/apply。configure 需要 config(version:1, workspaceDir, clientImportRoot, clientSubdir) 与 expectedRevision；save 需要 expectedRevision，首次保存另传工作区相对 path。用户授权更新后，先保存完整存档，再 preview 核对来源与目标，最后 apply 传 planId、选定 scriptIds 和 confirmed:true。计划仅在当前 handle 有效，过期需重新预览；返回逐文件结果与备份位置，不代表真机试玩通过。',
     inputSchema: objectSchema({ ...handleProperty, action: { type: 'string', enum: ['discover', 'status', 'configure', 'save', 'preview', 'apply'] }, args: { type: 'object', additionalProperties: true } }, ['handle', 'action']),
@@ -188,6 +201,7 @@ async function callTool(name, args = {}, signal) {
       preview: { status: 'not-requested', message: 'Saved to disk. Call qxqy_preview_open with the returned path to switch or confirm the Web preview.' },
     }
     if (name === 'qxqy_studio_get') return controller.get()
+    if (name === 'qxqy_studio_export') return controller.exportAction(args.action, args.args || {})
     if (name === 'qxqy_script_sync') return controller.scriptSyncAction(args.action, args.args || {})
     if (name === 'qxqy_studio_patch') return controller.patch(args.op)
     if (name === 'qxqy_studio_play') return controller.play(args.action, agentPlayArgs(args.action, args.args || {}), signal)

@@ -635,7 +635,9 @@ export function exportGia(project, options = {}) {
   const isClientTemplates = project.meta?.assetType === 'client-control-template'
   let rootObject
   if (isClientTemplates) {
-    rootObject = buildClientTemplateRootObject(project, guidById, warnings, undefined, options.scripts || [])
+    const extra = options.includeScriptMappings ? scriptGraphUnits(options.scripts || [], new Set(guidById.values())) : null
+    rootObject = buildClientTemplateRootObject(project, guidById, warnings, undefined, extra?.scripts || options.scripts || [])
+    if (extra) rootObject.accessories.push(...extra.units)
   } else {
     const extra = scriptGraphUnits(options.scripts || [], new Set(guidById.values()))
     warnings.push(...extra.warnings)

@@ -14,6 +14,8 @@
 
 浏览器试玩的官方键鼠映射、响应开关与按键释放策略见 [键位响应](docs/browser-input.md)。
 
+客户端控件支持属性栏单项 GIA 与顶栏「部分组合导出」勾选预览；MCP/DSH 使用 `qxqy_studio_export`。子树提升、脚本依赖及共用协议见 [部分导出](docs/partial-export.md)。
+
 客户端 GIA 的 wire 层序与编辑器列表相反。2026-10-12 已修复独立/整合导出和客户端导入，并保留旧资产编号迁移的原GUID→index对应；证据、自包含方向回归及与 `7d20283` 的关系见 [客户端模板层序](docs/client-template-order.md)。
 
 ```sh

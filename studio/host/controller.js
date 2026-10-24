@@ -66,6 +66,28 @@ export class SimulatorController {
     return { ...this.studio.get(), storage: { path: this.archivePath } }
   }
 
+  exportData(format, assetType, options = {}) {
+    return this.studio.exportData(format, assetType, options)
+  }
+
+  exportAction(action, args = {}) {
+    if (action === 'list') return this.studio.exportChoices()
+    if (action === 'preview') return this.studio.exportPreview(args)
+    if (action !== 'export') throw new Error(`unknown export action: ${action}`)
+    const result = this.exportData(args.format || 'gia-partial', args.assetType || '', args)
+    if (!args.path) return result
+    if (!this.activeWorkspacePath()) throw new Error('workspace is not bound')
+    if (result.files) throw new Error('path requires a single-file export format')
+    const absolute = resolveWorkspaceOutput(this.activeWorkspacePath(), args.path)
+    mkdirSync(dirname(absolute), { recursive: true })
+    // Explicit file output only. Never overwrite a save, source or previous
+    // export by accident; agents can choose a new output name.
+    const data = Buffer.from(result.data, 'base64')
+    writeFileSync(absolute, data, { flag: 'wx' })
+    const { data: _data, ...metadata } = result
+    return { ...metadata, path: String(args.path).replaceAll('\\', '/'), bytes: data.length }
+  }
+
   scriptSyncAction(action, args = {}) {
     if (action === 'discover') return discoverScriptDirectories()
     if (action === 'status') return { config: this.get().scriptSync, lastResult: this.scriptSync.lastResult }

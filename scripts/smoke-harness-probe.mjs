@@ -62,7 +62,7 @@ export function apply(ctx, config) {
         assert.match(await readFile(join(skill.resourceBase.path, 'references/workflow.md'), 'utf8'), /PREFLIGHT/)
       } finally { await lease[Symbol.asyncDispose]() }
       assert.ok(await ctx.skills.get('qxqy-simulator'))
-      assert.equal(ctx.tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 7)
+      assert.equal(ctx.tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 8)
       const before = (await call('qxqy_studio_get')).value
       assert.equal(before.workspace.path, config.workspace)
       await call('qxqy_studio_patch', { op: { op: 'set', id: 'n2', key: 'text', value: 'Harness 0.2', expectedRevision: before.version } })
@@ -88,7 +88,7 @@ export function apply(ctx, config) {
         await call('qxqy_studio_play', { action: 'start' })
         await owners[0].restart()
         assert.deepEqual(await readLanguage(), language, 'locale route survives plugin restart')
-        assert.equal(ctx.tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 7)
+        assert.equal(ctx.tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 8)
         const beforeRestartEdit = (await call('qxqy_studio_get')).value
         await call('qxqy_studio_patch', { op: { op: 'renameSave', name: `restart-${cycle}`, expectedRevision: beforeRestartEdit.version } })
         const reloaded = await (await fetch(`${url}/qxqy-simulator/api/get`, {

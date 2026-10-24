@@ -151,6 +151,7 @@ test('MCP handshake exposes simulator tools and supports an edit/save round trip
     const listed = await server.request('tools/list')
     const names = listed.result.tools.map((tool) => tool.name)
     assert.deepEqual(names, [
+      'qxqy_studio_export',
       'qxqy_script_sync',
       'qxqy_project_open', 'qxqy_project_save', 'qxqy_studio_get', 'qxqy_studio_patch',
       'qxqy_studio_play', 'qxqy_studio_ui_screenshot', 'qxqy_studio_play_screenshot', 'qxqy_studio_load',
@@ -316,6 +317,29 @@ async function waitForFrames(play, previous) {
   }
   assert.fail('realtime clock did not advance')
 }
+
+test('MCP export lists/previews client controls and writes selected GIA without overwriting files', async t => {
+  const { call, raw, handle, workspace } = await clockFixture(t)
+  const before = await call('qxqy_studio_get', { handle })
+  const list = await call('qxqy_studio_export', { handle, action: 'list' })
+  const id = list.rows[0].id
+  const args = { controlIds: [id], expectedRevision: list.revision }
+  const preview = await call('qxqy_studio_export', { handle, action: 'preview', args })
+  assert.equal(preview.snapshot.asset.type, 'client-control-template')
+  assert.equal(preview.snapshot.selectedId, id)
+  const exported = await call('qxqy_studio_export', { handle, action: 'export', args: { ...args, path: 'exports/selected.gia' } })
+  assert.equal(exported.selection.templateCount, 1)
+  const bytes = readFileSync(join(workspace, exported.path))
+  assert.equal(bytes.length, exported.bytes)
+  const duplicate = await raw('qxqy_studio_export', { handle, action: 'export', args: { ...args, path: exported.path } })
+  assert.equal(duplicate.isError, true)
+  assert.deepEqual(readFileSync(join(workspace, exported.path)), bytes)
+  const outside = await raw('qxqy_studio_export', { handle, action: 'export', args: { ...args, path: '../outside.gia' } })
+  assert.equal(outside.isError, true)
+  const base64 = await call('qxqy_studio_export', { handle, action: 'export', args })
+  assert.equal(base64.encoding, 'base64')
+  assert.deepEqual(await call('qxqy_studio_get', { handle }), before)
+})
 
 test('MCP realtime is opt-in, pauses correctly and preserves mode on device changes (#5)', { timeout: 15000 }, async t => {
   const { raw, handle, play } = await clockFixture(t)

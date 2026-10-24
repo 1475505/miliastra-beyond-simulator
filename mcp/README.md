@@ -64,6 +64,7 @@ npm install -g beyond-simulator-mcp
 
 - `qxqy_project_open` / `qxqy_project_save`
 - `qxqy_studio_get` / `qxqy_studio_patch`
+- `qxqy_studio_export`
 - `qxqy_studio_play`
 - `qxqy_studio_ui_screenshot` / `qxqy_studio_play_screenshot`
 - `qxqy_studio_load`
@@ -125,6 +126,18 @@ Web 的 `/` 预览页会监听磁盘：启动时还没有存档，会在 Codex �
 保存返回的 `preview.status: "not-requested"` 只表示此次调用没有请求 Web 确认；保存本身不访问网络，Web 未启动也能成功。需要确认页面对应内容时，在保存后使用返回路径调用 `qxqy_preview_open`。预览工具支持取消，整个请求默认 4 秒超时；连接、认证、旧版 API 和工作区不一致均返回明确错误。打开超时后可调用 `qxqy_preview_status` 检查实际状态，避免将超时误认为服务端必定未加载。
 
 ## 工具边界
+
+### 单项 / 部分组合导出
+
+```text
+qxqy_studio_export({ handle: "project-1", action: "list" })
+qxqy_studio_export({ handle: "project-1", action: "preview", args: { controlIds: ["n1"], expectedRevision: N } })
+qxqy_studio_export({ handle: "project-1", action: "export", args: {
+  controlIds: ["n1", "n4"], expectedRevision: N, includeScripts: true, path: "exports/selected.gia"
+} })
+```
+
+`N` 使用 list 返回的客户端 revision；controlIds 用该列表的 Authoring id。默认导出一个部分组合 GIA，保留完整子树、去重父子选择；子控件只在副本中提升为模板。默认包含子树挂载脚本及未挂载模块。path 省略返回 base64；指定时写入工作区内新文件，不覆盖已有文件，不保存工程。也可用 format/assetType 调用原有全量导出。预览为布局快照，不执行 Lua。依赖提示、子控件局部布局及真机验证边界见 [部分导出](../studio/docs/partial-export.md)。
 
 ### 实机脚本复制同步
 

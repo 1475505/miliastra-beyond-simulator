@@ -62,7 +62,7 @@ qxqy_studio_play { "action": "view",  "args": { "playerIndex": 2 } }     ← 切
 
 ### 4. 导出与引导 GIA 尝试
 
-导出由用户在顶栏"导出"完成，格式选择：
+用户可在顶栏"导出"操作；AI 也可调用 `qxqy_studio_export`。`list` 列出客户端控件及 revision；`preview` / `export` 的 args 传 `controlIds`（Authoring id）、`expectedRevision`、可选 `includeScripts`（默认 true）。export 默认部分组合 GIA；可选 path 写入工作区新文件、不覆盖，省略返回 base64，也支持原有 format/assetType。完整协议与子树/脚本依赖边界见 `studio/docs/partial-export.md`。格式选择：
 
 | 需求 | 选什么 |
 |---|---|
@@ -171,6 +171,7 @@ qxqy_studio_play { "action": "serverSend", "args": { "target": "PlayerSelf", "na
 |---|---|---|
 | `qxqy_studio_get` | 读工程无损 JSON 快照 | 无参数；严格 JSON |
 | `qxqy_studio_patch` | 编辑工程，参数 `{ "op": { ... } }` | 带 `expectedRevision`；成功后 revision +1 |
+| `qxqy_studio_export` | 单项 / 部分组合 / 原有格式导出 | list → preview → export；controlIds 是客户端 Authoring id，父子去重，path 不覆盖 |
 | `qxqy_studio_ui_screenshot` | 获取编辑器舞台 PNG | Host 根据 boxes 渲染；不需要打开模拟器标签；不含完整 DOM 工具栏 |
 | `qxqy_studio_play_screenshot` | 获取当前试玩 Runtime PNG | Host 根据 paint 渲染；需要已 start，不需要打开试玩页；不推进 Runtime |
 | `qxqy_studio_load` | 从会话工作区列出/拉取存档 | 不传 `path` 列出；传相对路径加载 |

@@ -35,7 +35,7 @@ pnpm test:git-install
 pnpm test:harness
 ```
 
-Host Tools：`qxqy_script_sync`、`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_play`、`qxqy_studio_ui_screenshot`、`qxqy_studio_play_screenshot`、`qxqy_studio_load`。截图由 Host 在进程内根据 `boxes` / `paint` 渲染 PNG，不需要打开模拟器标签或试玩页。
+Host Tools：`qxqy_script_sync`、`qxqy_studio_get`、`qxqy_studio_patch`、`qxqy_studio_export`、`qxqy_studio_play`、`qxqy_studio_ui_screenshot`、`qxqy_studio_play_screenshot`、`qxqy_studio_load`。截图由 Host 在进程内根据 `boxes` / `paint` 渲染 PNG，不需要打开模拟器标签或试玩页。客户端属性栏单项导出和顶栏勾选预览与 AI 共用同一导出协议，见 [部分导出](../studio/docs/partial-export.md)。
 
 `qxqy_script_sync` 支持目录配置、保存、差异预览和复制。用户授权更新后，AI 可通过 `save → preview → apply` 完成同步并取得文件回执与备份位置。参数与流程见 [脚本同步接口](../studio/docs/script-sync.md#ai-更新接口)。
 

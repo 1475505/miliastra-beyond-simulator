@@ -47,9 +47,9 @@ export class SimulatorController extends SharedSimulatorController {
     return super.patch(jsonParam(op))
   }
 
-  exportData(format, assetType) {
+  exportData(format, assetType, options = {}) {
     this.touch()
-    return this.studio.exportData(format, assetType)
+    return super.exportData(format, assetType, options)
   }
 
   importData(format, data, filename) {
@@ -431,6 +431,22 @@ function registerTools(ctx, registry) {
   }))
 
   ctx.tools.register(defineTool({
+    name: 'qxqy_studio_export',
+    description: '导出 GIA/JSON/Lua。list 列出客户端控件与 revision；preview 传 controlIds 预览子树；export 默认 gia-partial（部分组合）。父子同时选自动去重，子控件只在副本中提升为模板。includeScripts 默认 true（挂载脚本和未挂载模块）。支持原有 format/assetType；path 可选，写入工作区新文件，不覆盖；省略返回 base64。',
+    parameters: {
+      action: { type: 'string', enum: ['list', 'preview', 'export'], required: true },
+      args: { type: 'json', description: 'controlIds（客户端控件 id 数组）、includeScripts、expectedRevision（list 返回的客户端 revision）、canvasId、format、assetType、path。' },
+    },
+    output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }] },
+    timeoutMs: 10_000,
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      const controller = registry.get(toolSessionId(exec), sessionWorkspace(exec))
+      return controller.exclusive(() => controller.exportAction(args.action, jsonParam(args.args) || {}))
+    },
+  }))
+
+  ctx.tools.register(defineTool({
     name: 'qxqy_studio_play',
     description: '控制当前会话的千星 UI 试玩 Worker：启动、步进、输入、暂停、停止、多设备画布切换、多人视角、服务端变量/信号，以及录制回放用例。工具启动默认关闭浏览器音效；用户可在试玩页打开，或 start/device 传 muteAudio:false。',
     parameters: {
@@ -508,7 +524,9 @@ function registerApi(ctx, registry, checkUpdates) {
         if (action === 'updates') value = await checkUpdates()
         else if (action === 'get') value = controller.get()
         else if (action === 'patch') value = controller.patch(body.op)
-        else if (action === 'export') value = controller.exportData(body.format, body.assetType)
+        else if (action === 'export-list') value = controller.exportAction('list')
+        else if (action === 'export-preview') value = controller.exportAction('preview', body)
+        else if (action === 'export') value = controller.exportData(body.format, body.assetType, body)
         else if (action === 'import') value = controller.importData(body.format, body.data, body.filename)
         else if (action === 'archives') value = controller.listArchives()
         else if (action === 'load-archive') value = controller.loadArchive(body.path)

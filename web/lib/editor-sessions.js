@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { SimulatorController } from 'qxqy-studio/host/controller'
 import { resolveWorkspaceFile, resolveWorkspaceOutput } from 'qxqy-studio/host/workspace'
 
-const ACTIONS = new Set(['get', 'patch', 'import', 'export', 'archives', 'load-archive', 'save', 'play', 'script-sync', 'script-sync-apply', 'image-refresh'])
+const ACTIONS = new Set(['get', 'patch', 'import', 'export', 'export-list', 'export-preview', 'archives', 'load-archive', 'save', 'play', 'script-sync', 'script-sync-apply', 'image-refresh'])
 const stamp = path => createHash('sha256').update(readFileSync(path)).digest('hex')
 
 // One trusted operator, with independent editor tabs and their play windows.
@@ -58,7 +58,9 @@ export class EditorSessions {
         if (!Number.isInteger(body.op?.expectedRevision)) throw new Error('expectedRevision is required')
         return { ...controller.patch(body.op), storage: { path: row.path } }
       }
-      if (action === 'export') return controller.studio.exportData(body.format, body.assetType)
+      if (action === 'export-list') return controller.exportAction('list')
+      if (action === 'export-preview') return controller.exportAction('preview', body)
+      if (action === 'export') return controller.exportData(body.format, body.assetType, body)
       if (action === 'play') return controller.play(body.action, body.args || {}, signal)
       if (action === 'load-archive' || action === 'import') {
         await controller.play('stop')

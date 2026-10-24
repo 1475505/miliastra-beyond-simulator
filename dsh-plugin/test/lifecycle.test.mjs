@@ -79,9 +79,15 @@ test('one plugin can restart repeatedly without leaking routes or splitting HTTP
   const owner = await app.ctx.plugin(plugin)
   for (let cycle = 0; cycle < 3; cycle++) {
     assert.deepEqual([...app.routes.keys()], routeKeys)
-    assert.equal(app.tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 7)
+    assert.equal(app.tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 8)
     const before = await app.post('get')
     assert.equal(before.save.name, '未命名存档')
+    const choices = await app.call('qxqy_studio_export', { action: 'list' })
+    const args = { controlIds: [choices.rows[0].id], expectedRevision: choices.revision }
+    const preview = await app.post('export-preview', args)
+    assert.equal(preview.selection.templateCount, 1)
+    const exported = await app.call('qxqy_studio_export', { action: 'export', args })
+    assert.equal(exported.selection.templateCount, 1)
     await app.call('qxqy_studio_patch', { op: { op: 'renameSave', name: `cycle-${cycle}` } })
     assert.equal((await app.post('get')).save.name, `cycle-${cycle}`)
     await app.post('patch', { op: { op: 'renameSave', name: `http-${cycle}` } })

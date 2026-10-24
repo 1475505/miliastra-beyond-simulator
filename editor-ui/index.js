@@ -12,6 +12,7 @@ import { refreshBrowserImage } from '../studio/assets/browser.js'
 import { loadBrowserFont } from '../studio/play/browser-font.js'
 import { createFontSettings } from './font-settings.js'
 import { createFooter } from './footer.js'
+import { createPartialExportDialog, PARTIAL_EXPORT_CSS } from './partial-export.js'
 import { t, createUseLocale, getLanguagePreference, setLanguagePreference, getSystemLanguage } from '../studio/i18n.js'
 
 export function createEditor(React, { api, playUrl, saveToWorkspace = false, version = '' }) {
@@ -26,10 +27,11 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
     const ColorField = createColorField(React)
     const FontSettings = createFontSettings(React)
     const Footer = createFooter(React)
+    const PartialExportDialog = createPartialExportDialog(React)
     const useLocale = createUseLocale(React)
 
     const STYLE_ID = 'qxqy-simulator-style'
-    const CSS = `
+    const CSS = PARTIAL_EXPORT_CSS + `
 .qxsim-save-overlay{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:#0006}.qxsim-save-dialog{width:min(440px,90%);padding:24px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 12px 48px #0005}.qxsim-save-dialog h2{margin:0 0 16px;font-size:17px}.qxsim-save-dialog input{width:100%;margin:8px 0 16px;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--input)}.qxsim-save-dialog footer{display:flex;justify-content:flex-end;gap:8px}.qxsim-save-dialog [role=alert]{color:var(--danger);margin-bottom:12px;overflow-wrap:anywhere}
 .qxsim-play-overlay{position:fixed;inset:0;width:100%;height:100%;max-width:none;max-height:none;margin:0;padding:0;border:0;background:var(--bg);color:var(--text)}.qxsim-play-overlay[open]{display:flex;flex-direction:column}.qxsim-play-overlay::backdrop{background:#0008}.qxsim-play-header{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:12px;padding:4px 12px;border-bottom:1px solid var(--line);background:var(--panel)}.qxsim-play-overlay iframe{display:block;flex:1;width:100%;min-height:0;border:0;background:var(--bg)}.qxsim-play-error{padding:8px 12px;color:var(--danger);overflow-wrap:anywhere}html[data-windows-titlebar] .qxsim-play-overlay{top:40px;height:calc(100% - 40px)}
 .qxsim-footer{display:flex;align-items:center;gap:12px;flex-shrink:0;min-height:32px;padding:4px 10px;border-top:1px solid var(--line);background:var(--panel);font-size:11px}.qxsim-footer .spacer{flex:1}.qxsim-footer button{border:0;background:transparent;color:var(--muted);font:inherit;cursor:pointer}.qxsim-footer a,.qxsim-modal a{color:var(--blue);text-decoration:none}.qxsim-footer button:hover,.qxsim-footer a:hover{color:var(--blue);text-decoration:underline}.qxsim-modal{width:min(620px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:24px;background:var(--panel);color:var(--text);font:inherit;box-shadow:0 16px 60px #0006}.qxsim-modal::backdrop{background:#0008}.qxsim-modal h2{margin:0 0 16px;font-size:17px}.qxsim-modal p{overflow-wrap:anywhere;line-height:1.6}.qxsim-modal footer{display:flex;justify-content:flex-end;margin-top:20px}
@@ -534,6 +536,22 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       return e('div', { key: item.id, 'data-control-id': item.id, className: `qxsim-box ${kind}${item.instantiated ? ' dynamic' : ''}${item.pressed ? ' pressed' : ''}`, style }, content)
     }
 
+    function ExportPreview({ snapshot, fontFamily }) {
+      const ref = React.useRef(null)
+      const [size, setSize] = React.useState({ width: 560, height: 300 })
+      React.useEffect(() => {
+        const observer = new ResizeObserver(entries => setSize({ width: entries[0].contentRect.width, height: entries[0].contentRect.height }))
+        observer.observe(ref.current)
+        return () => observer.disconnect()
+      }, [])
+      const { width: cw, height: ch } = snapshot.canvas
+      const width = Math.max(1, Math.min(size.width, size.height * cw / ch))
+      const boxes = snapshot.boxes.filter(box => box.kind !== 'server-container' && box.visible && box.visibleInHierarchy !== false)
+      return e('div', { ref, className: 'qxsim-export-canvas' },
+        e('div', { className: 'qxsim-stage', 'data-export-preview-id': snapshot.selectedId, style: { width: `${width}px`, aspectRatio: `${cw}/${ch}` } },
+          e(MaskedControls, { boxes, canvasWidth: cw, canvasHeight: ch, renderControl: item => renderControl(item, snapshot, cw, ch, width / cw, fontFamily) })))
+    }
+
     function SimulatorView({ sessionId }) {
       const locale = useLocale()
       const theme = useHostTheme()
@@ -554,6 +572,8 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       const [refreshingImage, setRefreshingImage] = React.useState(false)
       const [notice, setNotice] = React.useState(''); const fileInputRef = React.useRef(null)
       const [exportWarnings, setExportWarnings] = React.useState([])
+      const [partialExportOpen, setPartialExportOpen] = React.useState(false)
+      React.useEffect(() => setPartialExportOpen(false), [sessionId])
       const [archives, setArchives] = React.useState([])
       const [page, setPage] = React.useState('ui'); const [inspectorTab, setInspectorTab] = React.useState('base')
       const [zoom, setZoom] = React.useState('fit'); const [hiddenCanvasIds, setHiddenCanvasIds] = React.useState({}); const [search, setSearch] = React.useState(''); const [addMode, setAddMode] = React.useState('template')
@@ -728,12 +748,12 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
           : { op: 'add', kind, parentId: childParent(current.root, current.selectedId), name: label }
         void patch(op).then(() => setNotice(isTemplate ? t`已新增${t(label)}模板` : t`已添加${t(label)}子控件`)).catch(() => {})
       }
-      async function exportFile(format, arg = '') {
+      async function exportFile(format, arg = '', options = {}) {
         try {
           await queueRef.current.catch(() => {})
           await saveScriptDraft()
           await saveLogicDraft()
-          const result = await callApi(sessionId, 'export', { format, assetType: arg })
+          const result = await callApi(sessionId, 'export', { format, assetType: arg, ...options })
           setExportWarnings([...new Set([...(result.warnings || []), ...(result.files || []).flatMap(file => file.warnings || [])])])
           if (Array.isArray(result?.files) && result.files.length) {
             for (const file of result.files) downloadBase64(file)
@@ -743,6 +763,14 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
           }
           downloadBase64(result)
           setError(''); setNotice(result.warnings?.length ? t`已导出 ${result.filename}；请查看上方导出说明。` : t`已导出 ${result.filename}`)
+        } catch (reason) { setError(reason?.message || String(reason)); if (format === 'gia-partial') throw reason }
+      }
+      async function openPartialExport() {
+        try {
+          await queueRef.current
+          await saveScriptDraft()
+          await saveLogicDraft()
+          setError(''); setPartialExportOpen(true)
         } catch (reason) { setError(reason?.message || String(reason)) }
       }
       async function loadWorkspaceArchive(path) {
@@ -839,6 +867,11 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       const selectedParentId = selectedRow?.parentId || snap.root.id
       return e('div', { className: 'qxsim', 'data-qxqy-font-ui': '', lang: locale === 'zh' ? 'zh-CN' : 'en', 'data-theme': theme, 'data-qxsim-session-id': sessionId },
         playLauncher.overlay,
+        partialExportOpen ? e(PartialExportDialog, { sessionId, api: callApi,
+          initialId: clientTemplates ? snap.selectedId : '',
+          onClose: () => setPartialExportOpen(false),
+          onExport: options => exportFile('gia-partial', 'client-control-template', options),
+          renderPreview: snapshot => e(ExportPreview, { snapshot, fontFamily }) }) : null,
         fontSettingsOpen ? e(FontSettings, { onClose: () => setFontSettingsOpen(false) }) : null,
         page === 'script' && error ? e('div', { className: 'qxsim-status error', role: 'alert' }, t(error)) : null,
         savePath !== null ? e('div', { className: 'qxsim-save-overlay' },
@@ -861,7 +894,13 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
               e('input', { ref: fileInputRef, hidden: true, type: 'file', accept: '.json,.gia,.lua,application/json,application/octet-stream,text/plain', onChange: (event) => void importFile(event.target.files?.[0]) }),
               e('select', { className: 'qxsim-control zoom', 'aria-label': t('从工作区拉取存档'), defaultValue: '', onFocus: () => void refreshArchives(), onChange: (event) => { const path = event.target.value; event.target.value = ''; if (path) void loadWorkspaceArchive(path) } }, e('option', { value: '', disabled: true }, snap.workspace?.bound ? t('⤓ 工作区存档') : t('工作区未绑定')), ...(archives.length ? archives.map((row) => e('option', { key: row.path, value: row.path }, `${row.name} · ${row.path}`)) : [e('option', { value: '', disabled: true }, snap.workspace?.bound ? t('未发现 qxqy-simulator-save') : t('先绑定会话工作区'))])),
               e('button', { className: 'qxsim-action', title: t('导入存档、单项 UI 资产或 Lua'), onClick: () => fileInputRef.current?.click() }, t('⇧ 导入')),
-              e('select', { className: 'qxsim-control zoom', 'aria-label': t('导出格式'), defaultValue: '', onChange: (event) => { const [format, arg = ''] = event.target.value.split('|'); event.target.value = ''; if (format) void exportFile(format, arg) } }, e('option', { value: '', disabled: true }, t('⇩ 导出')), e('option', { value: 'save' }, t('资产包 JSON（三类合一）')), e('option', { value: 'save-gia' }, t('资产包 GIA（已改动项）')), e('option', { value: 'gia-combined' }, t('资产包 GIA 整合包（控件+脚本）')), e('optgroup', { label: t('当前界面（左栏正在看的那棵树）') }, e('option', { value: 'json' }, t('当前界面 Authoring JSON')), e('option', { value: 'gia' }, t('当前界面 GIA'))), e('optgroup', { label: t('服务器控件模板') }, e('option', { value: 'json|server-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|server-control-template' }, 'GIA')), e('optgroup', { label: t('客户端控件模板（仅当左栏切到「UI控件-客户端」时才是页面内容）') }, e('option', { value: 'json|client-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|client-control-template' }, 'GIA')), e('optgroup', { label: t('Lua 脚本') }, e('option', { value: 'scripts' }, t('脚本包 JSON（全部脚本）')), e('option', { value: 'scripts-gia' }, t('脚本包 GIA（全部脚本）'))))),
+              e('select', { className: 'qxsim-control zoom', 'aria-label': t('导出格式'), defaultValue: '', onChange: (event) => {
+                const [format, arg = ''] = event.target.value.split('|'); event.target.value = ''
+                if (format === 'gia-partial') void openPartialExport()
+                else if (format) void exportFile(format, arg)
+              } }, e('option', { value: '', disabled: true }, t('⇩ 导出')),
+              e('option', { value: 'gia-partial' }, t('部分组合导出')),
+              e('option', { value: 'save' }, t('资产包 JSON（三类合一）')), e('option', { value: 'save-gia' }, t('资产包 GIA（已改动项）')), e('option', { value: 'gia-combined' }, t('资产包 GIA 整合包（控件+脚本）')), e('optgroup', { label: t('当前界面（左栏正在看的那棵树）') }, e('option', { value: 'json' }, t('当前界面 Authoring JSON')), e('option', { value: 'gia' }, t('当前界面 GIA'))), e('optgroup', { label: t('服务器控件模板') }, e('option', { value: 'json|server-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|server-control-template' }, 'GIA')), e('optgroup', { label: t('客户端控件模板（仅当左栏切到「UI控件-客户端」时才是页面内容）') }, e('option', { value: 'json|client-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|client-control-template' }, 'GIA')), e('optgroup', { label: t('Lua 脚本') }, e('option', { value: 'scripts' }, t('脚本包 JSON（全部脚本）')), e('option', { value: 'scripts-gia' }, t('脚本包 GIA（全部脚本）'))))),
             e('button', { className: 'qxsim-action primary', title: t('打开试玩；新窗口不可用时在应用内试玩'), disabled: playLauncher.opening, onClick: startPlay }, playLauncher.opening ? t('正在准备…') : t('▷ 试玩 ↗')),
             e('button', { className: 'qxsim-iconbtn', title: t('重新载入'), onClick: reload }, '↻'))),
         e('nav', { className: 'qxsim-editor-nav', 'aria-label': t('编辑页面') }, e('button', { className: page === 'ui' ? 'active' : '', onClick: () => leavePage('ui') }, t('UI 编辑')), e('button', { className: page === 'script' ? 'active' : '', onClick: () => leavePage('script') }, t('Lua 脚本')), e('button', { className: page === 'logic' ? 'active' : '', onClick: () => leavePage('logic') }, t('服务端逻辑')), e('span', { className: 'save-summary' }, t('一个存档 · 服务器控件模板 + 客户端控件模板 + Lua 脚本 + 服务端逻辑')),
@@ -899,6 +938,10 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
             selectionBox ? renderControl(selectionBox, snap, canvasWidth, canvasHeight, effectiveZoom, fontFamily, true) : null))), error ? e('div', { className: 'qxsim-status error' }, '⚠ ', t(error)) : e('div', { className: 'qxsim-status' }, e('span', null, t`● ${t(snap.asset?.label) || t('控件')}编辑`), e('span', null, notice || (selectedRow ? t`当前：${selectedRow.name}` : '')), e('span', { className: 'spacer' }), e('span', null, clientTemplates ? t('GIA 导出后可在 Lua 中按 prefabId 实例化') : t('字段在失焦或 Enter 时提交')))),
           e('aside', { className: 'qxsim-inspector' }, snap.inspector ? e(React.Fragment, null,
             e('div', { className: 'qxsim-inspector-head' }, e('div', { className: 'qxsim-inspector-line' }, e('span', { className: 'qxsim-kind' }, (KIND_META[snap.inspector.kind] || ['◇'])[0]), e('strong', null, t(snap.inspector.label)), clientTemplates && selectedRow?.depth === 0 ? e('span', { className: 'qxsim-template-tag' }, t('可实例化')) : null), e('div', { className: 'qxsim-node-id' }, clientTemplates && selectedRow?.depth === 0 ? t('模板索引 ') : t('控件 GUID '), e('code', null, snap.inspector.guid ?? snap.inspector.id), ' · ', selectedRow?.name || t('节点')), snap.inspector.kind !== 'server-container' ? e(ControlGuidEditor, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, autofill: snap.clientGuidAutofill, onSave: (id, guid, automatic) => changeControlGuid(id, guid, snap.asset.type, automatic) }) : null),
+            clientTemplates && selectedRow ? e('div', { className: 'qxsim-section-body' },
+              e('button', { className: 'qxsim-action qxsim-export-single', title: t('导出当前客户端控件及其子树'), onClick: () => {
+                void exportFile('gia-partial', 'client-control-template', { controlIds: [selectedRow.id], includeScripts: true }).catch(() => {})
+              } }, t('导出 GIA'))) : null,
             e('div', { className: 'qxsim-tabs', style: canInspectorScript ? undefined : { gridTemplateColumns: '1fr' } },
               e('button', { className: inspectorTab === 'base' ? 'active' : '', onClick: () => setInspectorTab('base') }, t('基础属性')),
               canInspectorScript ? e('button', { className: inspectorTab === 'script' ? 'active' : '', onClick: () => setInspectorTab('script') }, t('脚本')) : null),

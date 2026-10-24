@@ -343,6 +343,7 @@ test('plugin registers screenshot capture, API and standalone Pixi play routes, 
     'qxqy_studio_play_screenshot',
     'qxqy_studio_ui_screenshot',
     'qxqy_studio_patch',
+    'qxqy_studio_export',
     'qxqy_studio_play',
     'qxqy_studio_load',
   ])

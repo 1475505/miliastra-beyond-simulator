@@ -63,6 +63,9 @@ try {
   assert.equal((await response.json()).value.scene.format, 'tree-v1')
   const edit = async (action, body = {}) => (await (await fetch(`${app.url}/editor/api/${action}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: 'smoke', ...body }) })).json())
   const snapshot = (await edit('get')).value
+  const choices = (await edit('export-list')).value
+  const exported = await edit('export', { format: 'gia-partial', controlIds: [choices.rows[0].id], expectedRevision: choices.revision })
+  assert.equal(exported.value.selection.templateCount, 1)
   const saved = await edit('save', { path: 'editor.save.json', expectedRevision: snapshot.version })
   assert.equal(saved.ok, true, JSON.stringify(saved))
   assert.equal((await edit('play', { action: 'start', args: { view: true } })).value.scene.format, 'tree-v1')
@@ -126,7 +129,7 @@ try {
   assert.equal(init.result.serverInfo.name, 'beyond-simulator-mcp')
   assert.equal(init.result.serverInfo.version, manifests.get('beyond-simulator-mcp').version)
   const tools = await request('tools/list', {})
-  for (const name of ['qxqy_project_save', 'qxqy_preview_status', 'qxqy_preview_open']) {
+  for (const name of ['qxqy_project_save', 'qxqy_preview_status', 'qxqy_preview_open', 'qxqy_studio_export']) {
     assert.ok(tools.result.tools.some(tool => tool.name === name), name)
   }
   const initialPreview = await callTool('qxqy_preview_status')
@@ -136,6 +139,11 @@ try {
   assert.equal(initialPreview.activePath, 'editor.save.json')
 
   const { handle } = await callTool('qxqy_project_open', { path: 'demo.save.json' })
+  const choices = await callTool('qxqy_studio_export', { handle, action: 'list' })
+  const exported = await callTool('qxqy_studio_export', { handle, action: 'export', args: {
+    controlIds: [choices.rows[0].id], expectedRevision: choices.revision, path: 'mcp-selected.gia',
+  } })
+  assert.equal(exported.bytes, (await readFile(join(workspace, exported.path))).length)
   assert.equal((await callTool('qxqy_preview_status')).activePath, 'editor.save.json')
   const snapshot = await callTool('qxqy_studio_get', { handle })
   await callTool('qxqy_studio_patch', { handle, op: { op: 'renameSave', name: 'Installed MCP update', expectedRevision: snapshot.version } })

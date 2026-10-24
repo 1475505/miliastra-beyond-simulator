@@ -39,7 +39,7 @@ export async function smokeDshTools(workspace) {
     return result
   }
   try {
-    assert.equal(tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 7)
+    assert.equal(tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 8)
     const before = (await call('qxqy_studio_get')).value
     assert.equal(before.workspace.path, workspace)
     await call('qxqy_studio_patch', { op: { op: 'renameSave', name: 'Tool pipeline', expectedRevision: before.version } })
@@ -49,6 +49,10 @@ export async function smokeDshTools(workspace) {
     // Preserve the legacy string-json input form too.
     await call('qxqy_studio_patch', { op: JSON.stringify({ op: 'renameSave', name: 'String input' }) })
     await call('qxqy_script_sync', { action: 'status' })
+    const choices = (await call('qxqy_studio_export', { action: 'list' })).value
+    const exportArgs = { controlIds: [choices.rows[0].id], expectedRevision: choices.revision }
+    assert.equal((await call('qxqy_studio_export', { action: 'preview', args: exportArgs })).value.selection.templateCount, 1)
+    assert.ok((await call('qxqy_studio_export', { action: 'export', args: exportArgs })).value.data)
     assert.ok((await call('qxqy_studio_load')).value.archives.length > 0)
     assert.ok((await call('qxqy_studio_ui_screenshot')).content.some(block => block.type === 'image'))
     assert.equal((await call('qxqy_studio_play', { action: 'start' })).value.running, true)
@@ -65,7 +69,7 @@ export async function smokeDshTools(workspace) {
     for (let cycle = 0; cycle < 2; cycle++) {
       await owner.restart()
       assert.equal(routes.size, registeredRouteCount)
-      assert.equal(tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 7)
+      assert.equal(tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 8)
       assert.equal((await call('qxqy_studio_get')).value.save.name, '未命名存档')
     }
   } finally {
