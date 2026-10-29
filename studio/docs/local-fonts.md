@@ -1,5 +1,7 @@
 # 本地自定义字体
 
+上级：[共用编辑器](../../editor-ui/README.md#专题与实现入口)。
+
 模拟器支持读取本机的一份 TTF / OTF 字体。默认尝试 Windows 上原神的常见安装位置，也可指定文件或使用系统字体。不内置、下载或打包商业字体，也不通过项目存档分发字体。
 
 ## 使用
@@ -10,7 +12,7 @@
 - **指定本机字体文件**：填写完整绝对路径，可粘贴 Windows「复制文件地址」得到的带引号路径。安装在 E: 等其他盘符时使用此项；输入框默认提供通用安装位置，代码不保存开发者的个人盘符。
 - **使用系统字体**：明确关闭自动查找与自定义字体。
 
-「应用范围」可选择 **仅游戏内文本**（画布、试玩、截图）或 **整体 UI**（同时覆盖工具栏、面板、代码和日志）。默认整体 UI，旧配置保持这一行为。该选项随 Web 0.5.0 提供；已发布的 DSH 2.2.0 不包含范围选择。
+「应用范围」可选择 **仅游戏内文本**（画布、试玩、截图）或 **整体 UI**（同时覆盖工具栏、面板、代码和日志）。默认整体 UI，旧配置保持这一行为。
 
 保存前校验字体，错误路径不会覆盖旧设置；自动查找会立即显示找到的路径或“未找到”结果。保存后重启对应的 Web、MCP 或 Harness 宿主，再刷新编辑器与试玩页；现有进程继续使用原字体快照，保存不会中断正在运行的试玩或丢弃编辑草稿。字体文件后来被移动、删除或损坏时，已保存的配置会回退到系统字体，并在设置面板显示错误，仍可重新配置。
 
@@ -23,7 +25,7 @@ $env:QXQY_FONT_PATH = 'C:\Fonts\my-licensed-font.ttf'
 node web/dist/server.js --workspace . --host 127.0.0.1
 ```
 
-该路径仅为示例，请替换为你有权用于此场景的字体。MCP 需要将变量设置在 MCP 服务进程的本机环境中；DSH 需要在启动宿主前设置。优先级为环境变量 → 本机保存设置 → 默认自动查找。非空 `QXQY_FONT_PATH` 锁定字体来源与路径；Web 0.5.0 仍允许保存应用范围，移除变量并重启后可恢复来源编辑。旧环境变量的无效配置仍明确报错。变量不会从项目 JSON 或 GIA 读取，模拟器也不会自动加载 `.env`。不要把本机路径写进共享配置或提交到仓库。文件建议保存在仓库外；仓库内的 `.local-fonts/` 也已忽略。
+MCP 需要将变量设置在服务进程的本机环境中，DSH 需要在启动宿主前设置。优先级为环境变量 → 本机保存设置 → 默认自动查找。非空 `QXQY_FONT_PATH` 锁定字体来源与路径，但仍允许保存应用范围；移除变量并重启可恢复来源编辑。环境变量的无效配置明确报错。变量不从项目JSON/GIA读取，也不自动加载`.env`；本机路径不写入共享存档，仓库内`.local-fonts/`已忽略。
 
 文件限制为单字体 TTF / OTF、最大 32 MiB；TTC、WOFF 和 WOFF2 不作为输入支持。字体读取或注册失败会明确报错，不会静默假装已加载。没有可用字体时保留原有系统字体。修改字体或取消变量后，重启宿主并刷新已打开的编辑器及试玩页。
 
@@ -44,8 +46,6 @@ node web/dist/server.js --workspace . --host 127.0.0.1
 
 仓库忽略字体文件和 `.local-fonts/`，Web 静态资源复制及 Release 打包过滤字体文件和私有字体目录，Docker 构建上下文也排除它们。不要强制添加字体、Base64、转码/子集文件、字形图集、真实本机配置或私有测试样本；提交 PR 前仍须检查 diff 和产物清单。测试仅使用代码生成的简单几何字形，不依赖游戏文件或系统字体文件。
 
-用户需要确认字体许可覆盖自己的实际使用方式。拥有文件或游戏客户端不代表拥有软件嵌入、Web 使用或再分发权；本项目的代码许可证不授予第三方字体许可。
-
 证据范围：本功能属于模拟器字体加载与隔离策略，`evidence_source=inferred; device_status=not_required`，不新增千星真机字体能力结论。
 
 ## 排版整合与回归
@@ -54,10 +54,4 @@ node web/dist/server.js --workspace . --host 127.0.0.1
 
 长期回归只维护互补边界：`test/local-font.test.mjs` 用合成几何字体核对 PNG、换行、自适应字号及真实 Controller → Worker 的字节快照传递；`web/test/local-font.test.mjs` 验证 HTTP 认证/字体资源与可选浏览器的 DOM/Pixi 字体、字号增量更新。描边 alpha 并入 `test/text-alignment.test.mjs`，不另维护单用例文件。测试不使用外部字体或真机样本；模拟器验证不代表真机字体一致。
 
-2026-10-18 整合核验：基于 `a74a873` 与工作区已有排版/显隐修改，Windows / Node.js 22.23.2；冻结锁文件安装、根 `pnpm test`（357 pass、9 skip、0 fail）、Web/DSH/MCP 构建均通过。Edge headless / SwiftShader 单独启用合并后的浏览器字体/字号用例，2/2 通过。此项为 `evidence_source=observed`、运行端 `simulator`、`device_status=not_required`；不涉及游戏实机验收。
-
-同日前端配置核验：`test/local-font.test.mjs` 以合成字体和独立子进程验证保存后不改变当前快照、重启后加载、环境变量优先、错误路径不覆盖以及损坏文件可恢复；`web/test/local-font.test.mjs` 覆盖配置接口认证与跨源拒绝，以及真实 Chromium 中的表单输入、带引号路径、失败保护、保存提示与既有 DOM/Pixi 字体渲染。Windows / Node.js 22.23.2，全仓 364 pass、11 条件 skip、0 fail；Chromium 真实浏览器用例另启用，2/2 通过；Web/DSH/MCP 构建通过。标记为 `evidence_source=observed`、运行端 `simulator`、`device_status=not_required`；未在完整签名 Harness Desktop 或其他系统验收。本轮用户给出的本机字体仅作临时读取验证，未放入源码、测试夹具或配置默认值。
-
-同日全界面字体核验：按用户要求扩展到整个模拟器 UI。Windows / Node.js 22.23.2，直接运行字体、国际化与译文审校专项测试，11 pass、1 条件 skip。另以 Edge headless、合成几何字体和隔离配置直接加载当前编辑器与字体 ES 模块，复用现有 Pixi 依赖资源；45 项计算样式检查覆盖工具栏、控件树、属性表单、顶层弹窗、Lua 编辑区、服务端逻辑、内嵌试玩标题、独立试玩和 Web 预览，另确认 iframe 字体、20px 下 AB 的实际 DOM 字宽为 28px、系统字体回退及加载失败后重试。验证未调用构建或改写 dist，不代表当前安装包或完整 Harness Desktop 已更新。`evidence_source=observed`、运行端 `simulator`、`device_status=not_required`。
-
-同日范围选择核验：Web 0.5.0 源码，Windows / Node.js 22.23.2 / Edge headless。既有字体测试以合成字体验证旧配置默认 `all`、非法范围拒绝、环境变量锁定来源但允许范围修改；浏览器通过设置表单保存 `game` / `all` 并启动真实新宿主，确认 manifest 与界面字体一致，两种模式的 DOM 画布及 Pixi 游戏文字都保留自定义字体。字体与翻译专项 11 pass、1 条件 skip；单独启用字体浏览器用例 2/2 通过。`evidence_source=observed`、运行端 `simulator`、`device_status=not_required`。DSH 2.2.0 安装包保持原发布内容。
+2026-10-18 Windows / Node22.23.2 / Edge headless验证了重启加载、环境变量优先、错误路径保护、损坏配置恢复、game/all范围及DOM/Pixi字体一致。使用合成字形与隔离配置；`observed / simulator / not_required`。未在完整签名Harness Desktop、其他操作系统或游戏真机验收。

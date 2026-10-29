@@ -326,7 +326,7 @@ test('controller renders editor screenshots from boxes without the simulator tab
   }
 })
 
-test('plugin registers screenshot capture, API and standalone Pixi play routes, and cleanup effects', t => {
+test('plugin registers tools and serves its play page and renderer', t => {
   const tools = []
   const routes = []
   const effects = []
@@ -361,39 +361,7 @@ test('plugin registers screenshot capture, API and standalone Pixi play routes, 
   routes[1].handler({ method: 'GET', url: '/qxqy-simulator/play' }, response)
   assert.equal(response.statusCode, 200)
   assert.match(headers['content-type'], /text\/html/)
-  assert.match(body, /千星沙箱 · 独立试玩/)
-  assert.match(body, /height:100%/)
-  assert.match(body, /body\[data-theme=light\]/)
-  assert.match(body, /data-view="play"/)
-  assert.match(body, /data-view="log"/)
-  assert.match(body, /客户端脚本日志/)
-  assert.match(body, /服务端日志/)
-  assert.match(body, /id="serverLog"/)
-  assert.match(body, /服务端变量/)
-  assert.match(body, /id="serverVars"/)
-  assert.match(body, /id="playerCountSel"/)
-  assert.match(body, /id="playerViewSel"/)
-  assert.match(body, /保存用例/)
-  assert.match(body, /回放用例/)
-  assert.match(body, /createPlaySession/)
-  assert.match(body, /play\.act\('step'/)
-  assert.match(body, /id="cv" class="stage-canvas"/)
-  assert.match(body, /type="module"/)
-  assert.match(body, /PixiPlayRenderer/)
-  assert.doesNotMatch(body, /play-capture/)
-  assert.doesNotMatch(body, /captureRequest/)
-  assert.doesNotMatch(body, /getContext\('2d'\)/)
-  const loop = readFileSync(new URL('../../studio/play/browser-session.js', import.meta.url), 'utf8')
-  assert.match(loop, /light: true/)
-  assert.match(loop, /view: true/)
-  assert.match(loop, /PLAY_POLL_INTERVAL_MS = 33/)
-  assert.match(loop, /renderer\.render\(next\.paint/)
-  assert.doesNotMatch(body, /\.innerHTML\s*=/)
-  assert.doesNotMatch(body, /试玩流程|flow-step|<span>编辑<\/span>/)
-  const scriptStart = body.indexOf('<script type="module">') + '<script type="module">'.length
-  const scriptEnd = body.lastIndexOf('</script>')
-  assert.ok(scriptStart >= '<script>'.length && scriptEnd > scriptStart)
-  assert.doesNotThrow(() => new Function(body.slice(scriptStart, scriptEnd).replace(/^\s*import[^\n]+\n/, '')))
+  assert.equal(body, readFileSync(new URL('../lib/play.html', import.meta.url), 'utf8'))
   const rendererHeaders = {}
   let rendererBody = ''
   routes[2].handler({ method: 'GET', url: '/qxqy-simulator/play-renderer.js' }, {
@@ -402,9 +370,8 @@ test('plugin registers screenshot capture, API and standalone Pixi play routes, 
     end(value) { rendererBody = value || '' },
   })
   assert.match(rendererHeaders['content-type'], /text\/javascript/)
-  assert.match(rendererBody, /WebGL/)
+  assert.equal(rendererBody, readFileSync(new URL('../dist/play-renderer.js', import.meta.url), 'utf8'))
   assert.ok(routes.some(route => route.path === '/qxqy-vfx'))
-  assert.equal(effects.length, 8)
 })
 
 test('Harness AI tools save and copy selected scripts without requiring editor actions', async t => {

@@ -1,5 +1,7 @@
 # DSH 插件更新公告
 
+上级：[DSH 插件](README.md)。安装方式见插件入口；这里只保留发布变化。
+
 ## v2.2.1 2026-10-22 01:04版本：DSH 2.2.1 / Web 0.5.1 / MCP 0.5.1
 
 新增基础富文本支持：文本框和文本视窗可显示粗体、斜体、字号及颜色标签，编辑预览、试玩和截图共用排版，标签不再作为普通文字显示或参与换行。
@@ -74,26 +76,4 @@ DSH 保持已发布的 2.2.0，本次字体范围选项仅随 Web 发布。更�
 
 该问题在只安装一份插件时也可触发，报错本身不代表重复安装。修复补齐了路由的生命周期清理。
 
-### 安装与更新
-
-可直接下载本 Release 附带的 `dsh-plugin-beyond-simulator-2.0.11.tgz`，通过实际使用的 Harness profile 安装。以下以 `web` profile 为例：
-
-```sh
-dsh plugin --profile web add ./dsh-plugin-beyond-simulator-2.0.11.tgz
-```
-
-npm 版本审核上线后，也可执行：
-
-```sh
-dsh plugin --profile web add dsh-plugin-beyond-simulator@2.0.11
-```
-
 更新后请从托盘完整退出 Harness，再重新启动，以清除旧进程残留的路由。保留原版 `cordis.patch.yml`，无需注释主组件的 insert。
-
-### 验证
-
-- 全量自动化测试：309 通过、7 项条件测试跳过、0 失败。
-- DSH Tools 0.1 / 0.2 两套基线的独立安装包验证通过。
-- 真实 Harness 0.2.0-rc.2 完整启动、带活跃 Worker 的组件重复重启，以及 HTTP/工具状态一致性验证通过。
-
-反馈者 Desktop 环境的原始触发链及修复包回验仍待确认。npm 使用暂存审核流程，工作流成功不等于版本已公开；公开状态以 npm registry 为准。

@@ -16,7 +16,12 @@ rt.injectKey('KeyboardCraftspersonKey1Down')
 rt.destroy()
 ```
 
-详见 `docs/architecture.md`。
+## 文档
+
+- [架构](docs/architecture.md)：VM、桥接、调度与实现位置。
+- [观察契约](docs/observed-contract.md)：文档、真机观察和模拟器策略的边界。
+
+上级：[项目文档树](../../README.md#文档树)。
 
 按键监听的模拟器派发按当前同级显示层序从上到下进行；Lua 调整 sibling 顺序后，下一次按键也使用新顺序。此行为对应创作者提供的后续版本规则，新版真机待验。
 

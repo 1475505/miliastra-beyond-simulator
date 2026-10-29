@@ -136,7 +136,8 @@ See [in-game delivery and validation](agent/wonderland-lua-builder/skills/qxqy-g
 
 - **Passing in the simulator does not guarantee passing in the game.** Final verification in Miliastra Wonderland is required.
 - **Multiplayer playtests use local simulation.** Server support covers variables and signals, without the full official node graph or network multiplayer.
-- **Images** support basic primitives, static assets, Prefab icons, and **Basic/Stretch** modes. Animated effects and 3D models are outside the preview scope. See [image assets](studio/docs/image-assets.md).
+- **Images** support basic primitives, static assets, Prefab icons, and **Basic/Stretch** modes. 3D models are outside the preview scope. See [image assets](studio/docs/image-assets.md).
+- **UI/fullscreen effects** support browser previews and Lua playtests, with failures isolated per effect. Headless PNG omits video frames; nonempty effect settings in GIA remain unverified. See [effect playback](studio/docs/ui-vfx-playback.md).
 - **Lua 2D audio** can play during playtests, with assets downloaded on demand. See [audio assets](studio/docs/audio-assets.md).
 - **GIA supports a verified subset of content.** Review export notices and keep original files and complete JSON saves.
 
@@ -151,6 +152,25 @@ pnpm test
 ```
 
 See the [distribution guide](DISTRIBUTION.md) for packaging and publishing.
+
+## Documentation tree
+
+Follow the branch for your task. Each module README owns its topic links.
+
+- **Usage and integrations**
+  - [Web](web/README.md): editor, disk previews, and deployment.
+  - [MCP](mcp/README.md): project handles, tools, and clocks.
+  - [Harness plugin](dsh-plugin/README.md): installation, compatibility, and troubleshooting.
+    - [Release notes](dsh-plugin/CHANGELOG.md)
+    - [Simulator usage skill](skill/SKILL.md)
+  - [Game-building preset](agent/wonderland-lua-builder/README.md): workflow, references, and behavior evaluations.
+- **Implementation and maintenance**
+  - [Studio](studio/README.md): saves, layouts, GIA, assets, and rendering.
+  - [Shared editor](editor-ui/README.md): UI integration, language, fonts, and play windows.
+  - [Lua Runtime](client/lua-runtime/README.md): architecture and observed contracts.
+  - [Server](server/README.md): variables and signals.
+  - [Distribution](DISTRIBUTION.md): builds, installation checks, and releases.
+  - [Contributor rules](AGENTS.md): module ownership, documentation, and tests.
 
 ## License
 

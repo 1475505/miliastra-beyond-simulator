@@ -65,6 +65,8 @@ MCP 的每次调用使用同一个 `handle`；Harness 使用同一会话。计�
 
 ## 接入
 
+上级：[Studio](../README.md#专题树)。
+
 - 共用核心：`studio/host/script-sync.js`，存档配置校验：`studio/script-sync-config.js`。
 - 编辑器 API：`script-sync`，以及保留兼容的 `script-sync-apply`（planId/scriptIds/confirmed）。
 - AI 工具：`qxqy_script_sync`，开放 discover/status/configure/save/preview/apply，使用同一复制核心与校验。
@@ -72,7 +74,7 @@ MCP 的每次调用使用同一个 `handle`；Harness 使用同一会话。计�
 
 ## AI 接口验证（2026-10-19）
 
-- `evidence_source: observed`，运行端 `simulator`，`device_status: not_required`，Windows / Node.js 22.23.2：冻结锁文件安装通过，全仓 `pnpm test` 391 pass / 13 条件 skip / 0 fail。新增测试覆盖保存时的 revision / 磁盘变更检查、显式文件选择、布尔确认、备份及结果查询；既有过期计划、路径约束和索引引用检查继续通过。
+- `evidence_source: observed`，运行端 `simulator`，`device_status: not_required`，Windows / Node22.23.2：回归覆盖保存时revision/磁盘变更、显式文件选择、布尔确认、备份与结果查询，以及过期计划、路径约束和索引引用检查。
 - MCP 经真实 stdio 子进程完成配置、保存、预览、部分复制与新增文件复制，核对备份原始字节、未选文件保留、过期和跨 handle 计划拒绝。Harness 经实际 `defineTool` 注册 / execute 与合成宿主上下文完成同一流程，覆盖 JSON 字符串参数和跨会话拒绝；不是 Desktop 窗口端到端验收。全部复制使用临时目录，未操作真实游戏脚本，真机保存与试玩仍待用户验证。
 
 ## 验证记录（2026-09-26）

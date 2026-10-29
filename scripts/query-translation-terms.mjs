@@ -45,7 +45,7 @@ async function main() {
   const { default: en } = await import('../studio/locales/en.js')
   const result = await queryTranslationTerms(Object.keys(en), { onProgress: value => process.stdout.write(JSON.stringify(value) + '\n') })
   await writeFile(resolve(output), JSON.stringify(result, null, 2) + '\n', { flag: 'wx' })
-  process.stdout.write('Query evidence saved. Review results before editing translations or the audit record.\n')
+  process.stdout.write('Query evidence saved. Review results in context before editing translations.\n')
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

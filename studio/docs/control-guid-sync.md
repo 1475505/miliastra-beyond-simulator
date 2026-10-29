@@ -1,5 +1,7 @@
 # 修改索引后的 Lua 同步（2026-10-12）
 
+上级：[Studio](../README.md#专题树)。批量校准顺序及适用条件见[客户端模板层序](client-template-order.md#imported-index-calibration-2026-10-12-follow-up)。
+
 这是模拟器工作流，不是千星沙箱的自动重映射能力。`setControlGuid` 仍只修改控件和明确的模板引用；随后通过共享编辑器的「下一步：同步 Lua 索引引用」完成代码更新。
 
 ## 用户流程
@@ -28,7 +30,7 @@ WOO 的 `TemplateGuids` 配置表可使用全量替换。希望保留非索引�
 - 控件用已有 `setControlGuid` 显式校准：一次性更新已知模板引用，记录 `controlGuidChanges`，Lua保留原文等待语义同步。脚本旧ID和GenericSlot挂载也原样保留；旧脚本索引修复需结合真实脚本映射及代码引用处理，当前没有脚本索引校准UI，不能把自动分配新号当成完整迁移。
 - 最小回归：#23初版对旧模板1001执行 `get` 后改为1073742105，引用仍是1001、无变更记录且revision未变；旧记录 `newGuid=19001` 无法读取；仅槽位挂载的脚本1500000000被分配新号后脱挂。审查后采用“读旧值、严校验新值、显式校准、导出只验证”的边界，避免这些静默变化。
 - 长期测试合并至 `control-guid.test.mjs` / `control-guid-autofill.test.mjs`，删除重复的 `control-guid-range.test.mjs`。覆盖上下边界、分配耗尽、旧ID/记录/挂载保留、导出拒绝原子性、显式修复及Lua映射；恢复MR改夹具时丢失的重叠置换和外部脚本碰撞条件。脚本GIA范围校验沿用 `gia-reference.test.mjs` 的独立wire夹具，Web端到端夹具使用合法新索引。
-- 验证：Windows / Node 22.23.2，冻结锁文件安装、全仓 `pnpm test` 402通过、15环境相关跳过、0失败，Web/DSH/MCP构建与 `git diff --check` 通过。一次性Edge验收索引1001被前端拒绝且revision不变、1073745100成功并生成映射，验收脚本已清理。结果为 `observed / simulator`，不新增真机验证。
+- Windows / Node22.23.2 / Edge验收：索引1001被前端拒绝且revision不变，1073745100成功并生成映射；`observed / simulator`，不新增真机验证。
 
 ## 宿主与文件事务
 

@@ -104,7 +104,7 @@ qxqy_studio_play({ handle: "project-1", action: "start", args: { clockMode: "rea
 - `device` 重建运行时并保留本局模式，也可显式指定模式；新的 `start` 未指定时恢复 MCP 默认 manual。
 - 运行快照和截图回执含 `clockMode`。Web/DSH 的交互试玩默认仍为 realtime。
 
-这是用户确认的模拟器工具设计，用于解决 [#5](https://github.com/1475505/miliastra-beyond-simulator/issues/5) 调用间计时问题，不是新增真机行为结论。升级到 0.3.5（源码运行需重新构建）并重启 MCP 服务后生效。脚本重载子问题未复现：非空内联 `scripts[].source` 优先于磁盘 `path`，文件保存后使用 `stop → load → start` 重新加载对应工程。
+这是用户确认的模拟器工具设计，自 MCP 0.3.5 起用于解决 [#5](https://github.com/1475505/miliastra-beyond-simulator/issues/5) 调用间计时问题。来源与尚未复现的相关问题见 [MCP 问题核验摘要](../studio/docs/issue-review-20261006.md)。脚本重载时，非空内联 `scripts[].source` 优先于磁盘 `path`，文件保存后使用 `stop → load → start` 重新加载对应工程。
 
 白名单图片截图会先准备远程静态素材，首次可能需要下载，后续复用与 Web/DSH 相同的磁盘缓存。失败项返回 `assetWarnings` 并显示占位，不影响 Lua 状态。缓存目录可用 `QXQY_IMAGE_CACHE_DIR` 指定，详见 [素材缓存](../studio/docs/image-assets.md)。
 
@@ -172,9 +172,9 @@ qxqy_studio_export({ handle: "project-1", action: "export", args: {
 
 ### 客户端控件索引校准
 
-真实编辑器导入 GIA 后若重新分配了客户端控件索引，可在 Web/DSH 编辑器修改选中客户端控件的「索引」，或使用当前资产的 `setControlGuid`。`id` 是存档内部控件 ID，`guid` 是用户回传的实际索引（整数 `1–2147483647`）；操作保留内部 ID 和脚本挂载，拒绝服务端容器及工程中重复的控件/脚本索引。
+真实编辑器导入 GIA 后若重新分配了客户端控件索引，可在 Web/DSH 编辑器修改选中客户端控件的「索引」，或使用当前资产的 `setControlGuid`。`id` 是存档内部控件 ID，`guid` 是用户回传的实际索引；新写入范围及旧值兼容见 [索引规则](../studio/docs/control-guid-sync.md#索引范围与旧数据232026-10-21)。操作保留内部 ID 和脚本挂载，拒绝服务端容器及工程中重复的控件/脚本索引。
 
-同一批客户端模板导入且结构未改动时，可在客户端资产下附加 `autoFillClientGuids: true`：以指定控件为锚点，按 GIA 原生父先子后顺序填写全部模板及子控件。它不是全体旧 GUID 加固定偏移；服务端界面和脚本不参与，越界或与范围外控件/脚本冲突会整批拒绝。变更账本中的同一 `batchId` 代表同时映射，处理 Lua 引用时不可按数字逐条替换。Web/DSH 有对应的默认关闭复选框及区间预览。规则依据与适用边界见 [编辑器说明](../editor-ui/README.md)。
+同一批客户端模板导入且结构未改动时，可在客户端资产下附加 `autoFillClientGuids: true`：以指定控件为锚点，按 GIA 原生父先子后顺序填写全部模板及子控件。它不是全体旧 GUID 加固定偏移；服务端界面和脚本不参与，越界或与范围外控件/脚本冲突会整批拒绝。变更账本中的同一 `batchId` 代表同时映射，处理 Lua 引用时不可按数字逐条替换。Web/DSH 有对应的默认关闭复选框及区间预览。规则依据与适用边界见 [模板层序与索引校准](../studio/docs/client-template-order.md#imported-index-calibration-2026-10-12-follow-up)。
 
 先确认当前资产与目标控件一致；需要时调用 `selectAsset`，其 `assetType` 为 `server-control-template` 或 `client-control-template`，然后重新 `get` 读取控件及 revision。
 

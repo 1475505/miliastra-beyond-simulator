@@ -1,5 +1,7 @@
 # 浏览器键位响应
 
+上级：[Studio](../README.md#专题树)。
+
 Web 预览、Web 编辑器试玩及 DSH 共用试玩页提供「键位响应：开／关」。默认开启，当前页面内重开试玩保留开关，刷新页面恢复默认；开关不保存进工程、不修改 Lua 监听器。
 
 开启时，把官方键鼠默认绑定转为 `Enum.KeyEventType` 对应的 Down / Up。关闭时停止这层转发，普通光标点击、拖拽、滚轮仍有效；MCP 的显式 `key` 输入不受浏览器开关影响。
@@ -41,7 +43,7 @@ Web 预览、Web 编辑器试玩及 DSH 共用试玩页提供「键位响应：�
 
 源码更新后重建 Web/DSH 并重启宿主，刷新已打开页面。模拟器测试不证明上述默认表与任意真机版本或用户改键一致。
 
-2026-10-18，Windows / Node.js 22.23.2 / Edge headless + SwiftShader：在 #12 与 `a74a873` 的独立整合工作树中，冻结锁文件安装、Web/DSH 构建、根 `pnpm test` 通过（353 pass、10 环境相关 skip、0 fail）；键位、字体与既有内嵌试玩浏览器验证 4/4。键位用例覆盖 1280px 工具栏开关/返回按钮可见。合并时将 #12 的 CJK 回退接入 #20 共用字体栈；扫描预算每次调用只读取一次，拒绝非正整数并补恢复环境的边界测试。`evidence_source=observed`、运行端 `simulator`、`device_status=not_required`。
+2026-10-18 Windows / Node22.23.2 / Edge headless + SwiftShader的键位及内嵌试玩回归通过，含1280px工具栏可见性；`observed / simulator / not_required`。
 
 ## 指针请求乱序（2026-10-24）
 
@@ -49,6 +51,6 @@ WOO「播放花神诞祭」实际浏览器点击中，DOM 先发 pointerdown、�
 
 修复在共享 `play/browser-session.js`：Pointer/Key 统一排队；按下前和松开前的节流 Move、滚轮和 Cancel 都保持事件顺序；替换会话时通过 generation 丢弃旧队列。Lua 点击逻辑、按钮层级和拖动阈值沿用。更新 Web/DSH 构建后需刷新试玩页，让新模块生效。
 
-独立回归依据是实际 DOM/HTTP/Worker 时序及用户期望的按下→松开点击。`test/browser-session.test.mjs` 新增延迟 Down、微移、取消和重启队列用例，旧版两例失败，修复后全部11例通过。冻结锁文件安装、Web/DSH构建、根 `pnpm test`：405 pass、15环境相关skip、0 fail；另运行真实Edge键位、鼠标拖动、滚轮、触摸回归3/3通过。
+独立回归依据是实际DOM/HTTP/Worker时序及按下→松开的点击语义。`test/browser-session.test.mjs`覆盖延迟Down、微移、取消和重启队列；旧版两例失败，修复后与真实Edge键位、鼠标拖动、滚轮、触摸回归均通过。
 
 原始记录：完整工作区 `probes/browser-pointer-order-20261024/input-before.json`（含用户历史、DOM isTrusted、请求时间、Worker history），`input-fixed-user.json`为同一内置浏览器刷新后的可信点击，down/up有序且一次触发播放。WOO专项验收位于 `workspace/woo/records/simulator/finale-eyes-input-20261024/verification/`：真实Edge在实际canvas上走通30关、庆生及两次重播31项检查，包含延迟Down160ms、微移、长按和拖出取消。Windows / Node.js 22.23.2，`evidence_source=observed`、运行端`simulator`、`device_status=not_required`（仅此模拟器传输缺陷）。用户更早两次点击落在其他位置，缺当时DOM坐标，不能归为同一个已证实原因，也不能据此认定用户点错；本条不增加真机事件顺序结论。

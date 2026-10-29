@@ -1,6 +1,6 @@
 # 界面动效与全屏动效播放
 
-2026-10-30 源码接入。Web / DSH 共用编辑画布和浏览器试玩支持 C/T 视频动效；Lua Runtime 只管理确定性播放状态，网络和浏览器解码故障不进入 Lua VM。
+上级：[Studio](../README.md#专题树)。Web / DSH 共用编辑画布和浏览器试玩支持 C/T 视频动效；Lua Runtime 只管理确定性播放状态，网络和浏览器解码故障不进入 Lua VM。
 
 ## 使用
 
@@ -59,48 +59,26 @@ out.rgb = C + background.rgb * T
 
 Host PNG（包括 MCP 截图和 `/` 的静态编辑预览）没有视频解码器，当前省略视频帧并返回 `assetWarnings`，不额外下载视频、不推进 Lua 时间；真实浏览器截图可以包含已合成的动态画面。
 
-非空原生动效 GIA 的配置结构仍未核实。JSON/Lua 播放接入不代表已有文本槽编码可用于真机导入；证据缺口与参考子消息线索见[调研 §7](ui-vfx-preview-research.md#7-gia-是独立的关键缺口)。
+非空原生动效 GIA 的配置结构仍未核实。现有 `Details.effectSlot(86)` / `fullscreenEffectSlot(87)` 的string声明仅有空槽证据。第三方 `ugc-tool` 的 `7bdf307` 将普通动效86视为子消息（501为整数ID、502为音效布尔），与当前文本编码冲突；该实现也没有可靠的layer和完整fullscreen映射，不能直接照搬。
+
+后续须用原生非空GIA分别改变ID、声音和Above/Below做最小差分，确认后再改codec。JSON/Lua预览不证明非空动效可可靠导入真机；未知字节不能按UTF-8猜读覆盖。
+
+## 素材来源与更新
+
+素材来自`F:/UGC_UI_VFX`及贡献者@xiaomol444，参考实现为`F:/ugc-tool`提交`7bdf307`。名称/分类源：`https://oss.xiaomol444.xyz/ugc-tool-data/Public/UIVfx/data.json`与相邻`i18n/{zh-cn,en-us}.json`。原`data.hash.json`使用TextMap hash，不能直接配合`uiEffect.title.*`翻译；其SHA-256为`55dc9e18c7840dc173a2d469257de78ae35f6929f45543ac843a59cc6bf02e97`。
+
+- 发布目录`uivfx/`包含196 WebM、196 PNG、47 MP3及3份目录/翻译JSON，共442文件、49,502,453字节；运行时内置清单仅引用439媒体。
+- 196视频均为VP9 Profile1、8-bit yuv444p、30fps，无音轨；编码宽度为素材宽度两倍，左右为C/T。时长0.566–10秒，85个循环素材均10秒。5个编码宽度超过4096，不能假定所有设备都能解码；颜色转换未证明与游戏一致。
+- 发布先上传媒体再更新目录；内容变更同步内置字节数/SHA-256及缓存版本。路径为前缀内相对路径，去掉开头`/`再拼接，避免丢失`uivfx/`。
+- 2026-10-30公开下载全部文件的哈希/MIME一致，10次媒体首尾Range均返回正确206；JSON公开Cache-Control为43200秒，与上传指定的300秒不符，覆盖层未定位。更新目录前仍需核对缓存或采用版本路径；浏览器同源缓存不依赖OSS CORS。
+
+原始发布清单SHA-256为`fcdd2087b0ce558f90489db6c1368211d8b110e8cc755baf1efd731814a53fd4`；本地回执位于`C:/Users/liul/AppData/Local/Temp/opencode/ui-vfx-research-20261028/`的`upload-manifest.json`、`public-verification.json`及`public-json-verification.json`。上述为资源/HTTP的`observed`证据，`device_status=not_required`，不是游戏播放证明。
 
 ## 验证与来源
 
-- API：2026-10-24 官网对齐的本地 `ClientUIAnimationControl`、`ClientUIFullscreenAnimationControl`、`Enum.UIAnimationLayer` 文档；字段/签名为 `documented / official_document`。全屏下层规则来源见[调研基线](ui-vfx-preview-research.md#1-调研基线与证据)。
+- API：2026-10-24本地官网对齐稿（SHA-256 `25228400d124294f46ec364a224256e53f0e2e5a3f8dc9a8d1129ba6f9109192`）的[客户端控件API](https://act.mihoyo.com/ys/ugc/tutorial/detail/mhtakr07vej4)、[界面动效](https://act.mihoyo.com/ys/ugc/tutorial/detail/mh2iyk9fa4gy)、[全屏动效](https://act.mihoyo.com/ys/ugc/tutorial/detail/mhbn4i09l5ns)。字段、签名和全屏下层规则为`documented / official_document`；第三方工具把全屏放上层的做法未采用。
 - 回归：`studio/test/ui-vfx.test.mjs`（目录、Lua生命周期、JSON、非消费式快照、PNG边界）；`studio/test/audio-player.test.mjs`（声音代次、静音/解锁、暂停、失败/重试、冷加载取消）；`web/test/ui-vfx.test.mjs`（HTTP缓存及真实浏览器）。
 - 浏览器用例使用自包含的合成 VP9 Profile1 / yuv444p 视频，独立已知的 C/T/B 颜色断言，不依赖 OSS 或仓库外素材。覆盖彩色T、羽化、重叠实例顺序、Above/Below、全屏cover、手动定帧、循环、预算、损坏/缺失媒体、编辑器搜索/重试、页面切换与解码器清理。
 - 模拟器回归结果标为 `observed / simulator / not_required`；未由本次验证覆盖的千星游戏时序、精确尺寸/色彩、其他浏览器/手机/操作系统仍保持 `device_status=pending`，不能把 Chromium 测试作为真机通过。
 
-### 2026-10-30 集成验收
-
-源码基线为 `19ca7bd` 加本次动效集成工作树；平台为 Windows / Microsoft Edge，浏览器用例通过 `QXQY_BROWSER` 指定本机 `msedge.exe`。下表均为 `evidence_source=observed`、运行端 `simulator`、`device_status=not_required`。
-
-| 检查 | 结果 |
-|---|---|
-| `pnpm install --frozen-lockfile` | 通过，锁文件无需更新 |
-| `pnpm test` | **426 通过、18 按环境跳过、0 失败**；覆盖 Runtime、Server、Studio、DSH、MCP、Web |
-| `node --test web/test/ui-vfx.test.mjs`（设置 `QXQY_BROWSER`） | **3/3 通过**；包括 HTTP 故障/缓存/Range、实际浏览器 C/T 像素断言、编辑器交互和预览模式切换 |
-| 浏览器输入/声音回归 | `web/test/key-input-browser.test.mjs` 通过；`web/test/audio-assets.test.mjs` **2/2 通过**，含自动化默认静音和显式声音开关 |
-| `pnpm pack:release` | Web、MCP、DSH 三个包构建成功 |
-| `pnpm test:packages` | 仓库外独立安装通过；dsh-tools `0.1.0-rc.6`、`0.2.0-rc.2`、`0.2.1-rc.2` 三组兼容矩阵全部通过，含打包后的动效快照、PNG边界、媒体路由/Range断言 |
-| `pnpm test:harness` | **Harness 0.2.1-rc.2 通过**；真实 CLI 安装、Web 启动、Skill/预设发现、工具、附件、HTTP 试玩、语言与插件重启生命周期 |
-| `git diff --check` | 通过 |
-
-全仓命令中的环境跳过项保留其原始结果；动效、声音和键位浏览器用例另外显式启用 Edge 运行。测试曾发现旧 DSH 清理数量断言未计入新增媒体路由，以及旧音频浏览器断言未反映自动化默认静音；已更新对应断言并通过复验。
-
-**实际 OSS 媒体检查：** 使用默认资源源和正式同源缓存路由，在编辑器及独立试玩页加载 `10001017`（能量满值1）与 `10001043`（点击效果2）。两个 WebM 和本次选中的 `audio/10001017.mp3`、`audio/10001043_02.mp3` 均返回200，通过固定清单校验；浏览器成功解码两个视频和两个 MP3。手动时钟步进到 **0.5秒** 后，视频均为 `currentTime=0.5`、`paused=true`，画面可见，动效警告为空，页面异常为空；声音按钮保持【声音已关闭】，本次没有进行听感验收。
-
-原始报告 `checkedAt=2026-10-29T17:19:34.450Z`（北京时间2026-10-30），位于本机 `C:/Users/liul/AppData/Local/Temp/opencode/ui-vfx-research-20261028/integrated-verification/`：`report.json`、`real-editor.png`、`real-play.png`；复现脚本为上一级 `verify-integrated.mjs`。这些本地文件是附加实测证据，仓库内回归仍只使用自包含合成媒体。
-
-本次验证的本地安装包身份如下，未提升版本或发布；后续重新打包应以新的 `release/manifest.json` 为准：
-
-| 包文件 | SHA-256 |
-|---|---|
-| `dsh-plugin-beyond-simulator-2.2.1.tgz` | `d901a0c19c557036481e9518e166e40bc222ff7f75721af9f3faa4c997443bfd` |
-| `beyond-simulator-mcp-0.5.1.tgz` | `fec5442fab6c57faf4d6ebd0624e6d6b1171de17d0dfb6e2e0287aab2a0825dd` |
-| `beyond-simulator-web-0.5.1.tgz` | `0078f789264eb4065d7f495cab4038cf48ae2031be1dd564265ee15325a7420a` |
-
-### 同日代码整理与本地预览
-
-合并视频加载失败/移除实例时的媒体释放逻辑；实例同步共用一份目标 ID 集合，删除重复遍历和 Map 写入；媒体完整性校验统一在缓存读取与下载入口执行，去掉返回前的重复计算。「联系作者」增加素材贡献者致谢，并补齐中英文文案与术语查询记录。
-
-整理后冻结锁文件安装和全仓测试通过（426 pass / 18 环境 skip / 0 fail），Edge 动效3项及联系/语言1项浏览器回归通过。本轮还修正联系/语言测试对用户本机字体配置、默认文本框裁切尺寸的依赖，改用隔离的系统字体配置及足以容纳验证文字的控件。Web/DSH 已重新构建；上表安装包仍对应整理前的验收批次。
-
-资源上传、原始媒体统计、先期 Pixi 双 pass 实验和来源记录保留于[预览调研](ui-vfx-preview-research.md)；本文为当前实现入口。
+2026-10-30集成验收：Windows / Edge上合成媒体回归通过；实际OSS的`10001017`、`10001043`及两条配套MP3解码成功，manual步进0.5秒后视频暂停在0.5，无动效警告/页面异常，未做听感验收。报告与截图位于上述本地目录的`integrated-verification/`，`checkedAt=2026-10-29T17:19:34.450Z`。全仓与安装矩阵的当次结果见提交`c47e91b`；后续安装包身份以当次`release/manifest.json`为准。

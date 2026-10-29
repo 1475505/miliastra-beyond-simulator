@@ -1,136 +1,89 @@
 # simulator/studio
 
-服务端控件模板 / 客户端控件模板 Authoring JSON、双根结构 GIA、锚点布局、五预览/四平台同步、交互试玩编排，以及试玩时间线自动测。Lua VM 的实现仍只在 `client/lua-runtime`。服务端变量/信号在 `../server/`。
+Authoring JSON、GIA、四平台布局、试玩编排、日志、回放与断言的共享核心。Lua VM 由 [Runtime](../client/lua-runtime/README.md) 实现，变量/信号由 [Server](../server/README.md) 实现；MCP、Web、DSH 复用本模块。
 
-11 类控件支持程度、2026-10-02 新增的文本/网格视窗基础滚动、模拟器策略与验证入口，统一见 [控件支持矩阵](docs/control-support.md)。
+上级：[项目文档树](../README.md#文档树)。
 
-`host-png.js` 是无 UI 宿主的编辑器/试玩 PNG 渲染器（截图与测试用）；`host/` 提供工作区边界、持久试玩 Worker 和通用 Controller，`play/pixi-renderer.js` 是 Web/DSH 共用的增量场景渲染器，`play/browser-session.js` 是两边共用的浏览器试玩循环。它们由 MCP、DSH 与本地 Web 适配层共同使用。
+## 专题树
 
-白名单静态素材由 `assets/` 与 `host/image-assets.js` 提供目录、透明留白还原、浏览器缓存和持久文件缓存，接入三种渲染路径。使用、刷新、异步截图接口与边界见 [素材缓存](docs/image-assets.md)。
+- **控件与渲染**
+  - [控件支持矩阵](docs/control-support.md)：11 类控件、文字、旋转、遮罩、滚动及保真边界。
+  - [浏览器输入](docs/browser-input.md)：键鼠映射、输入队列与焦点释放。
+  - 素材：[图片](docs/image-assets.md) · [音频](docs/audio-assets.md) · [界面／全屏动效](docs/ui-vfx-playback.md)。
+- **GIA 与脚本交付**
+  - [客户端模板层序](docs/client-template-order.md)：wire 方向与导入索引校准。
+  - [部分导出](docs/partial-export.md)：子树、依赖、预览和导出协议。
+  - [Lua 索引同步](docs/control-guid-sync.md)：变更映射、文本替换和备份。
+  - [实机脚本同步](docs/script-sync.md)：目录绑定、差异计划与复制。
 
-音频目录 `assets/audio-catalog.js`、`host/audio-assets.js` 和 `play/audio-player.js` 接通 Lua 2D 音效与浏览器播放，复用 `host/asset-cache.js` 的按需持久缓存。签名、生命周期策略和验证见 [音效与缓存](docs/audio-assets.md)。
+界面集成、语言和字体由 [共用编辑器](../editor-ui/README.md) 管理；MCP 时钟和协议由 [MCP](../mcp/README.md) 管理。
 
-界面动效和全屏动效已接通素材选择、编辑画布与 Lua 试玩：共享 DOM C/T 合成器、同源按需缓存及独立失败隔离。使用、时钟/声音策略、预算和 PNG/GIA 边界见 [动效播放](docs/ui-vfx-playback.md)；资源发布和先期实验见 [预览调研](docs/ui-vfx-preview-research.md)。
+## 实现与验证入口
 
-层序回归见 `test/sibling-order.test.mjs`：编辑器静态列表第一项在上；Lua 动态实例根默认后建在上，显式 sibling 排序另行生效。2026-09-28 修复位于 Runtime 实例化边界；PNG/Pixi/命中继续消费同一棵树。来源与生命周期边界见 [默认动态实例层序](../client/lua-runtime/docs/observed-contract.md#默认动态实例层序2026-09-28)。
+| 位置 | 职责 |
+|---|---|
+| `ui/`、`gia/` | 存档、属性、布局、校验和编解码 |
+| `host/` | Controller、工作区边界、持久 Worker、资源缓存 |
+| `play/session.js`、`play/compile.js` | Authoring → Runtime、输入及运行快照 |
+| `play/pixi-renderer.js`、`play/browser-session.js` | Web/DSH 共用增量渲染与浏览器循环 |
+| `host-png.js` | 无浏览器的编辑器/试玩 PNG |
+| `log/`、`autotest/` | 日志、录制回放与断言 |
 
-浏览器试玩的官方键鼠映射、响应开关与按键释放策略见 [键位响应](docs/browser-input.md)。
-
-客户端控件支持属性栏单项 GIA 与顶栏「部分组合导出」勾选预览；MCP/DSH 使用 `qxqy_studio_export`。子树提升、脚本依赖及共用协议见 [部分导出](docs/partial-export.md)。
-
-客户端 GIA 的 wire 层序与编辑器列表相反。2026-10-12 已修复独立/整合导出和客户端导入，并保留旧资产编号迁移的原GUID→index对应；证据、自包含方向回归及与 `7d20283` 的关系见 [客户端模板层序](docs/client-template-order.md)。
-
-```sh
-cd simulator
-pnpm install --frozen-lockfile
-pnpm --filter qxqy-studio test
-pnpm --filter qxqy-studio generate:client-template
-```
-
-独立 CLI 仍可用于一次性无头任务：
-
-```sh
-node studio/cli.mjs --in job.json --out out.json
-```
-
-DSH 正式交付位于 `../dsh-plugin/`，编辑路径进程内，试玩使用持久 `worker_threads.Worker`。旧动态原型（`dsh-host-kernel.js`、`frontend/dsh/`）已删除，业务逻辑以本目录模块为唯一来源。
+在仓库根运行 `pnpm --filter qxqy-studio test`；全仓及浏览器检查见 [验证规则](../AGENTS.md#验证)。一次性无头任务可用 `node studio/cli.mjs --in job.json --out out.json`。
 
 ## JSON 画布布局与 GIA 平台槽
 
-当前只保存四平台 `transformByPlatform`。五种画布仅提供视口尺寸，预览、检视器、试玩和 GIA 使用同一份平台参数。完整存档保存为 version 4，资产保存为 `layoutSchemaVersion: 2`（与编辑 revision 分开）。读取入口支持 version 1–4；未标注布局版本或布局版本 1 的资产自动迁移，新版资产仍严格校验四平台完整性，未知未来版本拒绝。GIA 导入直接生成新版模型。
+只保存四平台 `transformByPlatform`，五种画布从平台参数派生视口。完整存档为 version 4，资产为 `layoutSchemaVersion: 2`；编辑 revision 独立。读取支持 version 1–4，未知未来版本和缺损的新版平台数据拒绝。
 
-迁移为模拟器兼容策略：已有平台参数优先；缺失的键鼠/触屏参数取对应 16:9 画布，缺少标准画布时按预设顺序取同设备其他画布的锚点与尺寸；缺失手柄平台继承对应键鼠/触屏参数。没有任何来源才使用控件默认值。画布冲突、非标准来源及默认值使用均返回提示，导入界面显示实际提示，启动读取的提示放在快照 `migrationWarnings`。迁移复制输入并移除旧画布表，不改写原文件；后续预览/编辑/导出只读平台参数。五套互相独立的旧布局无法无损编码为四平台，因此冲突保留原输入供核对，不承诺所有旧视口外观同时不变。
+旧存档入口迁移规则：已有平台值优先；缺少键鼠/触屏值时取同设备 16:9 画布，再按预设顺序取其他画布；手柄缺值继承对应键鼠/触屏值；完全无来源才用默认值。冲突和补缺通过 `migrationWarnings` 返回。迁移复制输入并移除旧画布表，不自动改写磁盘；五套旧布局不能保证无损转为四平台。
 
-2026-09-24 排查 `diary2.save.json` → `测试的· 整合包.gia`：服务端树 37 个节点的 `transformByPlatform` 均为空，实际布局在 `transformByCanvas`。导入时 `createNode` 为缺失平台槽填入控件默认值，预览读取画布布局而 GIA 读取平台布局，造成 STAGE 的 1280×720 导出为 150×150，子控件尺寸和偏移也被默认值替代。以原 JSON 重导出，修复前全部 37 个节点的平台变换与问题 GIA 一致。
+同步关闭只写当前平台；开启时按各平台自身父矩形投影到其余平台。切换宽高比不写参数。GIA 向量已存在时，省略的标量表示 0；只有整向量缺失才采用默认值。
 
-最初采用“缺失平台槽从标准画布补齐”的运行时局部修复；该方案已由四平台唯一来源及入口迁移替代（`superseded_by=四平台唯一来源及入口迁移`）。原始日记旧格式现在可以直接导入，STAGE 在迁移及 GIA 往返后均为 1280×720。同步关闭仅写当前平台；同步开启将修改投影到另外三个平台，使用各平台自身父矩形。切换宽高比不写入参数，同平台共享锚点布局。
+来源：2026-09-24 Windows / Node 22.23.2 的日记存档复现中，37 个节点的平台槽为空，旧双表造成 STAGE 从1280×720导出为150×150。当前入口迁移取代该局部补槽方案（`superseded_by=四平台唯一来源及入口迁移`）。`test/platform-layout.test.mjs` 覆盖迁移、幂等、四平台/五视口、零分量与失败原子性；`observed / simulator`，新版包真机像素一致性 `pending`。
 
-自动迁移回归：`test/platform-layout.test.mjs` 覆盖 version 1–3、旧单资产和包装项目输入、冲突及缺失提示、输入不变、再次读取幂等、GIA 尺寸保留、新版严格验证。Windows / Node 22.23.2 下聚焦测试 10/10、全仓测试通过；这属于模拟器观察，未增加真机证据。
-
-证据：2026-09-24，Windows / Node 22.23.2，`evidence_source=observed`，运行端 `simulator`，`device_status=pending`（新版 GIA 尚未真机导入）。自包含回归 `test/platform-layout.test.mjs` 覆盖四平台独立值、五视口 × 同步开关 × 独立/整合 GIA 往返、独立手柄父矩形、失败导入及编辑不部分提交、读取不改变数据和零分量保留；相关布局测试 52/52，`pnpm install --frozen-lockfile`、根 `pnpm test` 通过。位置/尺寸含固定几何断言；GIA 编解码往返只证明模拟器支持字段的一致性，不代表真机像素一致。
-
-新增回归还暴露了 `gia/codec.js` 的零值问题：protobuf 已存在向量中省略的标量分量表示 0，旧实现把 pivot.x=0 读为 0.5、scale 的 0 分量读为 1。现区分整个向量缺失与向量分量缺失，左上锚点的 240×60 控件不再在 GIA 往返后横移 120。整向量缺失的原有默认策略保持不变。
-
+<a id="2026-09-25-日记-gia-的旋转与初始状态丢失"></a>
 ## 2026-09-25 GIA 图元与初始状态
 
-按官方 7.1.0 对照样本补齐 Z 旋转、初始可见性及客户端初始激活的 GIA 读写；文本垂直对齐的上/下有样本，居中值 1 是待实机验证的推断，导出时仍提示。导出前保存 Lua/服务端逻辑草稿；单独导出服务器 UI 时提示脚本源码未包含在包内。官方字段与样本哈希见完整知识工作区 `knowledge/ui/05_验证与不确定性.md` §8–9。
+按官方7.1.0对照样本读写 Z 旋转、初始可见性及客户端初始激活。文本垂直对齐上/下有样本，居中值1仍为授权推断，导出会提示。官方输入开关样本还覆盖常驻光标、隔离导航、穿透屏蔽、手柄聚焦与射线检测；未知原始非布尔值保留。
 
-`gia-observed-fields.test.mjs` 以独立观测字节构造输入；`gia-loss-warnings.test.mjs` 覆盖千图元往返与独立 UI GIA 的脚本遗漏提示。用户旧整合包虽含脚本和挂载，实机初始化原因仍需设备日志，模拟器启动通过不代表真机通过。
+来源为完整工作区 `knowledge/ui/05_验证与不确定性.md` §8–9；独立字节回归见 `test/gia-observed-fields.test.mjs`、`test/gia-loss-warnings.test.mjs` 和 `web/test/gia-input-e2e.test.mjs`。单独 UI GIA 不含脚本源码，导出会提示；旧日记整合包初始化原因仍待设备日志，不能凭模拟器启动或叠页现象定因。
 
 ## 试玩场景与文字对齐
 
-Runtime 控件内部保留 Lua `EnumItem` 身份；[`play/session.js`](play/session.js) 在 `paintList` / scene 输出边界把文字水平、垂直对齐统一为枚举 `Name` 字符串。Authoring 中已有的字符串保持原值。PNG 和 Pixi 消费同一场景表示，对齐变化也参与 scene fingerprint，因而只有对齐变化时仍产生增量更新。
-
-### 2026-09-08 Lua 赋值后的居中失效
-
-- 症状与追因：Lua 写 `Enum.TextHorizontalAlignment.Middle` / `Enum.TextVerticalAlignment.Middle` 后，Runtime 存的是枚举对象；若原样交给仅比较 `'Middle'` 等字符串的 PNG / Pixi 渲染器，就回退到左/顶部，造成文字未居中。修复只在上述场景边界取 `Name`，保留 Runtime 的枚举读回与身份语义。
-- 独立依据：本地 [API 加工稿](../../knowledge/guide/Lua客户端UI脚本API.md) 的 `TextHorizontalAlignment` / `TextVerticalAlignment` 分别定义 `Middle` 为水平/垂直居中，文本控件对应字段为读写枚举；这是字段语义依据。回归夹具使用固定 240×160 画布和居中的 160×80 文本框，文字中心预期由矩形几何写定为 `(120, 80)`，没有从待测渲染器生成 golden。PNG 字形栅格与字体度量允许小范围容差。
-- 回归证据：[`test/text-alignment.test.mjs`](test/text-alignment.test.mjs) 实际执行 Lua 的 Middle→Right/Bottom 赋值，检查 Runtime 读回、scene / paint 名称、仅对齐变化的增量补丁、PNG 白色字形像素范围和真实 Pixi Text 的 anchor / 位置。2026-09-08 在 Windows x64 / Node.js 22.23.2、`@napi-rs/canvas` 0.1.100 和 Pixi 8.20.0 本地运行 `node --test studio/test/text-alignment.test.mjs`（模拟器仓库根）3/3 通过；`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`（本条只关闭模拟器表示转换缺陷）。
-- 未覆盖范围：Pixi 回归使用其真实容器/文字对象与生产适配器，未启动浏览器 WebGL；不证明浏览器 GPU 字形栅格或千星真机像素一致。本次没有新增真机观察。
+Runtime 保留 Lua `EnumItem` 身份，`play/session.js` 在 scene/paint 边界投影为枚举 `Name`，并纳入增量指纹。PNG/Pixi 消费同一表示。2026-09-08 的居中失效源于把枚举对象直接交给比较字符串的渲染器；`test/text-alignment.test.mjs` 用实际 Lua 赋值、固定几何、PNG 字形位置和 Pixi anchor 验证。`observed / simulator / not_required`，不证明游戏精确字形。
 
 ## 图片填充渲染边界
 
-2026-09-08 已补齐 PNG / Pixi 试玩的水平与垂直填充。Runtime 保留原有正式字段与方法；[`play/session.js`](play/session.js) 的 compact paint / scene 投影 `fillType`、水平/垂直方向枚举 `Name` 和 `fillAmount`，并纳入 scene fingerprint / Pixi visual key。[`play/image-fill.js`](play/image-fill.js) 统一计算图片本地坐标中的矩形裁切：Horizontal 从 Left/Right 开始，Vertical 从 Top/Bottom 开始；0 不绘制，0.5 保留对应半边，1 完整，Unused 取消裁切。PNG 保存/恢复每项绘制状态，Pixi 只遮罩图片自身图元，不裁切其子控件；裁切随图元一起旋转/缩放。
+`play/image-fill.js` 统一水平/垂直矩形裁切；scene/paint 投影方向与进度，更新参与渲染缓存。0不画、1完整、Unused取消；只裁图片自身，子控件独立。径向填充未实现；超范围有限进度截到可见范围是模拟器策略。素材限制见 [图片说明](docs/image-assets.md)。
 
-修复前最小观察：白色圆形代理图片 `100002` 执行 `SetFillVertical(Enum.ImageFillVerticalType.Top, 0.25)`，Runtime 读回为 `Vertical / Top / 0.25` 且无 mount error，但 scene / paint 未携带 `fillAmount`，PNG 与调用 `SetFillUnused()` 后逐字节相同。原因为场景投影和两个渲染器均漏掉填充，不能据此判定千星图片不支持填充。
-
-独立回归依据：本地 [API 加工稿](../../knowledge/guide/Lua客户端UI脚本API.md) 的水平/垂直方法、方向定义与进度字段，加上手写矩形几何预期。[`test/image-fill.test.mjs`](test/image-fill.test.mjs) 实际执行 Lua，对 240×160 画布中心的 100×80 图片检查四方向 × 0/0.5/1 的四象限固定像素和 Pixi mask bounds；另验 Unused、仅 fill 变化的补丁、枚举读回、圆形保持原半径、父节点旋转及子控件不被裁切。预期坐标不由待测裁切函数或截图生成。
-
-证据范围：2026-09-08，Windows x64 / Node.js 22.23.2 / `@napi-rs/canvas` 0.1.100 / Pixi 8.20.0；填充定向回归 5/5、Studio `npm test` 93/93 通过。`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`（本条关闭模拟器水平/垂直填充缺陷）。Pixi 使用真实 Graphics/mask 对象，未运行浏览器 GPU 像素测试；本轮没有真机验证。径向 90/180/360 填充仍未实现；超出 0–1 的有限进度按可见范围截断、缺失/非有限进度按完整代理显示，是模拟器策略。千星具体图片资产的填充条件仍需按既有证据判断，未验条件保持 `pending`。
+2026-09-08 复现中，Lua `SetFillVertical(Top, 0.25)` 读回正确而 PNG 与 Unused 相同，原因是场景和渲染器漏字段。`test/image-fill.test.mjs` 用固定象限像素、Pixi mask bounds、父旋转与子控件验证；`observed / simulator / not_required`，真机素材条件另行判断。
 
 ## 浏览器图形缓存
 
 ### 2026-10-18 高频文字更新与缓存残留（#16）
 
-[#16](https://github.com/1475505/miliastra-beyond-simulator/issues/16) 报告 macOS 长时间试玩后卡顿、内存增长，重开游戏无效而刷新页面恢复。当前源码基线 `9022a14` / Pixi 8.20.0，Windows / Node.js 22.23.2 / Edge headless + SwiftShader 的合成 HUD 复现了每次改字重建 Text、背景和裁切几何，以及 Pixi 两张文字表中失效键累积：三轮各400次更新并清场，`_managedTexts.items` / `canvasText._activeTextures` 的键数分别到400/800/1200，轮内视觉重建399次。
+普通 HUD 原位更新 Text；只有尺寸、底色、裁切等几何变化才重建视觉对象。销毁释放自有 TextStyle，沿 Pixi 引用计数回收纹理，仅清除已失效文字键；不能递归销毁共享图片或池化纹理。
 
-当前锁定 Pixi 版本的 `ViewContainer.destroy → unload → CanvasTextPipe.onTextUnload` 会释放文字的GPU引用，`AbstractTextSystem` 将纹理归还共享池；测试中清场后的存活文字/纹理引用为0，因此本轮**未复现报告描述的同一种 TextureSource 不释放路径**。其 `AbstractText.destroy` 的旧源码描述与本地8.20实现不同。不能直接销毁 Text 的池化纹理，也不能向全部图片递归传入 `texture:true`。
+[#16](https://github.com/1475505/miliastra-beyond-simulator/issues/16) 的 Windows / Pixi8.20 / Edge合成复现中，三轮各400次改字造成失效键400/800/1200、每轮399次重建；修复后重建0、键数1、清场归零。`test/pixi-cache.test.mjs` 与 `web/test/text-churn-browser.test.mjs` 验证资源复用、隐藏恢复和跨局释放。`observed / simulator / not_required`；macOS原工程、能耗与报告者纹理未释放路径未复现。
 
-- 修复：`play/pixi-renderer.js` 在文本框尺寸/底色/裁切与滚动条几何不变时原位更新 Text，文字内容、对齐、字号、颜色、描边变化不再重建背景与遮罩；样式变化只替换自有 TextStyle，普通 HUD 改字保留样式。
-- 清理：销毁自有文字时释放 TextStyle；沿Pixi正常引用计数回收纹理，只删除已释放的文字记录和旧字符串纹理键。隐藏控件延期上传或另一文字仍引用旧键时保留到实际释放。图片及圆形共享纹理的生命周期保持独立。
-- 验证：`studio/test/pixi-cache.test.mjs` 扩充一项覆盖复用、字号/描边/滚动位置和重建释放；既有图片共享纹理测试继续通过。`web/test/text-churn-browser.test.mjs` 在真实生产浏览器渲染包中检查1,200次更新、重复清场、隐藏恢复及删除一个文字不破坏另一个文字。修复后各轮重建0次，文字/纹理键各1、清场归零，GPU纹理源保持5（测试预热与池化高水位），最新字符串确实上传GPU。
-- 完整检查：冻结锁文件安装、`pnpm test` 363 pass / 11 环境相关 skip / 0 fail，Web/DSH构建通过；文字资源与字体/字号浏览器验证3/3。`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。macOS原始工程、具体能耗/CPU降幅及长时间原生Chrome表现未在本机核验。
-
-缓存清理接触锁定 Pixi 8.20 的内部管理表，升级依赖须运行上述浏览器回归。修复进入安装包后需重启宿主并刷新试玩页一次，以替换旧浏览器模块和已积累缓存；仅重开Lua游戏不会替换页面中的渲染器代码。
-
-2026-09-08，Windows / Pixi 8.20.0 的 Web 试玩回传：拓扑五子棋回廊第二条教学落下两颗棋子后，棋子向棋盘中心拉出黑色三角形。直接观察当前浏览器存在该图形；同一运行会话的完整 scene 在 PNG 中正常，浏览器收到完整 scene 重建后异常消失，棋盘和教学进度未改变。结论为 `evidence_source=observed`、运行端 `simulator`、`device_status=not_required`；不据此推断千星客户端图片能力。
-
-检查 [`play/pixi-renderer.js`](play/pixi-renderer.js) 发现明确的缓存顺序错误：`updateNode` 先登记新 visual key，`replaceVisual → clearVisual` 随后又将它清空，尺寸/颜色变更后的后续位置更新因此反复销毁并重建同一 Graphics。现将 key 提交移至替换完成后。独立回归 [`test/pixi-cache.test.mjs`](test/pixi-cache.test.mjs) 以“外观不变的移动应保留同一几何对象，外观改变应正确更新”为依据，修复前两例均失败，修复后均通过。另增浏览器 `attach`，刷新页面时只读取完整场景接回已有 Worker，不调用 start、切换玩家或解除暂停；见 [`test/browser-session.test.mjs`](test/browser-session.test.mjs)。
-
-Studio 全套96/96、Web全套2/2通过；原页面刷新接入后仍保留两颗棋子及“第2/2条、第3/5颗”。项目 `workspace/topo5/records/web-stone-spike/` 留存原场景、实际输入和原生对照，`tools/repro-web-stone-spike.mjs --user` 可产生去掉长时间空闲后的472帧实际输入增量序列。**黑三角的底层GPU触发条件未在这段独立序列中重现**，不能将已修正的缓存缺陷说成经独立复现证明的唯一原因，也不能把对象级回归当作GPU像素证明。完整重建已直接验证能恢复原画面；后续若复发，继续从GPU批次/生命周期收集证据，不重复检查已确认正常的Lua规则与场景几何。
+清理依赖锁定的 Pixi8.20 内部表，升级时运行上述浏览器回归。加载修复须重启宿主并刷新页面，重开Lua游戏不会替换渲染代码。
 
 ### 2026-09-09 复发后的圆形绘制修复
 
-上一条 visual key 修正未关闭黑三角问题（`superseded_by=本节`）。用户在回廊第一条教学的第3/5颗再次回传两颗棋子拉向棋盘中心；同一 Worker 的 flat paint 和 PNG 仍正常。独立重放首页→平面教学→回廊两子的338帧增量时也观察到一次相同尖角，但重复重放并不稳定。检查顶点、索引内容和绑定未形成可重复的唯一底层原因，不能把已确认的 key 错误或资源泄漏单独称为该尖角的唯一原因。
+Windows Web 棋子出现黑三角而同会话 PNG 正常；完整 scene 重建可恢复。最初修复 visual key 被清空的错误后仍复发，不能把它称为唯一原因（`superseded_by=共享圆形纹理与自有几何释放`）。
 
-修复直接绕开可变半径的圆形 Graphics 网格：无填充裁切的圆形图片使用按分辨率分档共享的白色圆形纹理和四顶点 Sprite；尺寸、颜色、透明度及位置变化只更新 Sprite。该版本按较小宽高取圆直径；2026-09-24 已修正为分别按宽高缩放，详见下节。纹理由渲染器统一持有、销毁，单个圆形删除不影响其他实例；水平/垂直填充继续使用已有 Graphics 和局部遮罩。同时补齐 `clearVisual` 的 `context: true`，同步释放自有形状及遮罩几何，避免尺寸/颜色动画的旧 context 留到定时 GC。释放断言修复前失败、修复后通过。
-
-回归证据：[`test/pixi-circle.test.mjs`](test/pixi-circle.test.mjs) 验证圆内不透明/圆外透明、0→1→20→60→50尺寸变化、非正方形尺寸、色彩/透明度、共享纹理、删除及跨分辨率分档；[`test/pixi-cache.test.mjs`](test/pixi-cache.test.mjs) 验证自有形状/遮罩释放。Windows / Node 22.23.2 / Pixi 8.20.0 下 Studio 100/100、Web 2/2、DSH 28/28通过。真实浏览器运行400帧缩放与删除重用，在21个检查点对圆形外部像素断言；相同现场输入按1、2、3、5、10帧间隔生成五种增量序列，实际浏览器输出均有两颗棋子、尖角区域黑色像素为0。证据保存在本地 `workspace/topo5/records/web-stone-spike-20260909/` 的 `pixel-check.json`、`stress-fixed.json`、`stride-*.png`，生成/检查工具位于该项目 `tools/`。这些是轮廓与症状区域的像素检查，不要求浏览器与原生PNG抗锯齿逐像素相同。
-
-现场接入：Web/DSH渲染包已重建；原Web页加载新版后保留“第1/2条、第3/5颗”和58个棋子图元（两颗分层棋子），画面恢复圆形，Worker继续运行且Lua error为0。`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。本条关闭此次浏览器圆形显示故障；底层Graphics不稳定复现条件仍未独立定因，后续若其他Graphics形状出现同类异常，应继续收集其GPU证据。本轮不改变Lua/GIA，也没有新增千星真机结论。
+无填充圆形改用分辨率分档共享纹理/Sprite；删除单个实例不销毁共享纹理，Graphics形状与遮罩释放自有 context。`test/pixi-circle.test.mjs`、`test/pixi-cache.test.mjs` 保留资源与几何回归。2026-09-09 Edge 400帧及五种增量间隔的症状区域像素检查通过，证据在完整工作区 `workspace/topo5/records/web-stone-spike-20260909/`。`observed / simulator / not_required`；原Graphics的底层GPU触发条件未唯一定位。
 
 ### 2026-09-24 非正方形图元尺寸一致性
 
-旧实现的图片代理 `100002` 圆形和 `100006` 圆环在 Pixi 试玩与 PNG 中使用 `min(宽, 高)` 生成正圆，而编辑画布通过百分比圆角在 340×60 控件上显示椭圆。可追溯到 2026-09-05 提交 `6e32354`，9 月 22 日的 Sprite 路径沿用了较短边直径，与本次四平台布局迁移无关。现统一按控件宽、高分别绘制椭圆及椭圆环：无填充圆形保留共享圆形纹理 Sprite 并分别设置两轴尺寸，有填充圆形和圆环走 Pixi ellipse，PNG 使用 Canvas ellipse。父级变换、颜色、透明度与填充遮罩路径保留。编辑画布的矩形、三角形、四角星、五角星与 Pixi/PNG 都按宽高分别生成外框或顶点，未发现相同的较短边截断。这里是模拟器代理图元的内部一致性修复，不宣称官方素材的拉伸规则已由真机核实。
-
-回归：`test/pixi-circle.test.mjs` 断言 340×60 的 Sprite 双轴尺寸、填充圆形及圆环的 Pixi ellipse 半轴；`test/primitive-stretch.test.mjs` 对 PNG 的椭圆/椭圆环像素、旋转后的椭圆/矩形以及另外四种代理图元进行独立坐标检查。`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`；真机素材行为仍待原生观察。
-
-## 2026-09-25 GIA 输入开关
-
-官方 7.1.0 的 9 个对照模板确认容器常驻光标、隔离导航、按键/点击穿透屏蔽、初始激活、手柄聚焦及光标射线检测开关。模拟器按字段读写，保留 footer/cursor 的未知原始非布尔值。回归覆盖官方样本往返、合成字节与 Web API 的整合包导出→导入→Lua 点击；实机点击仍待验证。
+圆形/圆环按控件宽高分别生成椭圆，而非 `min(宽,高)` 正圆。无填充圆形保留共享Sprite，填充圆形及圆环使用ellipse。`test/primitive-stretch.test.mjs` 和 `test/pixi-circle.test.mjs` 核对340×60双轴尺寸、旋转及其他代理图元；`observed / simulator / not_required`，不推定官方素材拉伸语义。
 
 ## 2026-10-11 客户端资产编号修复
 
-问题：旧导出器把 `Info.index` 当成控件类型常量，新建容器/文本/图片等统一填 2/3/10。带子树的“商品卡”“空格”在官方编辑器中根和子控件属性面板空白，尽管回导出仍保留完整属性。仅改根编号、改字号、换官方 Data 或拆成独立客户端包都未恢复；用户最终确认只修改 17 个资产编号字节的包恢复正常，GUID、属性、关联、脚本与版本均不变。原生多层样本显示逐个新建图片编号 6/7/8，导出树顺序为 6/8/7，因此编号与控件类型、层序及 GUID 是不同概念。真机来源及范围见完整知识工作区 [GIA 验证 §13](../../knowledge/ui/05_验证与不确定性.md#13-2026-10-11-完整资产编号包恢复与模拟器修复)。
+`Info.index` 是资产登记编号，与控件GUID、类型和层序不同。`gia/asset-indices.js` 为新模板根和子控件登记持久 `giaInfoIndex`，`meta.giaNextAssetIndex` 保存高水位；排序、换父级、删除不重编号或复用。无现存编号时从2开始，1留给服务端组，这是模拟器分配策略。
 
-- 新增 `gia/asset-indices.js`：客户端模板根和新建子控件均登记独立 `giaInfoIndex`，`giaInfoIndexSource=authoring`；项目保存 `meta.giaNextAssetIndex`，新增时从高水位继续，不随排序、换父级或删除而重编号/复用。项目没有现存编号时从 2 开始，1 留给服务器组；这是模拟器分配策略，不声称复刻官方全局分配器。
-- 读取旧 Authoring JSON 时，先保留所有已有合法编号，再一次性补缺失编号；没有创建历史的旧树只按保存树顺序登记一次。JSON 保存/重载保留编号及高水位，控件 GUID 和 Lua 引用不变。
-- 兼容已保存的旧错误编号：未登记编号格式版本，且同时满足“独立模板根共号、每种类型只用一个编号、编号组类型一致、没有 authoring 新资产身份”时，识别为旧类型兜底模式。读取 JSON/GIA 时保留每组第一份模板身份，从现有高水位且不低于 13 继续登记额外根和子控件，返回迁移提示；保存 `giaAssetIndexSchemaVersion=1` 后不重复处理。本次商店原包自动修复 17 条，映射与真机成功补丁一致，GUID/Lua/属性不变。
-- 导入 GIA 带来的编号默认标记 `imported`；官方模板与子实例的合法共号（没有独立根重复的旧模式）原样保留，新建节点不复用这些号码。不能识别的重复来源不猜测重写，校验仍会拒绝；当前 authoring 编号错误也不会当旧数据迁移。此兼容规则补上了首轮仅补缺号、遗漏显式错误编号的问题。
-- 导出器移除类型兜底，独立包和整合包都使用同一编号；导出校验拒绝独立模板根共号，Authoring 元数据检查拒绝新登记资产共号。整合包同时校验客户端模板森林，不只查服务器树；子实例的合法共号不做全局唯一性限制。
+- 旧JSON先保留合法编号，再一次性补缺。无创建历史时按保存树序登记，保留GUID、Lua和属性。
+- 未标编号格式版本，且满足独立根共号、每种类型单号、编号组类型一致、无authoring新身份时，才识别旧类型兜底模式。保留每组第一份，从高水位且不低于13补号；保存 `giaAssetIndexSchemaVersion=1` 后不重复迁移。
+- 原生模板/子实例合法共号保留；歧义来源不猜改，当前authoring错误不按旧数据迁移。独立和整合导出均校验模板森林、新资产身份和独立根共号。
 
-回归 `test/gia-asset-indices.test.mjs` 使用仓库内合成 wire 构造独立原生编号夹具，无工作区外文件依赖：新增同类兄弟、深层图片、创建顺序与导出顺序不同、换父级、重排序、删除/高水位、JSON 重载、原生模板/子实例共号、新资产保留范围、独立/混合导出校验和失败原子性均覆盖。全仓 `pnpm install --frozen-lockfile`、`pnpm test` 通过（319 pass、7 环境相关 skip），另执行 `pnpm build` 重建 Web/MCP/DSH；这是模拟器检查，生成的新版包尚未独立真机回验。用户已验证的编号补丁结果不要求重复确认。已运行的宿主需重启以加载新构建；旧 JSON 存档重新读取后再导出即可补齐此前缺失的资产编号。
-
-后续旧存档兼容回归：新增 3 项覆盖显式类型重复 JSON/GIA 的自动迁移、单次处理、脚本与属性/GUID不变及歧义来源不自动重写；相关 66 项通过，Web 导入/脚本同步端到端 3 项通过。实际旧商店 GIA 在本地 Web 导入再导出通过，输出字段仅编号和导出文件名变化。再次全仓检查期间，当前并行修改的遮罩代码有 2 项失败（嵌套 mask alpha、script.Invoke），编号测试全部通过；本次未修改这些无关文件，不把全仓结果记为通过。已重建所有产品并启动新版本地服务，已有页面须使用新进程重新导入旧存档。
-
-提交前最终检查：再次运行 `pnpm test`，Runtime 58、Server 11、Studio 189、DSH 35、MCP 15、Web 18 项通过，Web 8 项环境相关跳过，共 326 pass/0 fail/8 skip；此前遮罩两项在其后续工作区改动中已恢复。本提交只包含资产编号修复、旧存档迁移、相应导出与回归内容。
+证据：2026-10-11 用户确认只改17个编号字节即可恢复官方编辑器属性面板，见完整工作区 `knowledge/ui/05_验证与不确定性.md` §13；不要求重复验证该补丁。`test/gia-asset-indices.test.mjs` 用独立合成wire覆盖新增、高水位、原生共号、旧类型迁移与原子性。自动迁移的通用覆盖属于 `observed / simulator`，不等于所有新导出包均经真机回验。层序与批量GUID校准见 [客户端模板层序](docs/client-template-order.md)。

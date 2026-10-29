@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { resolveLocale, translate, loadSystemLanguage, getLocale, getSystemLanguage, setLanguagePreference } from '../i18n.js'
 import en from '../locales/en.js'
+import { createStudio } from '../index.js'
 
 test('Chinese language families use Chinese; other system languages default to English; manual choice wins', () => {
   for (const language of ['zh-CN', 'zh-TW', 'zh-Hant-HK', 'zh_SG', 'cmn-Hans', 'yue-HK']) {
@@ -61,4 +62,21 @@ test('every translation retains the original parameter slots', () => {
     assert.ok(value && !/[\p{Script=Han}]/u.test(value), key)
     assert.deepEqual(slots(value), slots(key), key)
   }
+})
+
+test('control names and fill labels translate without changing inspector enum values', () => {
+  const studio = createStudio()
+  for (const [id, expected] of [['n1', 'Container Control'], ['n5', 'Grid Scroller'], ['n7', 'Text Window']]) {
+    const snapshot = studio.patch({ op: 'select', id })
+    assert.equal(translate('en', snapshot.inspector.label), expected)
+  }
+  const image = studio.patch({ op: 'select', id: 'n9' })
+  const shape = image.inspector.fields.find(field => field.key === 'fillType')
+  assert.deepEqual(shape.options.map(option => option.value), ['Horizontal', 'Vertical', 'Radial90', 'Radial180', 'Radial360'])
+  assert.deepEqual(shape.options.slice(2).map(option => translate('en', option.label)), ['Radial90', 'Radial180', 'Radial360'])
+  assert.equal(translate('en', '边缘羽化'), 'Soft Edge')
+  assert.equal(translate('en', '中心'), 'Pivot')
+  assert.equal(translate('en', '居中'), 'Center')
+  assert.equal(translate('en', '关闭'), 'Close')
+  assert.equal(translate('en', 'ClientUIGridScrollerControl'), 'ClientUIGridScrollerControl')
 })

@@ -1,6 +1,6 @@
 # 客户端控件支持状态与基础滚动
 
-检查日期：2026-10-02。范围是当前源码中的编辑、Lua 运行时和 Web/DSH/PNG 试玩；下表的“可用”不代表千星真机已验证。11 类控件均可创建、配置公共变换、保存 JSON，并按已知子集交换 GIA。编辑器可创建、Lua 字段可读写和试玩实际有效是三个不同层次。
+上级：[Studio](../README.md#专题树)。范围是当前源码中的编辑、Lua运行时和Web/DSH/PNG试玩；“可用”不代表真机已验证。11类控件均可创建、配置公共变换、保存JSON，并按已知子集交换GIA。编辑器可创建、Lua字段可写和试玩有效是不同层次。
 
 ## 支持矩阵
 
@@ -46,7 +46,7 @@
 - 语法来源：2026-10-20 在线读取 [Unity 2018.4 Manual / Rich Text](https://docs.unity3d.com/2018.4/Documentation/Manual/StyledText.html)，`evidence_source=documented`、运行端 `official_document`，来源明确为 **Unity** 文档。千星本地 Lua API 仅声明文本控件的 `text/fontSize/fontColor` 等字段，没有富文本语法契约；不能据原神使用 Unity 推定其全部文本组件行为。
 - 最小复现：`<color=red>红字</color> <i>斜体</i> <size=12>小字</size>`，旧实现显示完整标签并将标签计入换行；现显示样式化正文。千星实机具体兼容范围、混合字号/自适应、异常标签处理及精确字形仍 `device_status=pending`。
 - 回归：`test/rich-text.test.mjs` 覆盖独立文档颜色值、嵌套恢复、异常标签、标签不占宽度、字号拟合边界、九种对齐/基线/描边、PNG 颜色与 Alpha、树形/扁平一致、实际 Lua 增量、变高行滚动、JSON/GIA 字符串保留、Pixi 纹理复用和释放。`web/test/rich-text-browser.test.mjs` 覆盖真实编辑器 Canvas、WebGL 颜色/Alpha、扁平回退、200次更新实际上传和资源释放；已有字体与普通文字缓存浏览器用例继续验证回归。
-- 本地验证：Windows / Node 22.23.2 / Pixi 8.20.0 / Edge headless + SwiftShader；`pnpm install --frozen-lockfile`、全仓 `pnpm test`（399通过、14环境相关跳过、0失败）、Web/MCP/DSH `pnpm build` 通过。收尾补齐系统字体为null的回退后，相关排版/滚动/缓存用例29/29及富文本浏览器用例1/1再次通过；本轮已有字体与普通文字缓存浏览器验证亦通过。
+- 验证环境：Windows / Node22.23.2 / Pixi8.20 / Edge headless + SwiftShader，上述回归及系统字体为空的回退通过；`observed / simulator`。
 
 源码更新后须构建并重启旧 Web/MCP/DSH 宿主、刷新页面，才能加载新渲染器。本节只描述模拟器能力，验证结果为 `observed / simulator`。
 
@@ -64,7 +64,7 @@
 
 自包含回归 `studio/test/gia-reference.test.mjs` 覆盖二进制内外槽、空/旧文本槽、JSON与GIA字节保留、编辑拒绝原子性、非UI依赖、脚本附件挂载及坏UI仍报错。合成数据不作为非空原生字段结构的证据。收到问题原包后再核对实际失败路径与目标模板引用格式。
 
-验证：本轮 Studio 源码测试237/237、Web GIA导入与脚本同步端到端2/2通过；本地两份原生空引用模板均可导入，`gia.proto`编译与`schema.json`解析通过。未触发产品构建、未验证反馈者原包、未执行真机回导。
+本地两份原生空引用模板可导入；反馈者原包和真机回导未验证。
 
 ### pixel-link 整合包静态排查（2026-10-29）
 
@@ -89,7 +89,6 @@
 - API 依据为完整知识工作区本地 `Lua客户端UI脚本API.md` 的 `adaptiveFontSize:boolean` 与 `minimumFontSize:integer`（documented / official_document，本轮未在线核验）；上述拟合算法是模拟器策略，`device_status=pending`，不能由字段名或 PNG 推断真机精确算法。
 - GIA 必须按消息类型区分：本项目客户端 `TextConfig(75)` 的自适应为 `502`、描边关闭为 `506`；图片编辑器素材组使用的旧 `TextBox(19)` 才是 `506` 自适应。旧消息的 `503=1` 仍含义未知，不映射为 visible，也不替换新版 `TextConfig.field503=12`。旧素材组 GIA 的完整语义导入不在本次渲染修复范围。
 - 自包含回归：`test/text-autosize.test.mjs` 以两行 ×1.2 行高加文本框块占位给出最大字号 13 的独立期望（文本视窗仍为16），覆盖实际 Lua 更新、开关/下限、尺寸、滚动、宽度、中文、换行、投影隔离、PNG 和真实 Pixi 对象；`test/gia-observed-fields.test.mjs` 固定新版原生观察字节，防止套用旧字段号。浏览器字号增量验证合并到 `web/test/local-font.test.mjs`，共用真实字体加载、编辑文字 span 和 WebGL 渲染链路，避免维护第二套临时服务器与打包器。测试属于 observed / simulator，不增加真机渲染证据。
-- 本地验证：Windows / Node 22.23.2，`pnpm install --frozen-lockfile`、`pnpm test`（353 pass、9 环境相关 skip、0 fail）及 `pnpm build`（Web/MCP/DSH）通过；随后补充“仅修改自适应/最小字号的非当前资产也须进入 GIA 资产包”回归，字号定向测试 6/6 通过。Edge headless / SwiftShader 浏览器用例单独启用后 1/1 通过。运行中的旧宿主需重启并刷新页面。
 
 ### #19 选取字号占位模型（2026-10-18）
 
@@ -100,7 +99,6 @@
 - 宽度用 #20 加载的实际字体 `measureText` 测量，自动换行也参与每个候选字号的高度检查。自适应以二分搜索挑能完整容纳的最大整数字号，低于配置最小字号仍放不下时停在最小字号。Lua/JSON 中请求字号不变。
 - 例如160×40、两行、配置40、最小10：字号13需要38.45 UI像素，字号14需要41.1，故选择13。宽度/字号的单位为缩放前画布本地像素；实际屏幕像素随后受画布缩放和父级变换影响，字形着色像素范围还取决于字体，不能把 fontSize 当作每个字的固定宽高。
 - 精简验证沿用现有 `text-autosize`、`local-font` 和浏览器字体用例，只加一组独立边界表，避免维护 PR 中重复常量/公式断言及另一套浏览器排版链路。
-- 选取版独立整合验证（基于 `8c81030`）：冻结锁文件安装、根 `pnpm test` 通过（360 pass、10 环境相关 skip、0 fail）；Edge headless 的字体/字号与键位浏览器验证3/3，Web/DSH/MCP构建通过。此为 `observed / simulator`，不增加原始真机证据。
 
 ### 文本框整行可见性（#22 C，2026-10-20）
 
@@ -112,8 +110,7 @@
 - **范围**：只摘取文本框完整行的容纳行为。没有引入全局10px字号下限或“字号<16就隐藏”；文本视窗保留完整内容、连续滚动与边缘裁切。上一节“只用于字号拟合”的范围由本节扩展，文本视窗策略不变。
 - **证据边界**：作者报告的 PC/UI缩放1.2 条件、字号10/16/20/24/40/60边界表仍为 `provided_unverified / device`、`device_status=pending`，具体客户端版本、字体和原始卡片待补。本轮最小模拟器观察：字号16/框高26，旧版 `fits=false` 仍有字形，修复后只有底色；高28恢复一行、高47显示两行。不能据此关闭 #22 原工程的所有缺字原因。
 - **长期回归**：合并进已有 `test/text-autosize.test.mjs`，保留独立边界、PNG底色/描边及保留行块对齐、编辑预览文本、Lua大小/字号增量；`web/test/local-font.test.mjs` 保留自适应切换时GPU旧字形清除和恢复。完整测量扫描、三种对齐×富文本的重复组合、浏览器逐高度行带扫描已验收后删除，不长期维护第二套测试夹具。
-- **本地验证**：Windows / Node 22.23.2 / Pixi 8.20.0。新增4项先在旧实现全部失败，修复后相关文本/滚动/缓存/字体39项通过；冻结锁文件安装、全仓 `pnpm test` 为403通过、14环境相关跳过、0失败。单独启用Edge headless + SwiftShader的上述浏览器用例3/3通过，Web/DSH/MCP构建通过，`git diff --check`通过。结果为 `observed / simulator`，不新增真机通过结论；运行中的旧宿主需重启并刷新页面。
-- **清理后提交验证**：一次性组合测试已删除、关键断言并入原有用例。仅含文本框修复的独立工作树冻结锁文件安装、全仓 `pnpm test` 为388通过、13环境相关跳过、0失败，Web/DSH构建通过；保留的Edge字体/裁行浏览器用例2/2通过。含已有富文本的主工作区相关33项通过。
+- **本地验证**：Windows / Node22.23.2 / Pixi8.20 / Edge headless + SwiftShader；独立边界先在旧实现失败，修复后文本和浏览器字体/裁行回归通过。`observed / simulator`，不增加真机通过结论。
 
 ## X/Y 旋转投影（2026-10-12）
 
@@ -128,7 +125,7 @@
 
 构建 `pnpm build` 后，重启旧 Web/MCP/DSH 宿主并刷新页面才能加载新实现。上述实现与回归属于 `observed / simulator`；只将真机已覆盖的单轴图片行为标为 `device_status=passed`。
 
-功能完成时的本地检查：Windows / Node 22.23.2，`pnpm install --frozen-lockfile`、全仓 `pnpm test`（332 pass、9 环境相关 skip、0 fail）与 Web/MCP/DSH 构建通过；新增浏览器用例另用 Edge headless / SwiftShader 执行 1/1 通过。2026-10-12 发版清理前再次用 Edge 验收三轴显示、索引批量校准及两条 Lua 同步路径，4/4 通过，再删除一次性浏览器脚本。外部原始 ROTXY2 GIA 用独立复核脚本导入→导出→运行，126 次三轴采样与真机转录一致，原包与源码哈希不变；该外部复核不作为仓库测试依赖。
+2026-10-12 Windows / Node22.23.2 / Edge headless + SwiftShader验收三轴DOM/WebGL显示；外部ROTXY2 GIA独立复核的126次采样与真机转录一致，原包与源码哈希不变。外部复核不作为仓库测试依赖。
 
 ## 命中转发：祖先矩形只在视口处裁切（2026-11-04）
 
@@ -154,7 +151,7 @@ MASK v1 的 PC 真机回传确认：`enableMask` 裁切图片的后代，不裁�
 
 上述渲染一致性与性能检查为 `observed / simulator`，`device_status=not_required`；不升级为真机精确羽化曲线或合成顺序已还原。
 
-验证环境：Windows / Node 22.23.2 / Pixi 8.20.0 / `@napi-rs/canvas` 0.1.100。锁定依赖安装和 Web/MCP/DSH 构建成功；全仓测试 326 通过、8 环境相关跳过、0 失败。遮罩浏览器用例另启用 Edge headless / SwiftShader 执行 1/1 通过。一次性渐变演示构建和临时 review 脚本已清理，保留交付文件和真机证据；长期只维护上述必要回归。
+验证环境：Windows / Node22.23.2 / Pixi8.20 / Canvas0.1.100 / Edge headless + SwiftShader；上述遮罩回归通过。
 
 ### 编辑画布遮罩与羽化（2026-10-20）
 
@@ -164,8 +161,7 @@ MASK v1 的 PC 真机回传确认：`enableMask` 裁切图片的后代，不裁�
 - 编辑器PNG复用试玩的裁剪包围盒分组合成。DOM选框/控制点与PNG选框最后单独绘制，不参与羽化，不因选中控件而把其图像提升层序。隐藏祖先或左树关闭画布可见性时，其后代不显示；遮罩范围外仍可通过控件树选取，编辑点击继续按布局矩形判断。
 - 支持边界沿用上节：仅矩形取形，精确羽化曲线、范围字段、反转和图片透明轮廓未新增实现。编辑预览仍不执行Lua，不证明真机像素一致。
 - 自包含关键回归扩充原有 `test/image-mask.test.mjs`、`web/test/image-mask-browser.test.mjs`，共用 `fixtures/image-mask.mjs`。PNG保留独立像素、祖先链、零宽/旋转和选框回归；浏览器用一个嵌套夹具核验实际分组合成、实时检视器提交、编辑选框及树可见性。重复的浏览器硬边/关闭/零宽/旋转逐项验收及整份存档切换已验证后清理。来源为 `observed / simulator`，`device_status=not_required`（编辑预览接通）；沿用的真机保真边界不升级。
-- 验证：Windows / Node 22.23.2 / Edge headless + SwiftShader。冻结锁文件安装、全仓 `pnpm test` 为401通过、15环境相关跳过、0失败；Web/DSH/MCP构建与差异格式检查通过。另启用遮罩、图片素材、字体、富文本浏览器回归7/7通过，补齐真实属性输入提交后遮罩2/2再次通过。重启旧宿主并刷新页面后生效。
-- 清理后提交验证：仅含本变更的独立工作树冻结锁文件安装、全仓 `pnpm test` 为389通过、14环境相关跳过、0失败，Web/DSH构建通过；精简后的遮罩浏览器用例2/2通过。
+- 验证：Windows / Node22.23.2 / Edge headless + SwiftShader的DOM/PNG和真实属性输入回归通过，重启宿主并刷新页面后生效。
 
 ## 基础滚动（2026-10-02）
 
@@ -195,7 +191,6 @@ MASK v1 的 PC 真机回传确认：`enableMask` 裁切图片的后代，不裁�
 - 修复前最小复现：160×80 文本视窗、字号 20、40 行文字、交互与滚动条均开启，按下→拖动 35→松开，命中/拖拽状态成立但 paint 与 PNG 完全不变；网格七方法直接抛 `not implemented`。当前相同输入改变内容偏移与画面。
 - 自动回归：`studio/test/scroll.test.mjs` 使用手写几何期望（10 行 ×24 行高 −80=160 溢出、拖动 35=偏移 35；两列网格 5×30−80=70），覆盖边界、遮挡/缩放、显隐/禁用、取消、文本重排、Lua 回调/复用/定位/Tween/释放、PNG 与树形/扁平 Pixi 裁切、滚轮录制回放。`browser-session.test.mjs` 检查滚轮单位换算、多指过滤和取消；`gia-loss-warnings.test.mjs` 检查新增字段 JSON 往返和 GIA 损失提示。
 - 浏览器证据：`web/test/scroll-browser.test.mjs`，Windows / Node 22.23.2 / Edge headless / SwiftShader / Pixi 8.20.0；真实浏览器鼠标滚轮、鼠标拖拽、滚动条点击、模拟触摸输入均到达 Worker 并移动两类视窗；GPU 截图检查网格内部固定色像素和视窗外裁切。单独设置 `QXQY_BROWSER` 后 2/2 通过；全仓默认测试会跳过需浏览器环境变量的用例。
-- 最终检查：`pnpm install --frozen-lockfile`、`pnpm build` 成功（Web/MCP/DSH 三端）；根 `pnpm test` 279 项通过、5 项按环境跳过、0 失败；滚动浏览器用例随后单独启用 Edge 运行 2/2 通过。`git diff --check` 无差异格式错误。
 - GIA：此次开放的视窗交互/滚动条、列表模板、方向/排列字段只保证 JSON/Lua。未核实 wire 映射不猜写；导出有对应改动时返回明确提示。已有已知尺寸/间距与文本字段继续沿用原编解码。
 
 ### 实现入口

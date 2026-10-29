@@ -1,5 +1,7 @@
 # 白名单图片与元件图标预览、缓存
 
+上级：[Studio](../README.md#专题树)。
+
 ## 使用
 
 图片控件选择图片源并填入白名单 `imageId` 后，编辑器画布、Pixi 试玩和 Host PNG 截图均可显示对应素材。首次实际使用时按需下载，重启后直接读取磁盘缓存，已缓存素材可离线使用。未知来源/ID 不发网络请求，下载失败保留占位。
@@ -59,11 +61,10 @@ Web、MCP、DSH 使用同一套 `ImageAssetStore`，同一系统用户默认共�
 - 环境：Windows、Node 22.23.2、Pixi 8.20.0、`@napi-rs/canvas` 0.1.100、Edge。
 - `studio/test/image-assets.test.mjs`：白名单、两 Store 并发文件锁、离线重启、失败退避/刷新保留、损坏缓存修复、独立几何像素预期、RGB/alpha/填充、共享纹理以及无浏览器 Host 截图。
 - `web/test/image-assets.test.mjs`：同源接口、ETag/HEAD/404、PNG 预览共用缓存；设置 `QXQY_BROWSER` 后验证真实浏览器 HTTP 命中、DOM 像素、WebGL 像素、静态异步完成、换 ID/删除竞态、GPU 释放和跨文档刷新。测试只使用合成图片和注入下载器，不访问 OSS。
-- `dsh-plugin/test/image-assets.test.mjs`：真实 HTTP 请求经 DSH 注册的素材路由及刷新 API，并与无头截图共享缓存。根 `pnpm test` 288 项通过、6 项环境可选测试跳过；本功能的 Edge 浏览器回归单独启用后通过。`pnpm pack:release`、`pnpm test:packages` 验证独立 Web/MCP/DSH 包，覆盖 DSH Tools 0.1 与 0.2 两条依赖基线。
+- `dsh-plugin/test/image-assets.test.mjs`：真实HTTP请求经DSH注册的素材路由及刷新API，并与无头截图共享缓存。
 - 实际源抽查：`100101`、`101001`、`102001`、`105001`、`107001`、`112001` 的 PNG/元数据均成功下载和恢复尺寸，其中 `101001` 从 48×48 裁切图恢复到 64×64。未批量下载其他素材。
 - 2026-10-11 元件扩展：完整清单的 ID、空项及尺寸与固定目录逐项比对，无差异。通过生产 Store 抽查 `10003004`、`10005001`、`20001001`、`30001001`，均只有一个 PNG 请求，重新创建离线 Store 后复用成功。
 - 元件扩展提交前已完成一次性验证：来源白名单、单 PNG 下载、并发去重/离线/刷新失败保留、透明边界、同 ID 不同来源乘色、真实 Lua 仅改来源的增量、JSON 保留/GIA 警告、编辑与试玩截图，以及 Web/DSH HTTP 与真实 Edge 画面和刷新检查；这些元件专用验证脚本及用例在验收后按要求删除。
-- 清理一次性测试前：`pnpm install --frozen-lockfile` 和 `pnpm test` 通过（315 通过、8 项环境可选跳过）；单独启用 Edge 的图片/元件与 DSH 素材测试 5/5 通过。
 - `evidence_source=observed`，运行端 `simulator`，`device_status=not_required`（验证新增预览/缓存功能，不宣称千星真机对齐）。DSH Desktop 自定义协议的 HTTP 缓存效果未据普通浏览器测试推定。
 
 ## 图片类型：基础／拉伸（2.1.0）
@@ -107,5 +108,4 @@ Windows / Node 22.23.2 / Pixi 8.20.0 / Edge，`evidence_source=observed`、运�
 
 - 提交前已完成一次性验证：合成色块检查九切片/三切片边界、小尺寸压缩、零宽中心混合值、透明度/填充、父级缩放、网格释放、旧缓存补元数据、404 与网络失败区分、真实 Lua 类型切换及 JSON/GIA 往返。
 - 独立编码的客户端 slot84.field504 字节验证基础省略/拉伸=1和未知枚举保留；真实 DOM/Pixi 验证类型下拉、零中心像素、增量更新、GPU 几何释放、零边界素材和缓存请求数。这些图片类型专用测试文件及新增用例在验收后按要求删除。
-- 清理一次性测试前，`pnpm install --frozen-lockfile`、根 `pnpm test` 通过（333 通过，9 环境可选跳过）；单独启用 Edge 的图片类型/缓存/遮罩检查合计 4/4 通过。
 - 实际源抽查 106030：90×90、四边 45，按 407.5×265 绘制；再次以离线 Store 加载 PNG/边界无告警。素材中心本身透明，中心采样透明不等于切片漏绘。100001/105222 元数据边界全零。

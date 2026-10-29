@@ -83,7 +83,7 @@ https://oss.070077.xyz/audio/50888.mp3
 - 每个 Runtime 最多保留 128 个活跃实例、最近 128 条播放记录；浏览器最多 64 个声音，超过上限回收最早项。
 - 参数严格要求整数数值；整值浮点可用，字符串/小数拒绝。
 - Runtime 单独使用时需注入 `audioDuration(id)`，Studio 统一注入固定目录。不在 Runtime 内访问网络或存储素材。
-- 本轮接通上述 Lua API；没有新增循环、音量控制、空间音效、按钮 `clickAudioId` 自动播放或界面动效声音语义。
+- 上述Lua API不提供循环、音量控制、空间音效或按钮`clickAudioId`自动播放；界面动效的独立声音策略见[动效播放](ui-vfx-playback.md#时钟与声音策略)。
 
 ## 验证
 
@@ -95,4 +95,4 @@ https://oss.070077.xyz/audio/50888.mp3
 - `web/test/audio-assets.test.mjs`：HTTP 缓存/ETag/Range；设置 `QXQY_BROWSER` 后运行生产试玩页面，由真实 Lua 触发，使用 Web Audio 解码合成 MP3，检查非零波形、真实按键解锁、播放/停止计数与冷加载取消。
 - `dsh-plugin/test/image-assets.test.mjs` 同时覆盖 DSH 注册的音频 HTTP 路由及缓存复用。
 - 实际 OSS 仅抽查 `50888`、`20001`、`10008`：均成功下载并通过 MP3 帧校验。自动测试全部使用仓库内合成 440Hz 音频，不依赖网络。
-- 发版前根 `pnpm test`：300 通过、7 项环境可选跳过、0 失败；随后启用 Edge 运行音频、图片和内嵌试玩相关测试 5/5 通过。浏览器播放链路验证不等于对扬声器作听觉验收，也不等于 DSH Desktop 自定义协议已实机验收。
+- 浏览器播放链路验证不等于对扬声器作听觉验收，也不等于DSH Desktop自定义协议已实机验收。

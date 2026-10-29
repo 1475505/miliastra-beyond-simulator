@@ -1,5 +1,7 @@
 # 分发设计
 
+上级：[项目文档树](README.md#文档树)。
+
 ## 仓库与包边界
 
 采用单仓库 pnpm workspace，保留现有模块路径。根 `package.json` 同时是开发入口和 `dsh-plugin-beyond-simulator` 的对外清单，维护插件版本、exports、运行依赖与 `dsh.bundle`。`dsh-plugin/package.json` 仅声明私有源码包 `qxqy-dsh-adapter`，不再重复维护对外包名和版本。`client/lua-runtime`、`server`、`studio`、`editor-ui` 同样为私有内部包，通过 `workspace:*` 引用。Web、MCP 的对外清单与版本仍在各自目录。单一 `pnpm-lock.yaml` 记录依赖。
@@ -83,4 +85,4 @@ Git tag 触发 npm 流程，不会自动创建 GitHub Release。版本公告单�
 
 日常回归执行 `pnpm test`；分发改动另执行 `pnpm pack:release`、`pnpm test:packages`；Git 源码安装入口、根 `prepare` 或 DSH exports 改动另执行 `pnpm test:git-install`。测试使用仓库内合成数据，不依赖父级知识库或游戏工程。
 
-2026-09-23 在 Windows x64 / Node.js 22.23.2 / pnpm 10.15.0 / Harness CLI 0.1.0-rc.6 验证过纯源码 Git 安装、临时 DSH profile 注册，以及三个 tarball 的仓库外安装。依据为 `scripts/smoke-git-install.mjs`、`scripts/smoke-installed.mjs` 等验收入口；`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。这份历史结论不替代当前版本的重新验收；该次未覆盖 Docker、Linux/macOS 和公开安装渠道。
+浏览器测试通过`QXQY_BROWSER`指定Chrome/Edge，Electron隔离宿主测试通过`QXQY_ELECTRON`启用；未配置时明确跳过。包检查使用`scripts/smoke-installed.mjs`，真实Harness使用`scripts/smoke-harness*.mjs`；兼容矩阵与未覆盖环境见[DSH入口](dsh-plugin/README.md#验证入口与边界)。测试结果是`observed / simulator`，发布身份记录在当次manifest及发布记录，专题文档不重复维护历史测试总数。

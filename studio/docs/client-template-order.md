@@ -1,5 +1,7 @@
 # Client-template GIA sibling direction (2026-10-12)
 
+Parent: [Studio](../README.md#专题树).
+
 Authoring lists real siblings foreground-first. Native GIA lists them background-first. Keep the independent template list in its original order; it is not a single paint stack.
 
 The device comparison used one nested WOO template (11 containers, 236 images). Changing only its GUIDs restored the selected inspector, but the UI tree showed the last wire child first and dark base shapes covered the face. Reversing each parent's `children` and `relatedIds`, with matching accessory DFS order, was subsequently accepted by the user. The accepted patch SHA256 is `a3f11438b75f2018d62209cbf7fae90f952c9eaa79f629cb861040bfe9813173`. Latest acceptance is a user report, not a new screenshot or native reexport. This does not validate arbitrary GUID ranges, every widget type or full-game runtime.
@@ -21,7 +23,7 @@ That commit replaces reused control-kind constants with persistent `Info.index` 
 
 `test/gia-client-order.test.mjs` constructs independent synthetic wire bytes with explicit nested sibling order. It checks import against known editor order, standalone/combined export against known wire order, preservation of template-list order, accessory DFS and no authoring tree mutation. Before the fix, directional tests failed while an import/export roundtrip passed; roundtrip symmetry alone is insufficient.
 
-Local validation: 22 focused tests pass; full `pnpm test` passes 336 tests with 9 environment skips, zero failures. `pnpm install --frozen-lockfile` and `pnpm build` also complete. These are simulator checks, distinct from the prior single-template device acceptance. New builds must be loaded by restarting existing Web/MCP/DSH hosts.
+The directional regression passed locally on Windows / Node 22. These simulator checks are distinct from the prior single-template device acceptance. Restart existing Web/MCP/DSH hosts to load new builds.
 
 ## Imported index calibration (2026-10-12 follow-up)
 

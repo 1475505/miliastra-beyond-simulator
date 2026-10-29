@@ -136,7 +136,8 @@ dsh web
 
 - **模拟器通过不等于真机通过**，最终需在千星奇域中验证。
 - **多人试玩为本地模拟**，服务端覆盖变量与信号，不包含完整官方节点图或网络联机。
-- **图片**支持基础图元、静态素材、元件图标及「基础／拉伸」模式；动效和 3D 模型不在预览范围。详见 [素材说明](studio/docs/image-assets.md)。
+- **图片**支持基础图元、静态素材、元件图标及「基础／拉伸」模式；3D 模型不在预览范围。详见 [素材说明](studio/docs/image-assets.md)。
+- **界面／全屏动效**支持浏览器预览与 Lua 试玩，资源失败仅跳过对应动效；无头 PNG 省略视频帧，非空动效 GIA 配置待核实。详见 [动效播放](studio/docs/ui-vfx-playback.md)。
 - **Lua 2D 音效**支持试玩播放，素材按需下载。详见 [音频说明](studio/docs/audio-assets.md)。
 - **GIA 支持已验证的内容子集**，请关注导出提示，保留原始文件和完整 JSON 存档。
 
@@ -151,6 +152,25 @@ pnpm test
 ```
 
 自行打包和发布见 [分发说明](DISTRIBUTION.md)。
+
+## 文档树
+
+按任务逐层阅读；模块 README 管理自己的专题入口。
+
+- **使用与接入**
+  - [Web](web/README.md)：编辑器、磁盘预览与部署。
+  - [MCP](mcp/README.md)：工程句柄、工具协议与时钟。
+  - [Harness 插件](dsh-plugin/README.md)：安装、宿主兼容与排障。
+    - [版本公告](dsh-plugin/CHANGELOG.md)
+    - [模拟器操作 Skill](skill/SKILL.md)
+  - [游戏制作预设](agent/wonderland-lua-builder/README.md)：七步流程、参考资料与行为评估。
+- **实现与维护**
+  - [Studio](studio/README.md)：存档、布局、GIA、素材与渲染专题。
+  - [共用编辑器](editor-ui/README.md)：界面集成、语言、字体与试玩窗口。
+  - [Lua Runtime](client/lua-runtime/README.md)：架构与观察契约。
+  - [Server](server/README.md)：变量与信号。
+  - [分发](DISTRIBUTION.md)：构建、安装验收与发布。
+  - [贡献约束](AGENTS.md)：模块分工、文档与测试维护规则。
 
 ## 开源协议
 
