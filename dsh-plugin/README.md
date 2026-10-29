@@ -9,7 +9,7 @@
 ```powershell
 dsh plugin --profile web add dsh-plugin-beyond-simulator
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.1.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.2.tgz
 ```
 
 更新也用`add`，之后重启Harness；`dsh --profile web --dump-config`检查加载，`dsh web`启动。tarball文件名以当次`release/manifest.json`为准，在其他目录安装时使用绝对路径。
