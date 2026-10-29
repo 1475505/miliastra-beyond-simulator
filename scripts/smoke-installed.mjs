@@ -45,6 +45,11 @@ try {
   assert.equal(playImage.data.subarray(1, 4).toString(), 'PNG')
   const gia = controller.exportData('gia')
   assert.ok(controller.importData('gia', gia.data, gia.filename).snapshot)
+  const effect = controller.patch({ op: 'add', parentId: controller.get().tree.find(row => row.kind === 'container').id, kind: 'animation', name: 'Installed effect' })
+  controller.patch({ op: 'set', id: effect.selectedId, key: 'animationId', value: '10001017' })
+  const animated = await controller.play('start', { view: true, clockMode: 'manual' })
+  assert.equal(animated.effects[0].animationId, 10001017)
+  assert.match((await controller.requestScreenshot()).assetWarnings[0].error, /browser playback only/)
   let skill
   registerSkill({ skills: { register(value) { skill = value } } })
   assert.equal(skill.name, 'qxqy-simulator')
@@ -54,11 +59,20 @@ try {
 console.log('PASS installed DSH: controller, Worker, PNG, GIA, Skill and preset assets')
 await smokeDshTools(workspace)
 
-const app = await createWebServer({ workspace, port: 0 })
+const media = Buffer.from('packaged-route-range-fixture')
+const app = await createWebServer({ workspace, port: 0, uiVfxAssets: { get: async path => {
+  assert.equal(path, 'video/10001017.webm')
+  return { data: media, etag: '"fixture"' }
+} } })
 try {
   const state = await (await fetch(`${app.url}/api/state`)).json()
   assert.equal(state.value.snapshot.save.name, 'Installed package')
   for (const path of ['/', '/app.js', '/play-renderer.js', '/api/editor.png', '/editor', '/editor.js', '/editor/play', '/editor/play.js', '/editor/play.css']) assert.equal((await fetch(`${app.url}${path}`)).status, 200, path)
+  const effectRange = await fetch(`${app.url}/qxqy-vfx/ct-v1/video/10001017.webm`, { headers: { range: 'bytes=2-8' } })
+  assert.equal(effectRange.status, 206)
+  assert.equal(effectRange.headers.get('content-type'), 'video/webm')
+  assert.deepEqual(Buffer.from(await effectRange.arrayBuffer()), media.subarray(2, 9))
+  assert.equal((await fetch(`${app.url}/qxqy-vfx/ct-v1/video/999.webm`)).status, 404)
   const response = await fetch(`${app.url}/api/play`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'start', args: { view: true } }) })
   assert.equal((await response.json()).value.scene.format, 'tree-v1')
   const edit = async (action, body = {}) => (await (await fetch(`${app.url}/editor/api/${action}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: 'smoke', ...body }) })).json())

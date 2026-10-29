@@ -293,7 +293,8 @@ export class SimulatorController {
       height: image.height,
       pixelWidth: image.pixelWidth,
       pixelHeight: image.pixelHeight,
-      assetWarnings: assets.warnings,
+      assetWarnings: [...assets.warnings, ...(snapshot.effects || []).map(effect => ({ animationId: effect.animationId,
+        error: 'UI effect video frames are available in browser playback only; omitted from this PNG' }))],
     }
   }
 
@@ -308,7 +309,8 @@ export class SimulatorController {
       height: image.height,
       pixelWidth: image.pixelWidth,
       pixelHeight: image.pixelHeight,
-      assetWarnings: assets.warnings,
+      assetWarnings: [...assets.warnings, ...snapshot.boxes.filter(box => ['animation', 'fullscreen'].includes(box.kind) && box.visibleInHierarchy !== false && box.animationId)
+        .map(box => ({ animationId: box.animationId, error: 'UI effect video frames are available in browser playback only; omitted from this PNG' }))],
     }
   }
 

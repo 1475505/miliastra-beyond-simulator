@@ -205,7 +205,7 @@ const DIRECT_FIELDS = new Set([
   'hoverChildId', 'pressedChildId', 'selectedChildId',
   'showScrollBar', 'cellSizeX', 'cellSizeY', 'spacingX', 'spacingY',
   'padding1X', 'padding1Y', 'padding2X', 'padding2Y', 'previewCount',
-  'scrollDirection', 'layoutConstraint', 'referencedPrefabId', 'animationId',
+  'scrollDirection', 'layoutConstraint', 'referencedPrefabId', 'animationId', 'playSoundEffect', 'layer',
   'keyboardKeyCode', 'controllerKeyCode',
   'itemPrefabId', 'layoutConstraintFixedCount',
 ])
@@ -252,6 +252,7 @@ const BOOLEAN_FIELDS = new Set([
   'disableKeyEventPassthrough', 'disableCursorEventPassthrough', 'showCursor',
   'adaptiveFontSize', 'enableOutline', 'enableMask', 'enableSoftEdge',
   'enableFill', 'reverseMaskArea', 'raycastTarget', 'interactable', 'showScrollBar',
+  'playSoundEffect',
 ])
 const STRING_FIELDS = new Set([
   'name', 'imageSource', 'horizontalAlignment', 'verticalAlignment', 'text', 'softEdgeMode',
@@ -262,6 +263,7 @@ const STATE_NODE_FIELDS = new Set([
   'unavailableChildId', 'hoverChildId', 'pressedChildId', 'selectedChildId',
 ])
 const ENUM_VALUES = {
+  layer: ['AboveAllControls', 'BelowAllControls'],
   imageSource: ['StaticReference', 'Prefab'],
   imageType: ['Basic', 'Stretch', null],
   scrollDirection: ['Horizontal', 'Vertical'],
@@ -415,6 +417,8 @@ function applyPatchMutating(project, op) {
       return project
     }
     if (DIRECT_FIELDS.has(key)) {
+      if (key === 'layer' && node.kind !== 'animation') throw new Error('layer is only available on UI animations')
+      if (key === 'playSoundEffect' && !['animation', 'fullscreen'].includes(node.kind)) throw new Error('playSoundEffect requires an animation control')
       if (key.endsWith('Color')) value = parseColor(value)
       if (NUMBER_FIELDS.has(key)) {
         value = finiteNumber(value, key)

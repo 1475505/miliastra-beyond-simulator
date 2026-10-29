@@ -5,6 +5,7 @@ Web 与 Harness 共用编辑器：所有编辑页面的顶部导航栏在「字�
 - QQ群号1007538100
 - 作者邮箱 725230880@qq.com
 - 开源仓库 https://github.com/1475505/miliastra-beyond-simulator
+- 感谢@xiaomol444提供的图片、音效、界面动效素材
 
 ## 检查更新
 

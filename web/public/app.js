@@ -33,6 +33,7 @@ const elements = {
   stageShell: byId('stage-shell'),
   stageImage: byId('stage-image'),
   stageCanvas: byId('stage-canvas'),
+  stagePlay: byId('stage-play'),
   stageEmpty: byId('stage-empty'),
   stageLoading: byId('stage-loading'),
   activePath: byId('active-path'),
@@ -218,6 +219,8 @@ function renderStage() {
   const showPlay = hasArchive && mode === 'play' && Boolean(model?.play?.running)
   elements.stageImage.hidden = !showEditor
   elements.stageCanvas.hidden = !showPlay
+  elements.stagePlay.hidden = !showPlay
+  resizePlayStage()
   elements.stageEmpty.hidden = showEditor || showPlay
   elements.stageShell.classList.toggle('playing', mode === 'play' && Boolean(model?.play?.running))
   if (!hasArchive) {
@@ -242,6 +245,17 @@ function renderStage() {
       : t('等待启动 Runtime')
     : t('编辑器静态预览 · 磁盘自动刷新')
 }
+
+// The video planes and transparent Pixi canvas share this exact viewport, not
+// the padded workspace around it. Keep letterboxing and clipping in one place.
+function resizePlayStage() {
+  const width = model?.play?.width || 1600, height = model?.play?.height || 900
+  const scale = Math.max(0.01, Math.min((elements.stageShell.clientWidth - 70) / width, (elements.stageShell.clientHeight - 80) / height))
+  elements.stagePlay.style.width = `${width * scale}px`
+  elements.stagePlay.style.height = `${height * scale}px`
+}
+const stageResize = new ResizeObserver(resizePlayStage)
+stageResize.observe(elements.stageShell)
 
 function refreshEditorImage() {
   if (!model?.activePath) return
@@ -308,6 +322,7 @@ function syncPlayPolling() {
 
 async function onPlaySnapshot(next) {
   applyPlayStatus(next)
+  resizePlayStage()
   updatePlayChrome()
 }
 
@@ -499,5 +514,5 @@ events.addEventListener('state', (event) => {
 })
 
 setInterval(() => { void refreshState({ quiet: true }) }, 5000)
-addEventListener('pagehide', () => play.destroy())
+addEventListener('pagehide', () => { stageResize.disconnect(); play.destroy() })
 void refreshState()

@@ -17,6 +17,7 @@ import { textWindowMetrics, clamp } from './scroll.js'
 import { textLayout } from './text-layout.js'
 import { scrollBarGeometry } from './scroll-geometry.js'
 import { audioDuration } from '../assets/audio-catalog.js'
+import { uiVfxAsset } from '../assets/ui-vfx-catalog.js'
 import { imageSourceName, canSelectImageType } from '../assets/catalog.js'
 import { centerMaskMatrix, imageMaskSpec } from './image-mask.js'
 import { randomUUID } from 'node:crypto'
@@ -656,6 +657,7 @@ export function playSnapshot(session, { inspect = false, view = false, paint = f
     paused: !!session.debugPaused,
     levelTimePaused: !!rt.clock.paused,
     audio: { sessionId: session.audioSessionId, playerIndex: session.viewPlayerIndex || 1, ...rt.audioSnapshot() },
+    effects: uiVfxSnapshot(session),
     mountError: session.mountError || rt.mountErrors[0] || null,
     logs: clientLogs.map((l) => ({ source: 'client', level: l.level, text: l.text, time: l.time })),
     tree: [],
@@ -678,6 +680,37 @@ export function playSnapshot(session, { inspect = false, view = false, paint = f
   // payload 全部由本次调用新建（无共享可变对象），只做无损校验，不再 parse/stringify 克隆。
   assertLosslessJson(payload)
   return payload
+}
+
+// Non-consuming side channel: independent instances and logical timestamps survive
+// scene deltas, browser attachment, pauses and repeated screenshot/get calls.
+export function uiVfxSnapshot(session) {
+  const configured = control => control._uiAnimation?.playing && control.animationId != null && String(control.animationId).trim() !== '' && Number(control.animationId) !== 0
+  if (![...(session.runtime.uiAnimations || [])].some(configured)) return []
+  const boxes = runtimeLayout(session), matrices = runtimeTransforms(session, boxes), out = []
+  const visit = (control, masks = []) => {
+    const box = boxes.get(control.Id), matrix = matrices.get(control.Id)
+    if (!box || !matrix || !box.activeInHierarchy || control.visible === false) return
+    const ownMask = control.kind === 'image' && control.enableMask === true
+      ? imageMaskSpec({ ...control, id: control.Id, sourceWidth: box.width, sourceHeight: box.height }, centerMaskMatrix(matrix, box.centerX, box.centerY)) : null
+    const next = ownMask ? [...masks, ownMask] : masks
+    const state = control._uiAnimation
+    if (configured(control)) {
+      const asset = uiVfxAsset(control.animationId, control.kind)
+      const audioPath = asset?.audio.length ? asset.audio[(control.Id + state.generation - 1) % asset.audio.length] : null
+      out.push({ id: control.Id, kind: control.kind, animationId: control.animationId ?? null,
+        generation: state.generation, startedAt: state.startedAt, playSoundEffect: control.playSoundEffect !== false,
+        audioPath, layer: control.kind === 'fullscreen' ? 'BelowAllControls' : enumName(control.layer) || 'AboveAllControls',
+        matrix: centerMaskMatrix(matrix, box.centerX, box.centerY), masks: next })
+    }
+    for (const child of [...control.children].reverse()) {
+      const clip = control._gridItems?.includes(child) ? { id: `viewport:${control.Id}`, matrix: centerMaskMatrix(matrix, box.centerX, box.centerY),
+        width: box.width, height: box.height, featherX: 0, featherY: 0 } : null
+      visit(child, clip ? [...next, clip] : next)
+    }
+  }
+  for (const root of session.runtime.roots) visit(root)
+  return out
 }
 
 export function stepPlay(session, dt = 1 / 30) {

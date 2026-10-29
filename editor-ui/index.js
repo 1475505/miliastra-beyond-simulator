@@ -2,6 +2,7 @@ import { createScriptSyncPanel } from './script-sync.js'
 import { createControlGuidSyncPanel } from './control-guid-sync.js'
 import { createPlayLauncher } from './play-launcher.js'
 import { createImagePreview, createImageTypeField } from './image-preview.js'
+import { createUIVfxComponents } from './ui-vfx-preview.js'
 import { createColorField } from './color-field.js'
 import { controlTransformStyle } from './control-transform.js'
 import { createTextPreview } from './text-preview.js'
@@ -21,6 +22,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
     const ControlGuidSyncPanel = createControlGuidSyncPanel(React)
     const usePlayLauncher = createPlayLauncher(React)
     const ImagePreview = createImagePreview(React)
+    const { Effects: UIVfxEffects, Picker: UIVfxPicker } = createUIVfxComponents(React)
     const TextPreview = createTextPreview(React)
     const MaskedControls = createMaskedControls(React)
     const ImageTypeField = createImageTypeField(React)
@@ -80,8 +82,8 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       button: ['raycastTarget', 'interactable', 'unavailableChildId', 'hoverChildId', 'pressedChildId', 'selectedChildId', 'clickAudioId'],
       textwindow: ['interactable', 'showScrollBar', 'fontSize', 'adaptiveFontSize', 'minimumFontSize', 'fontColor', 'bgColor', 'enableOutline', 'outlineColor', 'horizontalAlignment', 'verticalAlignment', 'text'],
       keyhint: ['keyboardKeyCode', 'controllerKeyCode'],
-      animation: ['animationId'],
-      fullscreen: ['animationId'],
+      animation: ['animationId', 'playSoundEffect', 'layer'],
+      fullscreen: ['animationId', 'playSoundEffect'],
     }
 
     function ensureStyle() {
@@ -934,7 +936,8 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
               e('div', { className: 'qxsim-palette-head' }, e('span', { title: clientTemplates && addMode === 'template' ? t('新增独立可实例化模板') : t`添加到${selectedRow ? selectedRow.name : t('当前控件')}` }, clientTemplates && addMode === 'template' ? t('新增顶层模板') : t`添加到${selectedRow ? `“${selectedRow.name}”` : t('当前控件')}`), clientTemplates ? e('span', { className: 'qxsim-add-mode' }, e('button', { className: addMode === 'template' ? 'active' : '', onClick: () => setAddMode('template') }, t('顶层')), e('button', { className: addMode === 'child' ? 'active' : '', onClick: () => setAddMode('child') }, t('子控件'))) : null),
               e('div', { className: 'qxsim-add' }, CONTROL_TYPES.filter(([kind]) => clientTemplates || kind !== 'container').map(([kind, label]) => e('button', { key: kind, title: `${clientTemplates && addMode === 'template' ? t('新增') : t('添加')}${t(label)}`, onClick: () => addControl(kind, t(label)) }, `＋ ${t(label)}`))))),
           e('main', { className: 'qxsim-center' }, e('div', { className: 'qxsim-workspace', ref: workspaceRef }, e('div', { className: 'qxsim-stage-shell', style: { width: `${Math.max(40, Math.round(canvasWidth * effectiveZoom))}px` } }, e('div', { className: 'qxsim-stage-label' }, e('b', null, clientTemplates ? t('Lua 模板预览') : t('界面控件组')), e('span', { className: 'qxsim-platform-tag' }, snap.canvas.platform), e('span', null, t`${activeRatio} · ${canvasWidth}×${canvasHeight} · 左下原点`)), e('div', { className: 'qxsim-stage', style: { width: '100%', aspectRatio: `${canvasWidth} / ${canvasHeight}` }, onClick: (event) => { const rect = event.currentTarget.getBoundingClientRect(); void patch({ op: 'pick', x: (event.clientX - rect.left) * canvasWidth / rect.width, y: (rect.bottom - event.clientY) * canvasHeight / rect.height }).catch(() => {}) } },
-            e(MaskedControls, { boxes: renderBoxes, canvasWidth, canvasHeight, renderControl: item => renderControl(item, snap, canvasWidth, canvasHeight, effectiveZoom, fontFamily) }),
+             e(UIVfxEffects, { key: `${sessionId}:${snap.asset?.type}:${snap.asset?.currentTemplateId}`, boxes: renderBoxes, canvasWidth, canvasHeight }),
+             e(MaskedControls, { boxes: renderBoxes, canvasWidth, canvasHeight, renderControl: item => renderControl(item, snap, canvasWidth, canvasHeight, effectiveZoom, fontFamily) }),
             selectionBox ? renderControl(selectionBox, snap, canvasWidth, canvasHeight, effectiveZoom, fontFamily, true) : null))), error ? e('div', { className: 'qxsim-status error' }, '⚠ ', t(error)) : e('div', { className: 'qxsim-status' }, e('span', null, t`● ${t(snap.asset?.label) || t('控件')}编辑`), e('span', null, notice || (selectedRow ? t`当前：${selectedRow.name}` : '')), e('span', { className: 'spacer' }), e('span', null, clientTemplates ? t('GIA 导出后可在 Lua 中按 prefabId 实例化') : t('字段在失焦或 Enter 时提交')))),
           e('aside', { className: 'qxsim-inspector' }, snap.inspector ? e(React.Fragment, null,
             e('div', { className: 'qxsim-inspector-head' }, e('div', { className: 'qxsim-inspector-line' }, e('span', { className: 'qxsim-kind' }, (KIND_META[snap.inspector.kind] || ['◇'])[0]), e('strong', null, t(snap.inspector.label)), clientTemplates && selectedRow?.depth === 0 ? e('span', { className: 'qxsim-template-tag' }, t('可实例化')) : null), e('div', { className: 'qxsim-node-id' }, clientTemplates && selectedRow?.depth === 0 ? t('模板索引 ') : t('控件 GUID '), e('code', null, snap.inspector.guid ?? snap.inspector.id), ' · ', selectedRow?.name || t('节点')), snap.inspector.kind !== 'server-container' ? e(ControlGuidEditor, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, autofill: snap.clientGuidAutofill, onSave: (id, guid, automatic) => changeControlGuid(id, guid, snap.asset.type, automatic) }) : null),
@@ -947,7 +950,9 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
               canInspectorScript ? e('button', { className: inspectorTab === 'script' ? 'active' : '', onClick: () => setInspectorTab('script') }, t('脚本')) : null),
             e('div', { className: 'qxsim-inspector-scroll' }, canInspectorScript && inspectorTab === 'script'
               ? e(ControlScriptTab, { snap, addScriptMounted: (controlId) => void addScript({ controlId, controlAsset: snap.asset?.type }).then(() => leavePage('script')), mountScriptTo, unmountScript, openScript: (id) => { setSelectedScriptId(id); leavePage('script') } })
-              : e(React.Fragment, null, e(BaseInspector, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, commit, createStateChild }),
+               : e(React.Fragment, null, e(BaseInspector, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, commit, createStateChild }),
+                 ['animation', 'fullscreen'].includes(snap.inspector.kind) ? e(UIVfxPicker, { key: snap.selectedId,
+                   item: snap.boxes.find(item => item.id === snap.selectedId), commit: (key, value) => patch({ op: 'set', key, value }) }) : null,
                 snap.boxes?.some(item => item.id === snap.selectedId && isRemoteImage(item.imageId, item.imageSource)) ? e('div', { className: 'qxsim-section-body' },
                   e('button', { className: 'qxsim-action', disabled: refreshingImage, onClick: refreshSelectedImage }, refreshingImage ? t('正在刷新素材…') : t('↻ 重新下载此素材')),
                   e('p', { className: 'qxsim-muted' }, t('白名单图片按需缓存；刷新会重新访问素材源。'))) : null)),

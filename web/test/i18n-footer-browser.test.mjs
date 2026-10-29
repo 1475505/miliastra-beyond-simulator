@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createWebServer } from '../server.js'
@@ -10,6 +10,17 @@ test('English defaults, language persistence, contacts and update retry preserve
   skip: !process.env.QXQY_BROWSER, timeout: 60_000,
 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'qxqy-i18n-'))
+  const fontEnv = { QXQY_FONT_PATH: process.env.QXQY_FONT_PATH, QXQY_FONT_CONFIG_PATH: process.env.QXQY_FONT_CONFIG_PATH }
+  t.after(() => {
+    for (const [key, value] of Object.entries(fontEnv)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  })
+  // Contact/locale tests must not inherit a user's saved local font path.
+  delete process.env.QXQY_FONT_PATH
+  process.env.QXQY_FONT_CONFIG_PATH = join(directory, 'font.json')
+  await writeFile(process.env.QXQY_FONT_CONFIG_PATH, JSON.stringify({ mode: 'system' }))
   let calls = 0
   const app = await createWebServer({ workspace: directory, port: 0,
     systemLanguage: async () => ({ language: 'de-DE', source: 'test-host' }), checkUpdates: async () => {
@@ -78,12 +89,20 @@ test('English defaults, language persistence, contacts and update retry preserve
   await evaluate('window.simulateLegacyFont=false')
   await click('Retry')
   await wait("Boolean(document.querySelector('[aria-label=\"Font source\"]'))")
-  assert.equal(await evaluate("document.querySelector('.qxsim-font-dialog [role=\"alert\"]')"), null)
+  assert.equal(await evaluate("document.querySelector('.qxsim-font-dialog [role=\"alert\"]')?.textContent ?? null"), null)
   assert.ok(await evaluate("document.querySelector('.qxsim-font-dialog').textContent.includes('Use a local font file')"))
   await evaluate('window.fetch=window.fontOriginalFetch;delete window.fontOriginalFetch;delete window.simulateLegacyFont')
   await click('Close')
   const userText = '检查更新 Contact Author 玩家文字 {0}'
-  await evaluate("(async()=>{const sessionId=sessionStorage.getItem('qxqy-editor-session');const api=async(action,body={})=>{const r=await fetch('/editor/api/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId,...body})});return (await r.json()).value};const current=await api('get');await api('patch',{op:{op:'set',id:'n2',key:'text',value:" + JSON.stringify(userText) + ",expectedRevision:current.version}});})()")
+  await evaluate(`(async()=>{
+    const sessionId=sessionStorage.getItem('qxqy-editor-session');
+    const api=async(action,body={})=>{const r=await fetch('/editor/api/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sessionId,...body})});return (await r.json()).value};
+    let current=await api('get');
+    // Fit the whole sentence; this checks localization, not text clipping.
+    for(const [key,value] of Object.entries({text:${JSON.stringify(userText)},width:1000,height:80,fontSize:20})) {
+      current=await api('patch',{op:{op:'set',id:'n2',key,value,expectedRevision:current.version}});
+    }
+  })()`)
   await browser.navigate(app.url + '/editor')
   await wait("document.querySelector('.qxsim-box.textbox span')?.textContent.split(String.fromCharCode(10)).join('') === " + JSON.stringify(userText))
   const sessionId = await evaluate("sessionStorage.getItem('qxqy-editor-session')")

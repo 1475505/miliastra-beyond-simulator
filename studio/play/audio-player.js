@@ -1,4 +1,5 @@
 import { audioAssetUrl, audioDuration } from '../assets/audio-catalog.js'
+import { uiVfxAsset, uiVfxMedia, uiVfxUrl } from '../assets/ui-vfx-catalog.js'
 
 // One output per play page. Runtime instances are deterministic; media loading
 // and the user's autoplay consent never feed back into Lua's clock/state.
@@ -85,16 +86,17 @@ export class BrowserAudioPlayer {
     this.publish()
   }
 
-  buffer(id) {
+  buffer(id, { retry = false } = {}) {
     const cached = this.buffers.get(id)
-    if (cached && (!cached.failed || this.now() < cached.retryAt)) {
+    if (cached && (!cached.failed || !retry && this.now() < cached.retryAt)) {
       this.buffers.delete(id); this.buffers.set(id, cached)
       return cached.promise
     }
     const entry = { bytes: 0, failed: false, abort: new AbortController() }
     const timer = setTimeout(() => entry.abort.abort(), 30_000)
     entry.promise = (async () => {
-      const response = await this.fetcher(audioAssetUrl(id), { signal: entry.abort.signal })
+      const url = typeof id === 'string' && id.startsWith('audio/') ? uiVfxUrl(id) + (retry ? '?retry=1' : '') : audioAssetUrl(id)
+      const response = await this.fetcher(url, { signal: entry.abort.signal })
       if (!response.ok) throw new Error(`音效 ${id} 加载失败：HTTP ${response.status}`)
       const bytes = await response.arrayBuffer()
       if (this.disposed) throw new Error('audio player disposed')
@@ -132,17 +134,18 @@ export class BrowserAudioPlayer {
   }
 
   playVoice(voice) {
-    if (this.disposed || this.voices.get(voice.row.instanceId) !== voice || this.paused || voice.source || voice.loading || voice.done) return
+    if (this.disposed || this.voices.get(voice.row.instanceId) !== voice || this.paused || voice.suspended || voice.source || voice.loading || voice.done) return
     if (!voice.buffer) {
       voice.loading = true
-      this.buffer(voice.row.audioId).then(buffer => {
+      this.buffer(voice.row.audioId, { retry: voice.row.retry }).then(buffer => {
         voice.loading = false
         if (this.disposed || this.voices.get(voice.row.instanceId) !== voice) return
         voice.buffer = buffer
         this.playVoice(voice)
       }).catch(error => {
         if (this.disposed || this.voices.get(voice.row.instanceId) !== voice) return
-        this.removeVoice(voice.row.instanceId)
+        if (voice.row.effect) voice.done = true
+        else this.removeVoice(voice.row.instanceId)
         this.error = error.message
         this.publish()
       })
@@ -150,19 +153,25 @@ export class BrowserAudioPlayer {
     }
     if (this.context?.state !== 'running') { this.publish(); return }
     if (voice.offset >= voice.buffer.duration) { voice.done = true; return }
-    const source = this.context.createBufferSource()
-    source.buffer = voice.buffer
-    source.connect(this.output)
-    voice.source = source
-    voice.beganAt = this.context.currentTime
-    source.onended = () => {
-      if (voice.source !== source) return
-      source.disconnect()
-      voice.source = null
+    try {
+      const source = this.context.createBufferSource()
+      source.buffer = voice.buffer
+      voice.source = source
+      source.connect(this.output)
+      voice.beganAt = this.context.currentTime
+      source.onended = () => {
+        if (voice.source !== source) return
+        source.disconnect()
+        voice.source = null
+        voice.done = true
+        this.publish()
+      }
+      source.start(0, voice.offset)
+    } catch (error) {
+      this.stopSource(voice)
       voice.done = true
-      this.publish()
+      this.error = error.message
     }
-    source.start(0, voice.offset)
     this.publish()
   }
 
@@ -182,6 +191,7 @@ export class BrowserAudioPlayer {
     const active = new Map(audio.active.map(row => [row.instanceId, row]))
     const recent = new Map(audio.recent.map(row => [row.instanceId, row]))
     for (const [id, voice] of this.voices) {
+      if (voice.row.effect) continue
       const state = recent.get(id) || active.get(id)
       if (state?.stopped || (voice.done && !active.has(id)) || !state) { this.removeVoice(id); continue }
       if (this.paused && !wasPaused && voice.source) {
@@ -201,8 +211,34 @@ export class BrowserAudioPlayer {
       this.voices.set(row.instanceId, voice)
     }
     this.sequence = audio.sequence
+    this.syncEffects(snapshot, wasPaused)
     for (const voice of this.voices.values()) this.playVoice(voice)
     this.publish()
+  }
+
+  syncEffects(snapshot, wasPaused) {
+    const keep = new Set()
+    for (const effect of snapshot.effects || []) {
+      const asset = uiVfxAsset(effect.animationId, effect.kind)
+      const path = effect.audioPath
+      const duration = asset?.audio.includes(path) ? uiVfxMedia(path)?.duration : 0
+      const offset = Math.max(0, snapshot.time - effect.startedAt)
+      if (!effect.playSoundEffect || !duration || offset >= duration) continue
+      const id = `vfx:${effect.id}:${effect.generation}`
+      keep.add(id)
+      let voice = this.voices.get(id)
+      if (!voice) {
+        if (this.voices.size >= 64) continue
+        voice = { row: { instanceId: id, audioId: path, effect: true, retry: effect.generation > 1 }, offset,
+          source: null, buffer: null, loading: false, done: false }
+        this.voices.set(id, voice)
+      }
+      const suspended = snapshot.clockMode === 'manual'
+      if ((this.paused && !wasPaused || suspended) && voice.source) this.stopSource(voice)
+      voice.suspended = suspended
+      if (!voice.source) voice.offset = offset
+    }
+    for (const [id, voice] of this.voices) if (voice.row.effect && !keep.has(id)) this.removeVoice(id)
   }
 
   reset() {

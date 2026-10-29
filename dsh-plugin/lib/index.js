@@ -6,6 +6,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { listWorkspaceArchives, resolveWorkspaceArchive } from './workspace-archives.js'
 import { serveImageAsset } from 'qxqy-studio/host/image-assets'
 import { serveAudioAsset } from 'qxqy-studio/host/audio-assets'
+import { serveUIVfxAsset } from 'qxqy-studio/host/ui-vfx-assets'
 import { localFont, serveLocalFont } from 'qxqy-studio/host/local-font'
 import { createUpdateChecker } from 'qxqy-studio/host/updates'
 import { systemLanguage, localLanguageRequest } from 'qxqy-studio/host/system-language'
@@ -558,5 +559,6 @@ export function apply(ctx) {
   registerPlayRenderer(ctx)
   registerRoute(ctx, { kind: 'prefix', path: '/qxqy-assets', handler: (request, response) => serveImageAsset(request, response) })
   registerRoute(ctx, { kind: 'prefix', path: '/qxqy-audio', handler: (request, response) => serveAudioAsset(request, response) })
+  registerRoute(ctx, { kind: 'prefix', path: '/qxqy-vfx', handler: (request, response) => serveUIVfxAsset(request, response) })
   registerRoute(ctx, { kind: 'prefix', path: '/qxqy-font', handler: serveLocalFont })
 }

@@ -11,6 +11,7 @@ import { EditorSessions } from './lib/editor-sessions.js'
 import { resolveWorkspaceRoot } from 'qxqy-studio/host/workspace'
 import { serveImageAsset, sharedImageAssets } from 'qxqy-studio/host/image-assets'
 import { serveAudioAsset, sharedAudioAssets } from 'qxqy-studio/host/audio-assets'
+import { serveUIVfxAsset, sharedUIVfxAssets } from 'qxqy-studio/host/ui-vfx-assets'
 import { localFont, serveLocalFont } from 'qxqy-studio/host/local-font'
 import { createUpdateChecker } from 'qxqy-studio/host/updates'
 import { systemLanguage, localLanguageRequest } from 'qxqy-studio/host/system-language'
@@ -97,7 +98,7 @@ function openBrowser(url) {
 }
 
 export async function createWebServer(options = {}) {
-  options = { ...options, imageAssets: options.imageAssets || sharedImageAssets(), audioAssets: options.audioAssets || sharedAudioAssets() }
+  options = { ...options, imageAssets: options.imageAssets || sharedImageAssets(), audioAssets: options.audioAssets || sharedAudioAssets(), uiVfxAssets: options.uiVfxAssets || sharedUIVfxAssets() }
   const host = options.host || '127.0.0.1'
   const password = options.password ?? process.env.QXQY_WEB_PASSWORD ?? ''
   const loopback = ['127.0.0.1', 'localhost', '::1'].includes(host)
@@ -154,6 +155,7 @@ export async function createWebServer(options = {}) {
       }
       if (await serveImageAsset(request, response, options.imageAssets)) return
       if (await serveAudioAsset(request, response, options.audioAssets)) return
+      if (await serveUIVfxAsset(request, response, options.uiVfxAssets)) return
       if (await serveLocalFont(request, response, { settingsEnabled: loopback })) return
       if (request.method === 'GET' && staticFiles.has(requestUrl.pathname)) {
         const filename = staticFiles.get(requestUrl.pathname)

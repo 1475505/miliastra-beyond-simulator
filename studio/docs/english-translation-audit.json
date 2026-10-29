@@ -1,7 +1,9 @@
 {
   "schemaVersion": 1,
-  "reviewedOn": "2026-10-25",
-  "incrementalQueries": [{ "checkedAt": "2026-10-24T19:28:56.389Z", "scope": "partial-export", "terms": 27, "apiMatches": 1 }],
+  "reviewedOn": "2026-10-30",
+  "incrementalQueries": [{ "checkedAt": "2026-10-24T19:28:56.389Z", "scope": "partial-export", "terms": 27, "apiMatches": 1 },
+    { "checkedAt": "2026-10-29T16:58:04.725Z", "scope": "ui-vfx-playback", "terms": 13, "apiMatches": 1 },
+    { "checkedAt": "2026-10-29T17:36:36.981Z", "scope": "asset-contributor-credit", "terms": 1, "apiMatches": 0 }],
   "queriedAt": "2026-10-18T12:41:32.832Z",
   "source": {
     "endpoint": "https://ugc.070077.xyz/api/v1/translate/terms/batch",
@@ -15,12 +17,12 @@
     "luaApiDocumentSha256": "4a43f93f2b322be8336ff33d9cb07b3bc3a8d4c8a931a45d18f90e4e64941bab"
   },
   "summary": {
-    "reviewed": 772,
-    "queried": 772,
-    "apiMatches": 27,
-    "apiAligned": 25,
+    "reviewed": 786,
+    "queried": 786,
+    "apiMatches": 28,
+    "apiAligned": 26,
     "contextOverrides": 2,
-    "noExactApiMatch": 745,
+    "noExactApiMatch": 758,
     "changed": 40
   },
   "glossary": [
@@ -474,6 +476,76 @@
     }
   ],
   "messages": [
+    {
+      "zh": "感谢@xiaomol444提供的图片、音效、界面动效素材", "en": "Thanks to @xiaomol444 for providing the image, sound effect, and UI animation assets.",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按素材致谢语境审校，保留贡献者账号，并沿用 UI Animation 术语。" }
+    },
+    {
+      "zh": "播放动效音效", "en": "Play effect sound",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按 playSoundEffect 开关语义审校。" }
+    },
+    {
+      "zh": "动效层级", "en": "Effect layer",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按 UIAnimationLayer 字段语义审校。" }
+    },
+    {
+      "zh": "所有控件之上", "en": "Above all controls",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按 AboveAllControls 枚举语义审校。" }
+    },
+    {
+      "zh": "所有控件之下", "en": "Below all controls",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按 BelowAllControls 枚举语义审校。" }
+    },
+    {
+      "zh": "支持浏览器动效播放；非空动效 GIA 配置尚未核实。", "en": "Browser effect playback is supported; nonempty effect settings in GIA remain unverified.",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；准确区分浏览器播放能力与未核实的 GIA 配置。" }
+    },
+    {
+      "zh": "请选择动效素材", "en": "Choose an effect",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；素材选择器的空选中提示。" }
+    },
+    {
+      "zh": "画布预览静音；加载失败只跳过当前动效。", "en": "Canvas preview is muted. Unavailable effects are skipped.",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；说明编辑器静音和单动效失败隔离。" }
+    },
+    {
+      "zh": "选择素材", "en": "Choose effect",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；当前按钮打开动效素材目录。" }
+    },
+    {
+      "zh": "重播 / 重试", "en": "Replay / retry",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；同时表达重新播放和资源失败重试。" }
+    },
+    {
+      "zh": "停止预览", "en": "Stop Preview",
+      "api": { "matched": true, "translation": "Stop Preview", "source_term": "停止预览", "chs": "停止预览", "source_lang": "chs", "target_lang": "en" },
+      "review": { "kind": "api-exact", "reason": "采用术语接口等值返回；仅停止编辑器预览。" }
+    },
+    {
+      "zh": "搜索 ID / 名称", "en": "Search ID / name",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按搜索字段提示语审校并保留 ID。" }
+    },
+    {
+      "zh": "搜索动效", "en": "Search effects",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；按动效搜索框可访问名称审校。" }
+    },
+    {
+      "zh": "动效加载失败（{0}）", "en": "Effects unavailable ({0})",
+      "api": { "matched": false, "translation": null },
+      "review": { "kind": "manual", "reason": "接口无等值译文；包含失败与预算限制，保留计数占位参数。" }
+    },
     {
       "zh": "当前后台尚未加载字体设置功能，请重启 Web 或 Harness 宿主后重试。",
       "en": "The running backend does not support font settings yet. Restart the Web or Harness host, then retry.",

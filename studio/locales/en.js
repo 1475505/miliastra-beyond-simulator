@@ -1,6 +1,20 @@
 // Bundled UI messages. Project content and API identifiers stay unchanged.
 // Full review and API evidence: ../docs/english-translation-audit.json
 export default {
+  "感谢@xiaomol444提供的图片、音效、界面动效素材": "Thanks to @xiaomol444 for providing the image, sound effect, and UI animation assets.",
+  "播放动效音效": "Play effect sound",
+  "动效层级": "Effect layer",
+  "所有控件之上": "Above all controls",
+  "所有控件之下": "Below all controls",
+  "支持浏览器动效播放；非空动效 GIA 配置尚未核实。": "Browser effect playback is supported; nonempty effect settings in GIA remain unverified.",
+  "请选择动效素材": "Choose an effect",
+  "画布预览静音；加载失败只跳过当前动效。": "Canvas preview is muted. Unavailable effects are skipped.",
+  "选择素材": "Choose effect",
+  "重播 / 重试": "Replay / retry",
+  "停止预览": "Stop Preview",
+  "搜索 ID / 名称": "Search ID / name",
+  "搜索动效": "Search effects",
+  "动效加载失败（{0}）": "Effects unavailable ({0})",
   "当前后台尚未加载字体设置功能，请重启 Web 或 Harness 宿主后重试。": "The running backend does not support font settings yet. Restart the Web or Harness host, then retry.",
   "当前后台尚未加载检查更新功能，请重启 Web 或 Harness 宿主后重试。": "The running backend does not support update checks yet. Restart the Web or Harness host, then retry.",
   "请输入六位颜色，例如 #FF8800": "Enter a six-digit color, e.g. #FF8800",

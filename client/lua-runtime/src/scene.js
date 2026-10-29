@@ -190,6 +190,11 @@ export class Control {
     for (const [k, v] of Object.entries(extra)) {
       if (this[k] === undefined) this[k] = spec[k] !== undefined ? spec[k] : v
     }
+    if (this.kind === 'animation' || this.kind === 'fullscreen') {
+      this.runtime.uiAnimations ||= new Set()
+      this.runtime.uiAnimations.add(this)
+      this.PlayAnimation()
+    }
     if (this.kind === 'grid') this.scrollProgress = spec.scrollProgress ?? 0
     if (spec.children) {
       for (const child of spec.children) {
@@ -588,12 +593,25 @@ export class Control {
     this.markPlayDirty()
   }
 
+  get animationId() { return this._animationId }
+  set animationId(value) {
+    if (this._animationId === value) return
+    this._animationId = value
+    if (this._uiAnimation) this.PlayAnimation()
+  }
+
   PlayAnimation() {
-    // 界面动效尚未实现：方法保留为 Lua API 占位，保证脚本可调用而不抛错。
+    if (!this.alive) return
+    // Preview policy: configured effects auto-start; explicit Play restarts.
+    // Pure logical state, with no media/network dependency inside the VM.
+    this._uiAnimation = { generation: (this._uiAnimation?.generation || 0) + 1,
+      startedAt: this.runtime.clock.time, playing: true }
+    this.markPlayDirty()
   }
 
   StopAnimation() {
-    // 界面动效尚未实现：方法保留为 Lua API 占位，保证脚本可调用而不抛错。
+    if (this._uiAnimation) this._uiAnimation.playing = false
+    this.markPlayDirty()
   }
 
   RefreshItems(count, callback) {

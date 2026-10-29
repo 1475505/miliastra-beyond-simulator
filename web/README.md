@@ -78,6 +78,8 @@ Web/MCP 0.3.0、共享宿主所在 DSH 2.0.3：修复空工作区启动后跳过
 
 Lua `game.PlayAudio2D(id)` 触发白名单 MP3 按需缓存与播放，同源路由为 `/qxqy-audio/`，缓存目录可用 `QXQY_AUDIO_CACHE_DIR` 指定。首次自动播放被浏览器阻止时点击「开启声音」；支持停止、试玩暂停/继续和静音。参见 [音频说明](../studio/docs/audio-assets.md)。
 
+界面动效和全屏动效通过 `/qxqy-vfx/ct-v1/` 按需缓存 C/T WebM、图标和声音。`/editor` 支持静音动态预览，两个试玩入口都支持 Lua 驱动的动效播放；`/` 编辑模式仍为静态 PNG。资源失败不停止编辑/试玩。参见 [动效播放、缓存与截图边界](../studio/docs/ui-vfx-playback.md)。
+
 ## 部署与访问控制
 
 绑定非回环地址前，设置 `QXQY_WEB_PASSWORD`，登录用户名固定为 `simulator`。设置口令后，即使回环访问也要求认证。业务静态文件、API、SSE 与截图均受保护；写请求只接受 JSON 并校验浏览器 Origin。路径只能落在配置工作区内。

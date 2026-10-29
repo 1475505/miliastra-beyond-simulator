@@ -684,6 +684,7 @@ export class LuaRuntime {
     for (const child of control.children.slice()) this._destroyControlTree(child)
     control.alive = false
     this.scrollControls?.delete(control)
+    this.uiAnimations?.delete(control)
     this._playRemoved.push(control.Id)
     if (control.parent) {
       const parent = control.parent
@@ -1036,6 +1037,9 @@ export class LuaRuntime {
             throw new Error(`bad argument #2 to '${key}' (integer expected, got ${valueType})`)
           }
           const enumType = ENUM_FIELDS[key]
+          if (key === 'animationId' && !Number.isSafeInteger(val)) throw new Error('animationId requires an integer')
+          if (key === 'playSoundEffect' && typeof val !== 'boolean') throw new Error('playSoundEffect requires a boolean')
+          if (key === 'layer' && (val?.EnumType !== 'UIAnimationLayer' || !['AboveAllControls', 'BelowAllControls'].includes(val.Name))) throw new Error('layer requires Enum.UIAnimationLayer')
           if (key === 'imageType' && (val?.EnumType !== 'ImageType' || !['Basic', 'Stretch'].includes(val.Name))) {
             throw new Error('imageType requires Enum.ImageType.Basic or Stretch')
           }

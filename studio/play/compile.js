@@ -141,7 +141,8 @@ export function compileControl(node, canvasId, scriptsByNode = null) {
   }
   if (node.kind === 'animation' || node.kind === 'fullscreen') {
     spec.raycastTarget = false
-    spec.animationId = node.animationId
+    const id = Number(node.animationId)
+    spec.animationId = node.animationId != null && String(node.animationId).trim() !== '' && Number.isSafeInteger(id) ? id : node.animationId
     spec.playSoundEffect = node.playSoundEffect
     if (node.kind === 'animation') spec.layer = node.layer
   }

@@ -64,6 +64,8 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       renderMatrix: matrix,
       ...(nextMasks.length ? { masks: nextMasks } : {}),
       primitive: node.kind === 'image' ? imagePrimitive(node.imageId, node.imageSource) : null,
+      ...(['animation', 'fullscreen'].includes(node.kind) ? { animationId: node.animationId ?? null,
+        playSoundEffect: node.playSoundEffect !== false, layer: node.layer || 'AboveAllControls' } : {}),
       ...((node.kind === 'textbox' || node.kind === 'textwindow') ? {
         text: node.text ?? '',
         fontSize: node.fontSize,
@@ -336,11 +338,15 @@ export function inspectorDto(node, canvasId, box, guidById) {
   }
   if (node.kind === 'animation' || node.kind === 'fullscreen') {
     fields.push(field('animationId', node.kind === 'animation' ? '动效索引' : '全屏动效索引', 'string', node.animationId ?? ''))
+    fields.push(field('playSoundEffect', '播放动效音效', 'bool', node.playSoundEffect !== false))
+    if (node.kind === 'animation') fields.push(field('layer', '动效层级', 'enum', node.layer || 'AboveAllControls', {
+      options: [{ value: 'AboveAllControls', label: '所有控件之上' }, { value: 'BelowAllControls', label: '所有控件之下' }],
+    }))
   }
   if (!CORE_KINDS.includes(node.kind) || node.kind === 'textwindow' || node.kind === 'grid') {
     fields.push(field('incomplete', '完整度', 'note', node.kind === 'textwindow' || node.kind === 'grid'
       ? '试玩支持基础滚动；滚动交互、滚动条及列表配置以 JSON/Lua 为准，相关 GIA 开关映射尚未核实。'
-      : '本阶段仅公共变换，业务槽不完整'))
+       : ['animation', 'fullscreen'].includes(node.kind) ? '支持浏览器动效播放；非空动效 GIA 配置尚未核实。' : '本阶段仅公共变换，业务槽不完整'))
   }
   return {
     id: node.id,

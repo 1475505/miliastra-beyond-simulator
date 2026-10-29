@@ -403,7 +403,8 @@ test('plugin registers screenshot capture, API and standalone Pixi play routes, 
   })
   assert.match(rendererHeaders['content-type'], /text\/javascript/)
   assert.match(rendererBody, /WebGL/)
-  assert.equal(effects.length, 7)
+  assert.ok(routes.some(route => route.path === '/qxqy-vfx'))
+  assert.equal(effects.length, 8)
 })
 
 test('Harness AI tools save and copy selected scripts without requiring editor actions', async t => {

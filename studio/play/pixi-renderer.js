@@ -9,6 +9,7 @@ export { loadBrowserFont } from './browser-font.js'
 export { t, getLocale, getLanguagePreference, setLanguagePreference, subscribeLocale, localizePage, loadSystemLanguage, getSystemLanguage } from '../i18n.js'
 import { DEFAULT_FONT } from '../fonts.js'
 import { paintRichTextCanvas } from './rich-text-paint.js'
+import { BrowserUIVfxPlayer } from './ui-vfx-player.js'
 // Pixi's default uniform sync uses Function().  Local Web intentionally has a
 // restrictive CSP, so register Pixi's static sync implementation instead.
 import 'pixi.js/unsafe-eval'
@@ -130,6 +131,12 @@ export function createCircleTexture(size) {
 export class PixiPlayRenderer {
   constructor(canvas, { fontReady = null } = {}) {
     this.canvas = canvas
+    if (canvas?.parentElement && typeof document !== 'undefined') {
+      this.effectHost = document.createElement('div')
+      canvas.parentElement.style.isolation = 'isolate'
+      canvas.parentElement.append(this.effectHost)
+      this.effects = new BrowserUIVfxPlayer(this.effectHost)
+    }
     this.app = null
     this.nodes = new Map()
     this.circleTextures = new Map()
@@ -174,6 +181,9 @@ export class PixiPlayRenderer {
     this.canvasHeight = h
     this.app.renderer.resize(w, h)
   }
+
+  syncEffects(snapshot) { this.effects?.sync(snapshot) }
+  resetEffects() { this.effects?.reset() }
 
   createNode(item, { group = false } = {}) {
     const root = new Container({ isRenderGroup: !!group })
@@ -668,6 +678,8 @@ export class PixiPlayRenderer {
   }
 
   destroy() {
+    this.effects?.destroy()
+    this.effectHost?.remove()
     this.disposed = true
     this.unsubscribeImages?.()
     this.clearNodes()

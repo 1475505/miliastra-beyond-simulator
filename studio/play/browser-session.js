@@ -65,6 +65,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   }
 
   async function applyScene(next, { freshAudio = false } = {}) {
+    const current = generation
     snapshot = next
     running = next?.running !== false
     audio?.sync(next, { fresh: freshAudio })
@@ -75,12 +76,14 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     } else if (Array.isArray(next?.paint)) {
       await renderer.render(next.paint, next.canvasWidth, next.canvasHeight)
     }
+    if (current !== generation) return
+    if (!isActive || isActive()) renderer.syncEffects?.(next)
     if (onSnapshot) await onSnapshot(next)
   }
 
   async function poll() {
     if (!running || polling) return
-    if (isActive && !isActive()) { audio?.reset(); return }
+    if (isActive && !isActive()) { audio?.reset(); renderer.resetEffects?.(); return }
     polling = true
     const current = generation
     try {
@@ -92,6 +95,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       running = false
       stopPolling()
       audio?.reset()
+      renderer.resetEffects?.()
       emitError(error)
     } finally {
       polling = false
@@ -108,6 +112,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     timer = null
     if (pollSoonTimer) clearTimeout(pollSoonTimer)
     pollSoonTimer = null
+    if (isActive && !isActive()) { audio?.reset(); renderer.resetEffects?.() }
   }
 
   function pollSoon(delay = 30) {
@@ -136,6 +141,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     void releaseKeys(false)
     generation++
     audio?.reset()
+    renderer.resetEffects?.()
     clearMove()
     activePointer = null
     switchingView = false
@@ -221,6 +227,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       if (current !== generation) return null
       current = ++generation
       audio?.reset()
+      renderer.resetEffects?.()
       sceneRev = 0
       const next = await api('view', { view: true, compact: true, ...args })
       if (current !== generation) return next

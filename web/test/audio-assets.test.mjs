@@ -110,6 +110,9 @@ test('browser decodes MP3, unlocks on gesture, plays Lua once, pauses/stops and 
   const before = requests.length
   await browser.evaluate(`fetch(${JSON.stringify(audioAssetUrl(10008))}).then(r=>r.arrayBuffer())`)
   assert.equal(requests.length, before)
+  assert.equal(await browser.evaluate(`document.getElementById('audio').textContent`), '声音已关闭', 'headless playback defaults to muted')
+  await browser.evaluate(`document.getElementById('audio').click()`)
+  await browser.wait(`document.getElementById('audio').textContent === '声音已开启'`)
   await browser.evaluate(`document.getElementById('audio').click()`)
   await browser.wait(`document.getElementById('audio').textContent === '声音已关闭'`)
   await browser.evaluate(`document.getElementById('stop').click()`)
