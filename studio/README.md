@@ -10,6 +10,8 @@
 
 音频目录 `assets/audio-catalog.js`、`host/audio-assets.js` 和 `play/audio-player.js` 接通 Lua 2D 音效与浏览器播放，复用 `host/asset-cache.js` 的按需持久缓存。签名、生命周期策略和验证见 [音效与缓存](docs/audio-assets.md)。
 
+界面动效的 OSS 上传清单、C/T WebM 合成实测、编辑器/试玩/截图接入方案与 GIA 待核对项，见 [界面动效预览调研](docs/ui-vfx-preview-research.md)（2026-10-28，方案阶段）。
+
 层序回归见 `test/sibling-order.test.mjs`：编辑器静态列表第一项在上；Lua 动态实例根默认后建在上，显式 sibling 排序另行生效。2026-09-28 修复位于 Runtime 实例化边界；PNG/Pixi/命中继续消费同一棵树。来源与生命周期边界见 [默认动态实例层序](../client/lua-runtime/docs/observed-contract.md#默认动态实例层序2026-09-28)。
 
 浏览器试玩的官方键鼠映射、响应开关与按键释放策略见 [键位响应](docs/browser-input.md)。

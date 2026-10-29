@@ -788,6 +788,13 @@ function pointerRecursesInto(control) {
   return control.kind === 'container' || control.kind === 'grid' || control.kind === 'textwindow' || control.kind === 'reference' || control.kind === 'button'
 }
 
+function clipsPlayChildren(control) {
+  // Scroll viewports clip their content, the masked case in Unity terms: a grid
+  // item that scrolled out of view must stay unclickable. Everything else is a
+  // plain layout host and only masks itself, never its descendants.
+  return control.kind === 'grid' || control.kind === 'textwindow'
+}
+
 function subtreeCanHit(control, memo) {
   const id = control.Id
   const cached = memo.get(id)
@@ -818,8 +825,14 @@ export function hitPlayControl(session, x, y) {
     const inverse = invertMatrix(matrix)
     if (!inverse) return null
     const local = applyMatrix(inverse, x, y)
-    if (local.x < box.left || local.x > box.right || local.y < box.bottom || local.y > box.top) return null
-    if (scrollUsable(control)) {
+    const inside = local.x >= box.left && local.x <= box.right && local.y >= box.bottom && local.y <= box.top
+    // A layout host forwards the pointer to its children even when the pointer is
+    // outside its own rect: on device only a mask clips raycasts, so a zero-size
+    // anchor container must not swallow hits on children that overflow it. The
+    // control itself is still accepted only inside its own rect, and scroll
+    // viewports keep clipping the content they mask.
+    if (!inside && (!pointerRecursesInto(control) || clipsPlayChildren(control))) return null
+    if (inside && scrollUsable(control)) {
       const bar = scrollBarGeometry(control._scroll, box.width, box.height)?.track
       const bx = local.x - box.centerX, by = box.centerY - local.y
       if (bar && bx >= bar.x && bx <= bar.x + bar.width && by >= bar.y && by <= bar.y + bar.height) return control
@@ -830,6 +843,7 @@ export function hitPlayControl(session, x, y) {
         if (child) return child
       }
     }
+    if (!inside) return null
     return acceptsPlayPointer(control) ? control : null
   }
   const identity = identityMatrix()

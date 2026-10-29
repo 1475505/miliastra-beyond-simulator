@@ -18,7 +18,7 @@ import { hitTest, layoutTree } from '../ui/inspector.js'
 import { createProject, snapshotProject } from '../ui/project.js'
 import { assignGuids } from '../gia/codec.js'
 import { compileProject } from '../play/compile.js'
-import { hitPlayControl, paintList, runtimeLayout, runtimeTransforms } from '../play/session.js'
+import { hitPlayControl, injectPlayPointer, paintList, runtimeLayout, runtimeTransforms } from '../play/session.js'
 import { createStudio, inspectGia, validateGiaCompatibility, validateServerGiaCompatibility } from '../index.js'
 import { createRuntime } from '../../client/lua-runtime/src/index.js'
 import { assertNoUndefined } from '../json.js'
@@ -385,6 +385,70 @@ test('play inherits a parent localScale for child paint and pointer hit testing 
   // old unscaled box whose right edge is 950.
   assert.equal(hitPlayControl(session, 1090, 475), hit)
   assert.equal(hitPlayControl(session, 1110, 475), null)
+})
+
+test('a zero-size anchor container forwards the pointer to a cursor child that overflows it', () => {
+  const runtime = createRuntime({ canvasWidth: 1280, canvasHeight: 720 })
+  const root = runtime.addRoot({
+    active: true,
+    kind: 'container',
+    name: 'Menu',
+    anchorMinX: 0,
+    anchorMinY: 0,
+    anchorMaxX: 1,
+    anchorMaxY: 1,
+    sizeDeltaX: 0,
+    sizeDeltaY: 0,
+    pivotX: 0.5,
+    pivotY: 0.5,
+    showCursor: true,
+    children: [
+      {
+        kind: 'container',
+        name: 'ExitLayer',
+        active: true,
+        anchorMinX: 0,
+        anchorMinY: 1,
+        anchorMaxX: 0,
+        anchorMaxY: 1,
+        sizeDeltaX: 0,
+        sizeDeltaY: 0,
+        pivotX: 0.5,
+        pivotY: 0.5,
+        children: [
+          {
+            kind: 'cursor',
+            name: 'ExitHit',
+            active: true,
+            anchorMinX: 0,
+            anchorMinY: 1,
+            anchorMaxX: 0,
+            anchorMaxY: 1,
+            anchoredPositionX: 39,
+            anchoredPositionY: -30.5,
+            sizeDeltaX: 52,
+            sizeDeltaY: 39,
+            pivotX: 0.5,
+            pivotY: 0.5,
+            raycastTarget: true,
+          },
+        ],
+      },
+    ],
+  })
+  const session = { runtime }
+  const exitLayer = root.children[0]
+  const hot = exitLayer.children[0]
+  // The anchor container is a single point in the top-left corner; the visible
+  // button and its hot zone overflow it, the way the menu's 退出 button does.
+  assert.equal(exitLayer.sizeDeltaX, 0)
+  assert.equal(hitPlayControl(session, 39, 690), hot)
+  assert.equal(hitPlayControl(session, 200, 690), null, 'a point away from the hot zone still hits nothing')
+  let clicks = 0
+  hot.AddCursorEventListener('CursorClick', () => { clicks += 1 })
+  injectPlayPointer(session, 'click', 39, 690, { silent: true })
+  assert.equal(clicks, 1)
+  runtime.destroy()
 })
 
 test('later play roots cover earlier roots for pointer hits', () => {

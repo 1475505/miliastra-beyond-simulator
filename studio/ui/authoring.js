@@ -83,7 +83,9 @@ export function createNode(kind, extras = {}) {
     node.isolateNavigation = extras.isolateNavigation === true
     node.disableKeyEventPassthrough = extras.disableKeyEventPassthrough === true
     node.disableCursorEventPassthrough = extras.disableCursorEventPassthrough === true
-    node.showCursor = extras.showCursor === true
+    // 官方字段表默认关。模拟器新建容器默认打开，否则 CursorEvent 点不到。
+    // 导入和 sanitize 会显式传入原值，缺省才用这个创建默认。
+    node.showCursor = Object.hasOwn(extras, 'showCursor') ? extras.showCursor === true : true
   }
   if (kind === 'textbox' || kind === 'textwindow') {
     node.fontSize = extras.fontSize ?? 20
