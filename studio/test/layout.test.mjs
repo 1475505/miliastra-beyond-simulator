@@ -598,14 +598,14 @@ end
   studio.playStop()
 })
 
-test('preset button resolves unavailable, hover, pressed and selected child states', () => {
+test('preset button resolves default, hover, pressed and unavailable child states', () => {
   const studio = createStudio()
   const stateIds = {}
   for (const [key, name] of [
-    ['unavailableChildId', '不可用态'],
+    ['defaultChildId', '默认态'],
     ['hoverChildId', '悬停态'],
     ['pressedChildId', '按下态'],
-    ['selectedChildId', '选中态'],
+    ['unavailableChildId', '不可用态'],
   ]) {
     const added = studio.patch({ op: 'add', kind: 'image', parentId: 'n6', name })
     stateIds[key] = added.selectedId
@@ -617,7 +617,7 @@ test('preset button resolves unavailable, hover, pressed and selected child stat
     return button.children.filter((child) => child.visible).map((child) => child.authoringId)
   }
   studio.playStart()
-  assert.deepEqual(visibleState(), [])
+  assert.deepEqual(visibleState(), [stateIds.defaultChildId])
   studio.playPointer('move', 800, 450)
   assert.deepEqual(visibleState(), [stateIds.hoverChildId])
   studio.playPointer('down', 800, 450)
@@ -625,12 +625,84 @@ test('preset button resolves unavailable, hover, pressed and selected child stat
   studio.playPointer('up', 800, 450)
   assert.deepEqual(visibleState(), [stateIds.hoverChildId])
   studio.playPointer('move', 10, 10)
-  assert.deepEqual(visibleState(), [stateIds.selectedChildId])
+  assert.deepEqual(visibleState(), [stateIds.defaultChildId])
   studio.playStop()
   studio.patch({ op: 'set', id: 'n6', key: 'interactable', value: false })
   studio.playStart()
   assert.deepEqual(visibleState(), [stateIds.unavailableChildId])
   studio.playStop()
+  studio.patch({ op: 'set', id: 'n6', key: 'interactable', value: true })
+  studio.patch({ op: 'set', id: 'n6', key: 'defaultChildId', value: null })
+  studio.patch({ op: 'remove', id: stateIds.defaultChildId })
+  studio.playStart()
+  assert.deepEqual(visibleState(), [], 'an unconfigured default slot does not display another state')
+  studio.playStop()
+})
+
+test('preset button can share a node across any or all states without later slots hiding it', () => {
+  const studio = createStudio()
+  const keys = ['defaultChildId', 'hoverChildId', 'pressedChildId', 'unavailableChildId']
+  const shared = studio.patch({ op: 'add', kind: 'image', parentId: 'n6', name: 'shared' }).selectedId
+  const other = studio.patch({ op: 'add', kind: 'image', parentId: 'n6', name: 'other' }).selectedId
+  const decoration = studio.patch({ op: 'add', kind: 'image', parentId: 'n6', name: 'decoration' }).selectedId
+  // Check all pairings, including non-adjacent slots and all four sharing a node.
+  for (const mask of [3, 5, 6, 9, 10, 12, 15]) {
+    for (const [i, key] of keys.entries()) studio.patch({ op: 'set', id: 'n6', key, value: mask & (1 << i) ? shared : other })
+    const check = index => {
+      const button = studio.playGet({ inspect: true }).tree[0].children.find(node => node.authoringId === 'n6')
+      assert.deepEqual(button.children.filter(child => child.visible).map(child => child.authoringId).sort(),
+        [mask & (1 << index) ? shared : other, decoration, ...(mask === 15 ? [other] : [])].sort(), `mask=${mask}, state=${keys[index]}`)
+    }
+    studio.patch({ op: 'set', id: 'n6', key: 'interactable', value: true })
+    studio.playStart()
+    check(0)
+    studio.playPointer('move', 800, 450)
+    check(1)
+    studio.playPointer('down', 800, 450)
+    check(2)
+    studio.playPointer('up', 800, 450)
+    check(1)
+    studio.playPointer('move', 10, 10)
+    check(0)
+    studio.playStop()
+    studio.patch({ op: 'set', id: 'n6', key: 'interactable', value: false })
+    studio.playStart()
+    check(3)
+    studio.playStop()
+  }
+})
+
+test('Lua interactable changes refresh button state without moving the pointer', () => {
+  const studio = createStudio()
+  const ids = {}
+  for (const key of ['defaultChildId', 'hoverChildId', 'pressedChildId', 'unavailableChildId']) {
+    ids[key] = studio.patch({ op: 'add', kind: 'image', parentId: 'n6', name: key }).selectedId
+    studio.patch({ op: 'set', id: 'n6', key, value: ids[key] })
+  }
+  studio.patch({ op: 'addScript', controlId: 'n6', path: 'toggle-button.lua', source: `
+function OnStart() script:EnableUpdate(true) end
+function OnUpdate()
+  script.object.interactable = not script.object.interactable
+end
+` })
+  const visible = () => studio.playGet({ inspect: true }).tree[0].children.find(node => node.authoringId === 'n6')
+    .children.filter(child => child.visible).map(child => child.authoringId)
+  studio.playStart()
+  assert.deepEqual(visible(), [ids.defaultChildId])
+  studio.playPointer('down', 800, 450)
+  assert.deepEqual(visible(), [ids.pressedChildId])
+  studio.playStep(1 / 30)
+  assert.deepEqual(visible(), [ids.unavailableChildId], 'disabled takes priority even during a press')
+  studio.playPointer('up', 800, 450)
+  studio.playStep(1 / 30)
+  assert.deepEqual(visible(), [ids.defaultChildId])
+  studio.playStop()
+  const runtime = createRuntime()
+  const button = runtime.addRoot({ kind: 'button', name: 'button' })
+  assert.ok(runtime.buttonControls.has(button))
+  runtime.destroyControl(button)
+  assert.equal(runtime.buttonControls.has(button), false, 'destroyed buttons leave the state registry')
+  runtime.destroy()
 })
 
 test('classify stretch vs center', () => {
@@ -774,16 +846,16 @@ test('updated textbox, image and four-state button settings survive GIA export-i
   source.patch({ op: 'set', id: 'n6', key: 'interactable', value: false })
   source.patch({ op: 'set', id: 'n6', key: 'raycastTarget', value: false })
   for (const [key, name] of [
-    ['unavailableChildId', '导出不可用态'],
+    ['defaultChildId', '导出默认态'],
     ['hoverChildId', '导出悬停态'],
     ['pressedChildId', '导出按下态'],
-    ['selectedChildId', '导出选中态'],
+    ['unavailableChildId', '导出不可用态'],
   ]) {
     const added = source.patch({ op: 'add', kind: 'image', parentId: 'n6', name })
     source.patch({ op: 'set', id: 'n6', key, value: added.selectedId })
   }
 
-  const gia = source.exportData('gia')
+  const gia = createStudio(source.archiveData()).exportData('gia')
   const target = createStudio()
   target.importData('gia', gia.data, 'updated-fields.gia')
   const nodes = []
@@ -802,9 +874,11 @@ test('updated textbox, image and four-state button settings survive GIA export-i
   const button = nodes.find((node) => node.kind === 'button')
   assert.equal(button.interactable, false)
   assert.equal(button.raycastTarget, false)
-  for (const key of ['unavailableChildId', 'hoverChildId', 'pressedChildId', 'selectedChildId']) {
+  for (const key of ['defaultChildId', 'hoverChildId', 'pressedChildId', 'unavailableChildId']) {
     assert.ok(button[key], key)
-    assert.equal(button.children.some((child) => child.id === button[key]), true)
+    assert.equal(button.children.find(child => child.id === button[key]).name, {
+      defaultChildId: '导出默认态', hoverChildId: '导出悬停态', pressedChildId: '导出按下态', unavailableChildId: '导出不可用态',
+    }[key])
   }
   assertNoUndefined(target.get())
 })

@@ -169,8 +169,6 @@ function emptyPlayerView() {
     pointerHoverControl: null,
     pointerScroll: null,
     hoveredControl: null,
-    selectedControl: null,
-    stateRestores: new Map(),
     viewCache: null,
   }
 }
@@ -199,7 +197,7 @@ function createPlayerRuntime(compiled, templateBundle, scripts, language) {
 
 const VIEW_FIELDS = [
   'pointerDownControl', 'pointerDownPosition', 'pointerLastPosition', 'pointerDragging',
-  'pointerHoverControl', 'pointerScroll', 'hoveredControl', 'selectedControl', 'stateRestores', 'viewCache',
+  'pointerHoverControl', 'pointerScroll', 'hoveredControl', 'viewCache',
 ]
 
 function bindCurrentView(session) {
@@ -622,6 +620,7 @@ function sceneView(session, sceneRev) {
 }
 
 export function playSnapshot(session, { inspect = false, view = false, paint = false, sceneRev, compact = false } = {}) {
+  prepareButtonStates(session)
   prepareScroll(session)
   // Direct Runtime consumers/tests may compose a session without startPlay.
   // Give those sessions a stable output identity too, never undefined in JSON.
@@ -751,10 +750,10 @@ function findButtonStateChild(button, authoringId) {
 }
 
 const BUTTON_STATE_KEYS = {
-  unavailable: 'unavailableChildId',
+  default: 'defaultChildId',
   hover: 'hoverChildId',
   pressed: 'pressedChildId',
-  selected: 'selectedChildId',
+  unavailable: 'unavailableChildId',
 }
 
 function buttonStateChildren(_session, control) {
@@ -767,33 +766,25 @@ function buttonStateChildren(_session, control) {
 }
 
 function prepareButtonStates(session) {
-  for (const root of session.runtime.roots) {
-    walk(root, (control) => {
-      if (control.kind !== 'button') return
-      for (const { child } of buttonStateChildren(session, control)) {
-        if (!session.stateRestores.has(child.Id)) {
-          session.stateRestores.set(child.Id, { child, active: child.active, visible: child.visible })
-        }
-        child.active = true
-        child.visible = false
-        if (typeof child.markPlayDirty === 'function') child.markPlayDirty(true)
-      }
-      refreshButtonState(session, control)
-    })
-  }
+  for (const control of session.runtime.buttonControls || []) refreshButtonState(session, control)
 }
 
 function refreshButtonState(session, control) {
   if (!control || control.kind !== 'button') return
-  let state = null
+  let state = 'default'
   if (control.interactable === false) state = 'unavailable'
   else if (control.pressed === true) state = 'pressed'
   else if (session.hoveredControl === control) state = 'hover'
-  else if (session.selectedControl === control) state = 'selected'
-  for (const item of buttonStateChildren(session, control)) {
-    item.child.active = true
-    item.child.visible = item.state === state
-    if (typeof item.child.markPlayDirty === 'function') item.child.markPlayDirty(true)
+  const states = buttonStateChildren(session, control)
+  const visibleChild = states.find(item => item.state === state)?.child
+  // Resolve the active slot first, then update each distinct child only once:
+  // another slot referencing the same child must not hide the active state.
+  for (const child of new Set(states.map(item => item.child))) {
+    const visible = child === visibleChild
+    if (child.active === true && child.visible === visible) continue
+    child.active = true
+    child.visible = visible
+    if (typeof child.markPlayDirty === 'function') child.markPlayDirty(true)
   }
 }
 
@@ -847,6 +838,7 @@ function subtreeCanHit(control, memo) {
 }
 
 export function hitPlayControl(session, x, y) {
+  prepareButtonStates(session)
   prepareScroll(session)
   const rootBox = canvasBox({ width: session.runtime.canvasWidth, height: session.runtime.canvasHeight })
   const memo = new Map()
@@ -1061,9 +1053,6 @@ export function injectPlayPointer(session, type, x, y, options = {}) {
         if (!session.pointerScroll) session.runtime.injectCursor(down, 'CursorEndDrag', data)
       } else if (hit === down && !session.pointerScroll?.bar) {
         session.runtime.injectCursor(down, 'CursorClick', data)
-        const previous = session.selectedControl
-        session.selectedControl = down.kind === 'button' ? down : null
-        if (previous && previous !== session.selectedControl) refreshButtonState(session, previous)
       }
       setPressed(session, down, false)
     }

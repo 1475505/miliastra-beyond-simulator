@@ -684,6 +684,7 @@ export class LuaRuntime {
     for (const child of control.children.slice()) this._destroyControlTree(child)
     control.alive = false
     this.scrollControls?.delete(control)
+    this.buttonControls?.delete(control)
     this.uiAnimations?.delete(control)
     this._playRemoved.push(control.Id)
     if (control.parent) {

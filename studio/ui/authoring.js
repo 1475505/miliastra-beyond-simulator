@@ -139,10 +139,10 @@ export function createNode(kind, extras = {}) {
     node.raycastTarget = extras.raycastTarget !== false
     node.interactable = extras.interactable !== false
     node.clickAudioId = extras.clickAudioId ?? DEFAULT_CLICK_AUDIO_ID
-    node.unavailableChildId = extras.unavailableChildId ?? null
+    node.defaultChildId = extras.defaultChildId ?? null
     node.hoverChildId = extras.hoverChildId ?? null
     node.pressedChildId = extras.pressedChildId ?? null
-    node.selectedChildId = extras.selectedChildId ?? null
+    node.unavailableChildId = extras.unavailableChildId ?? null
   }
   if (kind === 'cursor') node.raycastTarget = extras.raycastTarget ?? (extras.giaRaw?.cursorField501 !== 0)
   if (kind === 'reference') {
@@ -426,10 +426,10 @@ export function sanitizeNode(node) {
     extras.raycastTarget = node.raycastTarget
     extras.interactable = node.interactable
     extras.clickAudioId = node.clickAudioId
-    extras.unavailableChildId = node.unavailableChildId ?? null
+    extras.defaultChildId = node.defaultChildId ?? null
     extras.hoverChildId = node.hoverChildId ?? null
     extras.pressedChildId = node.pressedChildId ?? null
-    extras.selectedChildId = node.selectedChildId ?? null
+    extras.unavailableChildId = node.unavailableChildId ?? null
   }
   if (node.kind === 'cursor') extras.raycastTarget = node.raycastTarget
   if (node.kind === 'reference') extras.referencedPrefabId = node.referencedPrefabId ?? null

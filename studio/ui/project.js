@@ -201,8 +201,8 @@ const DIRECT_FIELDS = new Set([
   'softEdgeWidthX', 'softEdgeWidthY', 'horizontalSoftRange', 'verticalSoftRange',
   'enableFill', 'fillType', 'fillHorizontalType', 'fillVerticalType',
   'fillRadial90Type', 'fillRadialType', 'fillAmount', 'reverseMaskArea',
-  'raycastTarget', 'interactable', 'clickAudioId', 'unavailableChildId',
-  'hoverChildId', 'pressedChildId', 'selectedChildId',
+  'raycastTarget', 'interactable', 'clickAudioId', 'defaultChildId',
+  'hoverChildId', 'pressedChildId', 'unavailableChildId',
   'showScrollBar', 'cellSizeX', 'cellSizeY', 'spacingX', 'spacingY',
   'padding1X', 'padding1Y', 'padding2X', 'padding2Y', 'previewCount',
   'scrollDirection', 'layoutConstraint', 'referencedPrefabId', 'animationId', 'playSoundEffect', 'layer',
@@ -260,7 +260,7 @@ const STRING_FIELDS = new Set([
   'scrollDirection', 'layoutConstraint', 'referencedPrefabId', 'animationId',
 ])
 const STATE_NODE_FIELDS = new Set([
-  'unavailableChildId', 'hoverChildId', 'pressedChildId', 'selectedChildId',
+  'defaultChildId', 'hoverChildId', 'pressedChildId', 'unavailableChildId',
 ])
 const ENUM_VALUES = {
   layer: ['AboveAllControls', 'BelowAllControls'],

@@ -181,7 +181,7 @@ play 动作：`start`（重建运行时；可带 `canvasId` 指定设备画布�
 
 常用 patch op：`select`（id）、`pick`（x/y 命中）、`setCanvas`（canvasId）、`addScript` / `updateScript` / `removeScript`（脚本由存档统一管理；服务端容器会被拒绝）、`setServerLogic`（规则定义）、`newAsset`（assetType）、`addTemplate`、`add`（parentId/kind/name）、`reparent`、`moveSibling`（direction=up/down）、`remove`、`set`（id/key/value）、`setControlGuid`（id/guid，改当前资产的客户端控件索引）、`acknowledgeControlGuidChanges`（changeIds，核验 Lua 同步后清理指定变更记录）、`replace`（project）。数据写操作必须带 `expectedRevision`。
 
-`set` 常用 key：变换类 `posX/posY/width/height`、`rotationX/rotationY/rotationZ`（度）、`anchorType`、`anchorMinX/Y`、`anchorMaxX/Y`、`pivotX/Y`；业务类 `text`、`fontSize`、`imageId`、`enableMask`、`enableFill`、`fillType`、`fillAmount`(0–1)、按钮四状态 `unavailableChildId/hoverChildId/pressedChildId/selectedChildId`、`syncAllDevices`；颜色接受 `#AARRGGBB`。X/Y 支持正交压缩与背面镜像；混合轴及嵌套倾转为模拟器策略，范围见 `studio/docs/control-support.md`。以上是常用子集，未列出的字段不要猜——`set` 对不认识的 key 会直接报错，以报错为准。
+`set` 常用 key：变换类 `posX/posY/width/height`、`rotationX/rotationY/rotationZ`（度）、`anchorType`、`anchorMinX/Y`、`anchorMaxX/Y`、`pivotX/Y`；业务类 `text`、`fontSize`、`imageId`、`enableMask`、`enableFill`、`fillType`、`fillAmount`(0–1)、按钮四状态 `defaultChildId/hoverChildId/pressedChildId/unavailableChildId`（默认／悬停／按下／不可用）、`syncAllDevices`；颜色接受 `#AARRGGBB`。X/Y 支持正交压缩与背面镜像；混合轴及嵌套倾转为模拟器策略，范围见 `studio/docs/control-support.md`。以上是常用子集，未列出的字段不要猜——`set` 对不认识的 key 会直接报错，以报错为准。
 
 脚本 `require` 使用导入根：脚本映射路径去掉 `.lua` 后，前面加 `default_import_file/`。例如映射路径为 `workspace/flappy-fish/draws.lua` 时，写：`local ok, mod = pcall(require, "default_import_file/workspace/flappy-fish/draws")`。裸路径只为旧存档兼容，新脚本一律使用该前缀。
 

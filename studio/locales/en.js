@@ -568,7 +568,7 @@ export default {
   "不可用状态节点": "Unavailable Status Nodes",
   "悬停状态节点": "Hover Status Nodes",
   "按下状态节点": "Pressed Status Nodes",
-  "选中状态节点": "Selected Status Nodes",
+  "默认状态节点": "Default Status Nodes",
   "点击音效": "Click Sound",
   "引用控件模板索引": "Referenced Control Template Index",
   "允许滚动交互": "Enable Scrolling",

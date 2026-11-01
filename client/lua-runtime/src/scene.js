@@ -134,7 +134,7 @@ const DEFAULTS = {
   textbox: { text: '', fontSize: 20, fontColor: 0xffffffff, bgColor: 0, enableOutline: false, outlineColor: 0, horizontalAlignment: null, verticalAlignment: null, adaptiveFontSize: false, minimumFontSize: 10 },
   textwindow: { interactable: true, showScrollBar: true, text: '', fontSize: 20, fontColor: 0xffffffff, bgColor: 0, enableOutline: false, outlineColor: 0, horizontalAlignment: null, verticalAlignment: null, adaptiveFontSize: false, minimumFontSize: 10 },
   image: { imageSource: null, imageId: 0, imageColor: 0xffffffff, imageType: null, enableMask: false, enableSoftEdge: false, softEdgeMode: 'Percentage', softEdgeWidthX: 8, softEdgeWidthY: 8, horizontalSoftRange: 85, verticalSoftRange: 85, enableFill: false, fillType: 'Unused', fillHorizontalType: 'Left', fillVerticalType: 'Bottom', fillRadial90Type: 'BottomLeft', fillRadialType: 'Bottom', reverseMaskArea: false, fillAmount: 1 },
-  button: { interactable: true, clickAudioId: 0, raycastTarget: true, unavailableChildId: null, hoverChildId: null, pressedChildId: null, selectedChildId: null, pressed: false },
+  button: { interactable: true, clickAudioId: 0, raycastTarget: true, defaultChildId: null, hoverChildId: null, pressedChildId: null, unavailableChildId: null, pressed: false },
   cursor: { raycastTarget: true },
   grid: { itemCount: 0, itemPrefabIndex: null, raycastTarget: true, interactable: true, showScrollBar: true, scrollDirection: 'Vertical', layoutConstraint: 'AutoWrap', layoutConstraintFixedCount: null, scrollProgress: 0, cellSizeX: 50, cellSizeY: 50, spacingX: 8, spacingY: 8, padding1X: 20, padding1Y: 20, padding2X: 20, padding2Y: 20, previewCount: 5 },
   keyhint: { keyboardKeyCode: null, controllerKeyCode: null },
@@ -185,6 +185,10 @@ export class Control {
     if (this.kind === 'grid' || this.kind === 'textwindow') {
       this.runtime.scrollControls ||= new Set()
       this.runtime.scrollControls.add(this)
+    }
+    if (this.kind === 'button') {
+      this.runtime.buttonControls ||= new Set()
+      this.runtime.buttonControls.add(this)
     }
     const extra = DEFAULTS[this.kind] || {}
     for (const [k, v] of Object.entries(extra)) {

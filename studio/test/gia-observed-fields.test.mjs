@@ -230,3 +230,60 @@ test('server-group GIA preserves the same client flags under its container', () 
     for (const c of flagCases) for (const [key, value] of Object.entries(c[5])) assert.equal(nodes.get(c[0])[key], value)
   }
 })
+
+test('button exports default/hover/pressed/unavailable to independent wire tags 501/502/503/504', () => {
+  // Distinct slots in the user-provided device editor screenshot, cross-checked
+  // against the official four-state description; not a native re-export fixture.
+  const source = createStudio()
+  for (const [key, name] of [
+    ['defaultChildId', 'default'], ['hoverChildId', 'hover'],
+    ['pressedChildId', 'pressed'], ['unavailableChildId', 'unavailable'],
+  ]) {
+    const child = source.patch({ op: 'add', kind: 'image', parentId: 'n6', name }).selectedId
+    source.patch({ op: 'set', id: 'n6', key, value: child })
+  }
+  for (const asset of ['server', 'client']) {
+    const archive = source.archiveData()
+    const button = archive.assets.server.root.children[0].children.find(n => n.kind === 'button')
+    button.name = 'configured-button'
+    if (asset === 'client') {
+      archive.assets.client.root.children = [button]
+    }
+    const studio = createStudio(archive)
+    if (asset === 'client') studio.patch({ op: 'selectAsset', assetType: 'client-control-template' })
+    for (const format of ['gia', 'combined']) {
+      const payload = Buffer.from(studio.exportData(format).data, 'base64').subarray(20, -4)
+      const units = [...all(payload, 1), ...all(payload, 2)]
+      const buttons = units.filter(u => first(u, 3).toString() === 'configured-button')
+      assert.ok(buttons.length > 0)
+      for (const button of buttons) {
+        const config = details(button).flatMap(d => all(d, 81))[0]
+        for (const [tag, name] of [[501, 'default'], [502, 'hover'], [503, 'pressed'], [504, 'unavailable']]) {
+          const guid = all(config, tag)[0]
+          assert.ok(guid > 0, `${asset}/${format}/${tag}`)
+          const child = units.find(u => all(first(first(u, 19), 1), 501)[0] === guid)
+          assert.equal(first(child, 3).toString(), name, `${asset}/${format}/${tag}`)
+        }
+      }
+    }
+  }
+})
+
+test('button imports distinct independent wire state tags rather than the codec own field names', () => {
+  const buttonId = 1073745100
+  const childIds = [1073745101, 1073745102, 1073745103, 1073745104]
+  const content = cat(num(501, buttonId), ...childIds.map(id => num(503, id)),
+    slot(13, msg(12, msg(501, msg(502, Buffer.alloc(0))))),
+    slot(81, cat(...childIds.map((id, i) => num(501 + i, id)), num(505, 1))))
+  const button = cat(msg(1, num(4, buttonId)), str(3, 'button'), num(5, 70), msg(19, msg(1, content)))
+  const children = childIds.map((id, i) => {
+    const content = cat(num(501, id), num(504, buttonId),
+      slot(13, msg(12, msg(501, msg(502, Buffer.alloc(0))))), slot(84, num(503, 100001)))
+    return msg(2, cat(msg(1, num(4, id)), str(3, `state-${i}`), num(5, 15), msg(19, msg(1, content))))
+  })
+  const project = importGia(envelope(cat(msg(1, button), ...children))).project
+  const node = project.root.children[0]
+  for (const [i, key] of ['defaultChildId', 'hoverChildId', 'pressedChildId', 'unavailableChildId'].entries()) {
+    assert.equal(node.children.find(child => child.id === node[key]).name, `state-${i}`)
+  }
+})

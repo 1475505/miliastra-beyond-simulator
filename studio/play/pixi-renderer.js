@@ -368,8 +368,9 @@ export class PixiPlayRenderer {
       visual.__textChromeKey = textChromeKey(item, width, height)
     } else if (item.kind === 'button') {
       const graphic = new Graphics()
-      graphic.roundRect(-width / 2, -height / 2, width, height, 6).fill({ color: 0x3268cf, alpha: 1 })
-      graphic.roundRect(-width / 2, -height / 2, width, height, 6).stroke({ color: 0x70a0ff, alpha: 0.8, width: 1 })
+      // Simulator placeholder, not an exported native button skin.
+      graphic.roundRect(-width / 2, -height / 2, width, height, 6).fill({ color: 0x202020, alpha: 1 })
+      graphic.roundRect(-width / 2, -height / 2, width, height, 6).stroke({ color: 0x555555, alpha: 0.8, width: 1 })
       if (item.pressed) graphic.roundRect(-width / 2, -height / 2, width, height, 6).fill({ color: 0x000000, alpha: 0.28 })
       visual.addChild(graphic)
     } else if (item.kind === 'image' && item.primitive === 'sprite' && this.imageTexture(item.imageId, item.imageSource).texture) {

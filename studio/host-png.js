@@ -189,9 +189,10 @@ function drawScrollBar(ctx, item, width, height) {
 function drawButtonItem(ctx, item, width, height) {
   ctx.beginPath()
   roundRectPath(ctx, -width / 2, -height / 2, width, height, 6)
-  ctx.fillStyle = '#3268cf'
+  // Simulator placeholder, not an exported native button skin.
+  ctx.fillStyle = '#202020'
   ctx.fill()
-  ctx.strokeStyle = 'rgba(112,160,255,0.8)'
+  ctx.strokeStyle = 'rgba(85,85,85,0.8)'
   ctx.lineWidth = 1
   ctx.stroke()
   if (item.pressed) {

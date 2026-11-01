@@ -110,10 +110,10 @@ export function compileControl(node, canvasId, scriptsByNode = null) {
     spec.raycastTarget = node.raycastTarget !== false
     spec.interactable = node.interactable !== false
     spec.clickAudioId = node.clickAudioId
-    spec.unavailableChildId = node.unavailableChildId ?? null
+    spec.defaultChildId = node.defaultChildId ?? null
     spec.hoverChildId = node.hoverChildId ?? null
     spec.pressedChildId = node.pressedChildId ?? null
-    spec.selectedChildId = node.selectedChildId ?? null
+    spec.unavailableChildId = node.unavailableChildId ?? null
   }
   if (node.kind === 'cursor') spec.raycastTarget = node.raycastTarget !== false
   if (node.kind === 'reference') spec.referencedPrefabIndex = node.referencedPrefabId

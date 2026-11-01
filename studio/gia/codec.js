@@ -96,8 +96,8 @@ message GridViewConfig {
   message GridVector { float field501 = 501; float field502 = 502; }
 }
 message ButtonPresetConfig {
-  int32 disabledChild = 501; int32 hoverChild = 502; int32 pressedChild = 503;
-  int32 selectedChild = 504; int32 interactable = 505; int32 clickAudioId = 506;
+  int32 defaultChild = 501; int32 hoverChild = 502; int32 pressedChild = 503;
+  int32 disabledChild = 504; int32 interactable = 505; int32 clickAudioId = 506;
   int32 raycastTarget = 507;
 }
 message KeyHintConfig { int32 field501 = 501; int32 field502 = 502; }
@@ -394,18 +394,18 @@ function typeData(node, guid, guidById, warnings) {
       }
       return guidById.get(childId) || 0
     }
-    const disabledChild = stateGuid('unavailableChildId', '不可用')
+    const defaultChild = stateGuid('defaultChildId', '默认')
     const hoverChild = stateGuid('hoverChildId', '悬停')
     const pressedChild = stateGuid('pressedChildId', '按下')
-    const selectedChild = stateGuid('selectedChildId', '选中')
+    const disabledChild = stateGuid('unavailableChildId', '不可用')
     return [
       generic,
       ref(70, 93, 'empty80', 'buttonPreset', {
         clickAudioId: Math.trunc(node.clickAudioId),
-        ...(disabledChild ? { disabledChild } : {}),
+        ...(defaultChild ? { defaultChild } : {}),
         ...(hoverChild ? { hoverChild } : {}),
         ...(pressedChild ? { pressedChild } : {}),
-        ...(selectedChild ? { selectedChild } : {}),
+        ...(disabledChild ? { disabledChild } : {}),
         ...(node.interactable ? { interactable: 1 } : {}),
         ...(node.raycastTarget ? { raycastTarget: 1 } : {}),
       }),
@@ -1068,10 +1068,10 @@ function materializeControlForest(units, { reverseSiblings = false, idOffset = 0
     if (kind === 'image' && ![undefined, 0, 1, 2, 3, 4, 5].includes(image?.fillType)) warnings.push(`${node.name}: 填充形状枚举 ${image.fillType} 未识别，已保留原值。`)
     if (kind === 'button') {
       pendingStateGuids.set(node.id, {
-        unavailableChildId: button?.disabledChild,
+        defaultChildId: button?.defaultChild,
         hoverChildId: button?.hoverChild,
         pressedChildId: button?.pressedChild,
-        selectedChildId: button?.selectedChild,
+        unavailableChildId: button?.disabledChild,
       })
     }
   }

@@ -104,10 +104,10 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
         raycastTarget: node.raycastTarget !== false,
         interactable: node.interactable !== false,
         clickAudioId: node.clickAudioId,
-        unavailableChildId: node.unavailableChildId ?? null,
+        defaultChildId: node.defaultChildId ?? null,
         hoverChildId: node.hoverChildId ?? null,
         pressedChildId: node.pressedChildId ?? null,
-        selectedChildId: node.selectedChildId ?? null,
+        unavailableChildId: node.unavailableChildId ?? null,
       } : {}),
     }
     const childParent = node.kind === 'server-container' ? parentBox : box
@@ -296,10 +296,10 @@ export function inspectorDto(node, canvasId, box, guidById) {
     fields.push(
       field('raycastTarget', '可被光标射线检测', 'bool', node.raycastTarget !== false),
       field('interactable', '按钮是否可用', 'bool', node.interactable !== false),
-      field('unavailableChildId', '不可用状态节点', 'node', node.unavailableChildId, { options: childOptions, gia: 'W' }),
+      field('defaultChildId', '默认状态节点', 'node', node.defaultChildId, { options: childOptions, gia: 'W' }),
       field('hoverChildId', '悬停状态节点', 'node', node.hoverChildId, { options: childOptions, gia: 'W' }),
       field('pressedChildId', '按下状态节点', 'node', node.pressedChildId, { options: childOptions, gia: 'W' }),
-      field('selectedChildId', '选中状态节点', 'node', node.selectedChildId, { options: childOptions, gia: 'W' }),
+      field('unavailableChildId', '不可用状态节点', 'node', node.unavailableChildId, { options: childOptions, gia: 'W' }),
       field('clickAudioId', '点击音效', 'number', node.clickAudioId),
     )
   }

@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { Container, Matrix, Text } from 'pixi.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
+import { renderEditorPng, renderPaintPng } from '../host-png.js'
 
 function harness(t) {
   const renderer = Object.create(PixiPlayRenderer.prototype)
@@ -48,6 +50,30 @@ test('color and fill changes rebuild once and the same appearance then remains c
     assert.equal(root.__visual.uid, changed.uid)
     previous = changed
   }
+})
+
+test('button placeholder is neutral dark gray in Pixi and editor/play PNG, retaining pressed feedback', async t => {
+  const { renderer, root, item } = harness(t)
+  const button = { ...item, kind: 'button', sourceWidth: 150, sourceHeight: 50,
+    left: 25, bottom: 25, width: 150, height: 50,
+    matrix: { a: 1, b: 0, c: 0, d: 1, tx: 100, ty: 50 } }
+  renderer.updateNode(root, button)
+  const graphic = root.__visual.children[0]
+  assert.equal(graphic.context.instructions[0].data.style.color, 0x202020)
+  assert.equal(graphic.context.instructions[1].data.style.color, 0x555555)
+  renderer.updateNode(root, { ...button, pressed: true })
+  assert.equal(root.__visual.children[0].context.instructions.at(-1).data.style.alpha, 0.28)
+  const sample = async png => {
+    const canvas = createCanvas(200, 100), ctx = canvas.getContext('2d')
+    ctx.drawImage(await loadImage(png.data), 0, 0)
+    return Array.from(ctx.getImageData(60, 40, 1, 1).data)
+  }
+  assert.deepEqual(await sample(renderPaintPng([button], 200, 100)), [32, 32, 32, 255])
+  assert.deepEqual(await sample(renderEditorPng({ canvas: { width: 200, height: 100 }, boxes: [button] })), [32, 32, 32, 255])
+  const pressed = await sample(renderPaintPng([{ ...button, pressed: true }], 200, 100))
+  assert.ok(pressed[0] < 32)
+  assert.equal(pressed[0], pressed[1])
+  assert.equal(pressed[1], pressed[2])
 })
 
 test('replacing or removing an image releases its owned shape and mask contexts', t => {
