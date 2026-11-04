@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createServer, ENTITY_TYPES, PLAYER_SLOTS } from '../index.js'
+import { createServer, normalizeServerLogic, ENTITY_TYPES, PLAYER_SLOTS } from '../index.js'
 
 test('Lua entity aliases remain Level / PlayerSelf / AvatarSelf; Player1-8 are extra slots', () => {
   const server = createServer()
@@ -191,6 +191,117 @@ test('unsupported node graph fails instead of pretending to run', () => {
     vars: [{ entityType: 'Level', name: 'Wave', type: 'Int', defaultValue: 1 }],
   })
   assert.equal(server.getVar('Level', 'Wave'), 1)
+})
+
+test('entity creation initializes Level once and participating seats in order, independently of the view', () => {
+  const server = createServer({ playerCount: 2, viewPlayerIndex: 2, config: {
+    vars: [{ entityType: 'Level', name: 'Phase', value: 'config' }],
+    logic: { rules: [
+      { id: 'level', event: 'entityCreated', entityType: 'Level', actions: [
+        { kind: 'setCustomVariable', entityType: 'Level', name: 'Phase', value: 'ready' },
+      ] },
+      { id: 'players', event: 'entityCreated', entityType: 'PlayerSelf', actions: [
+        { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: 10 },
+        { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Items', value: [1, 2] },
+      ] },
+      { id: 'player2', event: 'entityCreated', entityType: 'Player2', actions: [
+        { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: 20 },
+      ] },
+      { id: 'absent', event: 'entityCreated', entityType: 'Player3', actions: [
+        { kind: 'setCustomVariable', entityType: 'Level', name: 'AbsentRan', value: true },
+      ] },
+      { id: 'signal', signalName: 'Earn', actions: [
+        { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: { fromSignalParam: 0 } },
+      ] },
+    ] },
+  } })
+  assert.equal(server.getVar('Level', 'Phase'), 'config')
+  server.initializeEntities()
+  assert.equal(server.getVar('Level', 'Phase'), 'ready')
+  assert.equal(server.getVar('Player1', 'Gold'), 10)
+  assert.equal(server.getVar('Player2', 'Gold'), 20)
+  assert.equal(server.getVar('Player3', 'Gold'), undefined)
+  assert.equal(server.getVar('Level', 'AbsentRan'), undefined)
+  assert.deepEqual(server.snapshot().logs.filter(row => row.level === 'info').map(row => row.text), [
+    'logic level: set Level.Phase',
+    'logic players: set PlayerSelf.Gold',
+    'logic players: set PlayerSelf.Items',
+    'logic players: set PlayerSelf.Gold',
+    'logic players: set PlayerSelf.Items',
+    'logic player2: set PlayerSelf.Gold',
+  ])
+  server.getVar('Player1', 'Items').push(3)
+  assert.deepEqual(server.getVar('Player2', 'Items'), [1, 2])
+  assert.deepEqual(server.inbound(), [])
+  assert.deepEqual(server.outbound(), [])
+
+  server.receiveFromClient('Earn', [99], { playerIndex: 1 })
+  server.setViewPlayerIndex(1)
+  server.initializeEntities()
+  assert.equal(server.getVar('Player1', 'Gold'), 99)
+  assert.equal(server.getVar('Player2', 'Gold'), 20)
+  server.reset()
+  server.initializeEntities()
+  assert.equal(server.getVar('Player1', 'Gold'), 10)
+  assert.deepEqual(server.getVar('Player1', 'Items'), [1, 2])
+})
+
+test('creation rule validation rejects signal-only inputs and ambiguous Level PlayerSelf writes', () => {
+  const action = { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: 0 }
+  const rule = { event: 'entityCreated', entityType: 'PlayerSelf', actions: [action] }
+  const normalize = fields => normalizeServerLogic({ rules: [{ ...rule, ...fields }] })
+  assert.equal(normalize({}).rules[0].event, 'entityCreated')
+  assert.throws(() => normalize({ event: 'unknown' }), /event must be signal or entityCreated/)
+  assert.throws(() => normalize({ entityType: 'AvatarSelf' }), /entityType must be Level, PlayerSelf, or Player1-8/)
+  assert.throws(() => normalize({ entityType: 'Level' }), /Level entityCreated has no PlayerSelf/)
+  assert.throws(() => normalize({ actions: [{ ...action, value: { fromSignalParam: 0 } }] }), /only supports setCustomVariable with literal values/)
+  assert.throws(() => normalize({ actions: [{ kind: 'sendClientScriptSignal', target: 'PlayerSelf', signalName: 'Ready', params: [] }] }), /only supports setCustomVariable with literal values/)
+  const oldRule = { id: 'old', signalName: 'Earn', actions: [action] }
+  assert.deepEqual(normalizeServerLogic({ rules: [oldRule] }).rules, [oldRule])
+  assert.deepEqual(normalizeServerLogic({ rules: [{ ...oldRule, event: 'signal' }] }).rules, [oldRule])
+  assert.throws(() => normalizeServerLogic({ enabled: 'false', rules: [] }), /serverLogic.enabled must be a boolean/)
+  assert.throws(() => normalize({ enabled: 0 }), /rules\[0\].enabled must be a boolean/)
+  assert.throws(() => normalize({ enabled: false, actions: [] }), /actions must be a non-empty array/)
+  assert.throws(() => normalizeServerLogic({ enabled: false, rules: [{ signalName: '', actions: [action] }] }), /signal name is required/)
+})
+
+test('logic and rule enable switches gate initialization and signals without deleting configuration or blocking manual operations', () => {
+  const rules = [
+    { id: 'init', event: 'entityCreated', entityType: 'PlayerSelf', actions: [
+      { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: 10 },
+    ] },
+    { id: 'disabled-init', enabled: false, event: 'entityCreated', entityType: 'Level', actions: [
+      { kind: 'setCustomVariable', entityType: 'Level', name: 'DisabledInit', value: true },
+    ] },
+    { id: 'earn', signalName: 'Earn', actions: [
+      { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: { fromSignalParam: 0 } },
+      { kind: 'sendClientScriptSignal', target: 'PlayerSelf', signalName: 'Ack', params: [] },
+    ] },
+    { id: 'disabled-signal', enabled: false, signalName: 'Earn', actions: [
+      { kind: 'setCustomVariable', entityType: 'Level', name: 'DisabledSignal', value: true },
+      { kind: 'sendClientScriptSignal', target: 'PlayerSelf', signalName: 'DisabledAck', params: [] },
+    ] },
+  ]
+  for (const enabled of [false, true]) {
+    const server = createServer({ logic: { enabled, rules } })
+    const received = []
+    server.attachRuntime({ sendClientSignal(name) { received.push(name) } })
+    server.initializeEntities()
+    assert.deepEqual(server.snapshot().vars.Player1, enabled ? { Gold: { type: 'Int', value: 10 } } : {})
+    server.receiveFromClient('Earn', [99])
+    assert.deepEqual(server.snapshot().vars.Player1, enabled ? { Gold: { type: 'Int', value: 99 } } : {})
+    assert.deepEqual(server.snapshot().vars.Level, {})
+    assert.deepEqual(received, enabled ? ['Ack'] : [])
+    assert.equal(server.inbound().length, 1, 'disabled logic still records incoming signals')
+    assert.equal(server.outbound().length, enabled ? 1 : 0)
+    assert.equal(server.snapshot().logs.length, enabled ? 3 : 0)
+    assert.deepEqual(server.getLogic(), { version: 1, enabled, rules })
+    server.setVar('PlayerSelf', 'Manual', 7)
+    server.sendToClient('ManualAck')
+    assert.equal(server.getVar('PlayerSelf', 'Manual'), 7)
+    assert.equal(received.at(-1), 'ManualAck')
+    server.destroy()
+  }
 })
 
 test('snapshot is lossless JSON without host references', () => {

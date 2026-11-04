@@ -215,9 +215,15 @@ function normalizeLogicAction(raw, ruleIndex, actionIndex) {
   throw new Error(`${label}.kind must be setCustomVariable or sendClientScriptSignal`)
 }
 
+function logicEnabledField(raw, label) {
+  if (raw.enabled === undefined) return {}
+  if (typeof raw.enabled !== 'boolean') throw new Error(`${label}.enabled must be a boolean`)
+  return { enabled: raw.enabled }
+}
+
 /**
  * Lightweight executable server-logic format. It intentionally models only
- * the operations exposed in the Studio: signal listener, variable write, and
+ * the operations exposed in the Studio: entity creation, signal listener, variable write, and
  * a client-script signal to PlayerSelf / a named player / AllPlayers.
  * It is not an official node-graph file format.
  */
@@ -228,15 +234,35 @@ export function normalizeServerLogic(raw) {
   if (!Array.isArray(inputRules)) throw new Error('serverLogic.rules must be an array')
   return {
     version: 1,
+    ...logicEnabledField(raw, 'serverLogic'),
     rules: inputRules.map((rawRule, ruleIndex) => {
       if (!isPlainObject(rawRule)) throw new Error(`serverLogic.rules[${ruleIndex}] must be an object`)
+      const enabled = logicEnabledField(rawRule, `serverLogic.rules[${ruleIndex}]`)
       if (!Array.isArray(rawRule.actions) || rawRule.actions.length === 0) {
         throw new Error(`serverLogic.rules[${ruleIndex}].actions must be a non-empty array`)
       }
+      const event = rawRule.event === undefined ? 'signal' : String(rawRule.event)
+      if (event !== 'signal' && event !== 'entityCreated') {
+        throw new Error(`serverLogic.rules[${ruleIndex}].event must be signal or entityCreated`)
+      }
+      const actions = rawRule.actions.map((action, actionIndex) => normalizeLogicAction(action, ruleIndex, actionIndex))
+      if (event === 'entityCreated') {
+        const entityType = requireLogicEntity(rawRule.entityType, `serverLogic.rules[${ruleIndex}]`)
+        for (const action of actions) {
+          if (action.kind !== 'setCustomVariable' || signalParamReference(action.value, 'entityCreated value')) {
+            throw new Error(`serverLogic.rules[${ruleIndex}]: entityCreated only supports setCustomVariable with literal values`)
+          }
+          if (entityType === 'Level' && action.entityType === 'PlayerSelf') {
+            throw new Error(`serverLogic.rules[${ruleIndex}]: Level entityCreated has no PlayerSelf; use Level or Player1-8`)
+          }
+        }
+        return { id: String(rawRule.id || `created-${ruleIndex + 1}`), ...enabled, event, entityType, actions }
+      }
       return {
         id: String(rawRule.id || `signal-${ruleIndex + 1}`),
+        ...enabled,
         signalName: requireSignalName(rawRule.signalName),
-        actions: rawRule.actions.map((action, actionIndex) => normalizeLogicAction(action, ruleIndex, actionIndex)),
+        actions,
       }
     }),
   }
@@ -276,6 +302,7 @@ export function createServer(options = {}) {
   let logic = normalizeServerLogic(options.logic)
   let playerCount = normalizePlayerCount(options.playerCount)
   let viewPlayerIndex = normalizePlayerIndex(options.viewPlayerIndex, playerCount)
+  let entitiesInitialized = false
 
   function log(level, text) {
     logs.push({
@@ -335,8 +362,14 @@ export function createServer(options = {}) {
   }
 
   function runLogic(entry) {
+    if (logic.enabled === false) return
     for (const rule of logic.rules) {
-      if (rule.signalName !== entry.name) continue
+      if (rule.enabled === false) continue
+      if (entry.event === 'entityCreated') {
+        if (rule.event !== 'entityCreated') continue
+        const entity = rule.entityType === 'PlayerSelf' ? playerEntity(entry.playerIndex) : rule.entityType
+        if (entity !== entry.entityType) continue
+      } else if (rule.event === 'entityCreated' || rule.signalName !== entry.name) continue
       for (const action of rule.actions) {
         if (action.kind === 'setCustomVariable') {
           const value = resolveLogicValue(action.value, entry)
@@ -384,6 +417,17 @@ export function createServer(options = {}) {
     setViewPlayerIndex(next) {
       viewPlayerIndex = normalizePlayerIndex(next, playerCount)
       return viewPlayerIndex
+    },
+
+    initializeEntities() {
+      if (entitiesInitialized) return
+      entitiesInitialized = true
+      // Simulator lifecycle policy: Level, then the participating player seats,
+      // before any client script starts. Viewing another seat is not creation.
+      runLogic({ event: 'entityCreated', entityType: 'Level', playerIndex: 0 })
+      for (let index = 1; index <= playerCount; index += 1) {
+        runLogic({ event: 'entityCreated', entityType: playerEntity(index), playerIndex: index })
+      }
     },
 
     log(level, text) {
@@ -667,6 +711,7 @@ export function createServer(options = {}) {
       logs.length = 0
       seq = 1
       clock = 0
+      entitiesInitialized = false
     },
 
     destroy() {

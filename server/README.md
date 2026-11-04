@@ -1,6 +1,6 @@
 # simulator/server
 
-单进程薄服务端：关卡、最多 8 个玩家座位及其角色的自定义变量，以及客户端↔服务端信号队列。支持存档内的轻量 `serverLogic` 规则：监听客户端信号后设置变量，或向当前玩家 / 指定座位 / 全部玩家发送客户端脚本信号。**不执行官方节点图。**
+单进程薄服务端：关卡、最多 8 个玩家座位及其角色的自定义变量，以及客户端↔服务端信号队列。支持存档内的轻量 `serverLogic` 规则：实体创建时初始化变量，或监听客户端信号后设置变量、向当前玩家 / 指定座位 / 全部玩家发送客户端脚本信号。**不执行官方节点图。**
 
 ```sh
 cd simulator/server
@@ -32,9 +32,47 @@ npm test
 
 ## 可执行服务端逻辑
 
-`serverLogic` 是模拟器存档格式，不是官方节点图格式。每条规则以 `signalName` 监听客户端信号，顺序执行 `actions`：
+`serverLogic` 是模拟器存档格式，不是官方节点图格式。每条规则按触发事件顺序执行 `actions`：
 
-- `setCustomVariable`：可写 `Level`、`PlayerSelf`（发信号的那位玩家）或固定座位 `Player1`–`Player8`。
+- **监听客户端信号**：以 `signalName` 监听；省略 `event` 或设为 `"signal"` 均表示信号规则，旧存档无需迁移。
+- **实体创建时**：设置 `event: "entityCreated"` 和 `entityType`，不需要 `signalName`。实体可选 `Level`、`PlayerSelf` 或 `Player1`–`Player8`；仅支持用字面量执行 `setCustomVariable`，不支持引用信号参数或发送客户端脚本信号。
+
+两种动作：
+
+- `setCustomVariable`：可写 `Level`、`PlayerSelf`（发信号或刚创建的玩家）或固定座位 `Player1`–`Player8`。
 - `sendClientScriptSignal`：`target` 为 `PlayerSelf`（发信号者）、`Player1`–`Player8` 或 `AllPlayers`（本局全部试玩玩家）。
 
 动作的 `value` 或 `params` 中，`{ "fromSignalParam": 0 }` 表示引用监听信号的第一个参数（从 0 开始）；用于转发时会保留原始参数类型。
+
+### 使用与停用
+
+- 编辑器「使用服务端逻辑」控制整份逻辑是否参与试玩，对应 `serverLogic.enabled`；每条规则的「启用规则」对应 `rules[].enabled`。
+- 两级开关都默认启用，旧存档省略字段时保持原行为。仅接受布尔值；设为 `false` 相当于不使用该逻辑／规则，但保留完整配置与顺序，重新启用无需重新填写规则。
+- 总开关关闭时不执行任何初始化或信号规则；总开关打开时仅执行启用的规则，不覆盖各规则自己的开关状态。
+- 开关随完整 JSON 存档保存，编辑器保存后**下次试玩／重建运行时**生效，不热切换已运行的试玩，也不回滚已经写入的变量。
+- 停用只控制自动规则，不关闭薄服务端：客户端信号仍记录，Lua 变量读写和工具手动 `serverSet` / `serverSend` 仍可使用。停用规则仍须通过格式校验，不能当作保存不完整草稿的方式。这不是官方节点图挂载或 GIA 导出能力。
+
+### 实体创建时初始化（模拟器策略）
+
+在编辑器「服务端逻辑」点击「＋ 实体创建时」，选择创建实体，再添加变量名和值。也可用 `setServerLogic` 写入：
+
+```json
+{
+  "rules": [{
+    "id": "initialize-gold",
+    "event": "entityCreated",
+    "entityType": "PlayerSelf",
+    "actions": [
+      { "kind": "setCustomVariable", "entityType": "PlayerSelf", "name": "Gold", "value": 10 }
+    ]
+  }]
+}
+```
+
+- 试玩先加载配置中的变量，再调用 `server.initializeEntities()`，最后启动客户端 Runtime / Lua。客户端 `OnStart` 首次读取即可取得初始化值。
+- 每局按 `Level` → `Player1` → … → 本局最后一个座位派发；同一实体匹配的规则及其动作保持存档顺序。`Level` 只触发一次；`PlayerSelf` 对每位参与玩家分别触发，动作中的 `PlayerSelf` 指刚创建的玩家；固定座位规则只在该座位参与时触发。
+- `Level` 创建事件没有当前玩家，因此拒绝向 `PlayerSelf` 写入，需指定 `Level` 或固定座位。初始视角不影响初始化结果。
+- 初始化每局只执行一次；步进、暂停/继续、切换玩家视角不重复执行，重新开始或重建设备试玩时重新执行。直接使用薄服务端时应在配置完成后显式调用 `initializeEntities()`；`reset()` 后可再次初始化。
+- 当前不建模中途加入、动态实体或角色创建事件；不宣称与官方实体生命周期的时序完全一致。
+
+证据边界：`evidence_source=inferred`、运行端 `simulator`、`device_status=not_required`，这是本项目初始化策略，不是官方节点图实现。行为回归见 `server/test/server.test.mjs`、`studio/test/autotest.test.mjs`；浏览器编辑保存见 `web/test/server-logic-browser.test.mjs`。

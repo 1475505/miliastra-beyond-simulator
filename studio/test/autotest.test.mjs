@@ -147,6 +147,93 @@ end
   studio.playStop()
 })
 
+test('saved entity creation rules initialize all players before client OnStart and rerun only on a fresh play', () => {
+  const studio = createStudio()
+  const logic = { rules: [
+    { id: 'level', event: 'entityCreated', entityType: 'Level', actions: [
+      { kind: 'setCustomVariable', entityType: 'Level', name: 'Phase', value: 'ready' },
+    ] },
+    { id: 'players', event: 'entityCreated', entityType: 'PlayerSelf', actions: [
+      { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: 10 },
+    ] },
+    { id: 'player2', event: 'entityCreated', entityType: 'Player2', actions: [
+      { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: 20 },
+    ] },
+  ] }
+  studio.patch({ op: 'setServerLogic', logic })
+  studio.patch({ op: 'addScript', controlId: 'n1', controlAsset: 'server-control-template', path: 'initialized.lua', source: `
+function OnStart()
+  print("initial", game.GetGlobalCustomVariableValue(Enum.CustomVariableEntityType.Level, "Phase"),
+    game.GetGlobalCustomVariableValue(Enum.CustomVariableEntityType.PlayerSelf, "Gold"))
+end
+` })
+  const archive = JSON.parse(Buffer.from(studio.exportData('save').data, 'base64').toString('utf8'))
+  const restored = createStudio(archive)
+  assert.deepEqual(restored.get().serverLogic, studio.get().serverLogic)
+  try {
+    const started = restored.playStart({ playerCount: 2, viewPlayerIndex: 2 })
+    assert.equal(started.server.vars.Level.Phase.value, 'ready')
+    assert.equal(started.server.vars.Player1.Gold.value, 10)
+    assert.equal(started.server.vars.Player2.Gold.value, 20)
+    assert.match(started.logs.map(row => row.text).join('\n'), /initial\tready\t20/)
+    assert.deepEqual(started.server.inbound, [])
+    assert.doesNotMatch(started.serverLogs.map(row => row.text).join('\n'), /missing/)
+    const asOne = restored.playSetView(1)
+    assert.match(asOne.logs.map(row => row.text).join('\n'), /initial\tready\t10/)
+    restored.playServerSet('PlayerSelf', 'Gold', 99)
+    restored.playStep(0.1)
+    restored.playPause()
+    restored.playResume()
+    restored.playSetView(2)
+    restored.playSetView(1)
+    assert.equal(restored.playGet().server.vars.Player1.Gold.value, 99)
+    const switched = restored.playSetCanvas('mobile-16-9')
+    assert.equal(switched.server.vars.Player1.Gold.value, 10)
+    assert.equal(switched.server.vars.Player2.Gold.value, 20)
+    assert.match(switched.logs.map(row => row.text).join('\n'), /initial\tready\t10/)
+    restored.playStop()
+    const restarted = restored.playStart({ playerCount: 1 })
+    assert.equal(restarted.server.vars.Player1.Gold.value, 10)
+    assert.equal(restarted.server.vars.Player2, undefined)
+    assert.match(restarted.logs.map(row => row.text).join('\n'), /initial\tready\t10/)
+  } finally { restored.playStop() }
+})
+
+test('logic enable settings survive archive round trips and are applied on the next play, not to an existing session', () => {
+  const studio = createStudio()
+  const rules = [
+    { id: 'init', enabled: false, event: 'entityCreated', entityType: 'PlayerSelf', actions: [
+      { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: 10 },
+    ] },
+    { id: 'earn', signalName: 'Earn', actions: [
+      { kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: 99 },
+    ] },
+  ]
+  studio.patch({ op: 'setServerLogic', logic: { enabled: false, rules } })
+  studio.patch({ op: 'addScript', controlId: 'n1', controlAsset: 'server-control-template', path: 'earn.lua', source: `
+function OnStart()
+  game.ServerSignal("Earn"):SendSignal()
+end
+` })
+  const restored = createStudio(studio.archiveData())
+  assert.deepEqual(restored.get().serverLogic, { version: 1, enabled: false, rules })
+  try {
+    const disabled = restored.playStart()
+    assert.deepEqual(disabled.server.vars.Player1, {})
+    assert.equal(disabled.server.inbound[0].name, 'Earn')
+    restored.patch({ op: 'setServerLogic', logic: { enabled: true, rules } })
+    assert.equal(restored.playGet().server.logic.enabled, false)
+    const enabled = restored.playStart()
+    assert.equal(enabled.server.vars.Player1.Gold.value, 99)
+    assert.equal(enabled.serverLogs.some(row => row.text.includes('logic init:')), false)
+    const allDisabled = rules.map(rule => ({ ...rule, enabled: false }))
+    restored.patch({ op: 'setServerLogic', logic: { rules: allDisabled } })
+    assert.deepEqual(restored.playStart().server.vars.Player1, {})
+    restored.patch({ op: 'setServerLogic', logic: { rules: [{ ...rules[0], enabled: true }, { ...rules[1], enabled: false }] } })
+    assert.equal(restored.playStart().server.vars.Player1.Gold.value, 10)
+  } finally { restored.playStop() }
+})
+
 test('multiplayer play isolates PlayerSelf per seat and view switches client snapshot', () => {
   const studio = createStudio()
   studio.patch({

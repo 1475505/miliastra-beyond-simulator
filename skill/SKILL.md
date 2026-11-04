@@ -141,7 +141,7 @@ qxqy_studio_play { "action": "serverSend", "args": { "target": "PlayerSelf", "na
 
 `entityType` 可以是 Lua 的 `Level` / `PlayerSelf` / `AvatarSelf`，或模拟器座位 `Player1`–`Player8` / `Avatar1`–`Avatar8`。未定义变量的 Lua Get 返回 `nil`（模拟器策略）。`serverSend.target` 可以是 `PlayerSelf`（当前视角玩家）、`Player1`–`Player8` 或 `AllPlayers`。
 
-要定义随客户端信号自动执行的服务端逻辑，可让用户在编辑器“服务端逻辑”页配置，或用 `qxqy_studio_patch` 的 `setServerLogic`。它是模拟器存档格式，不是官方节点图；规则按信号名监听，顺序执行设置变量和向玩家发客户端脚本信号：
+要定义实体创建时初始化或随客户端信号自动执行的服务端逻辑，可让用户在编辑器“服务端逻辑”页配置，或用 `qxqy_studio_patch` 的 `setServerLogic`。它是模拟器存档格式，不是官方节点图；完整契约见 `server/README.md`。信号规则按信号名监听，顺序执行设置变量和向玩家发客户端脚本信号：
 
 ```json
 {
@@ -162,6 +162,10 @@ qxqy_studio_play { "action": "serverSend", "args": { "target": "PlayerSelf", "na
 ```
 
 `{ "fromSignalParam": 0 }` 引用监听信号的第一个参数（从 0 开始）；用在回传参数时会保留原信号参数类型。动作可写 `Level` / `PlayerSelf` / `Player1`–`Player8`；`sendClientScriptSignal.target` 为 `PlayerSelf`（发信号者）、`Player1`–`Player8` 或 `AllPlayers`。Lua 侧 `PlayerSelf` 始终相对当前客户端。
+
+初始化规则使用 `{ "event": "entityCreated", "entityType": "PlayerSelf", "actions": [{ "kind": "setCustomVariable", "entityType": "PlayerSelf", "name": "Gold", "value": 10 }] }`，无需信号名。创建实体可选 `Level` / `PlayerSelf` / `Player1`–`Player8`，仅支持字面量设置变量；`PlayerSelf` 对每位参与玩家分别初始化，`Level` 一次。初始化发生在客户端 Lua 启动前，每次重建试玩重新执行，切换视角不重复。
+
+`logic.enabled: false` 可停用整份自动逻辑，`rules[].enabled: false` 可停用单条规则；默认均启用。配置保留并随 JSON 存档保存，下次试玩生效，不影响工具手动读写变量和发送信号。开关契约见 `server/README.md`「使用与停用」。
 
 约束：每会话最多一个试玩 Worker；单次操作默认 8 秒超时；`stop` 是唯一确定性回收方式；暂停（`pause`）后才能单帧调试（`step`）。
 

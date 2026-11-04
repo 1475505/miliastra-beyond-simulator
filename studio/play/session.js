@@ -225,6 +225,7 @@ export function startPlay(project, { templatesProject = null, scripts = [], scen
   const view = normalizePlayerIndex(viewPlayerIndex, count)
   const server = createServer({ playerCount: count, viewPlayerIndex: view })
   if (serverConfig) server.loadConfig({ ...serverConfig, playerCount: count, viewPlayerIndex: view })
+  server.initializeEntities()
   const runtimes = []
   for (let i = 0; i < count; i += 1) runtimes.push(createPlayerRuntime(compiled, templateBundle, scripts, language))
   server.attachRuntimes(runtimes)
