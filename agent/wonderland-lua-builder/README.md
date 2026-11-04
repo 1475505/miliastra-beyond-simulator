@@ -44,7 +44,7 @@ DSH 0.1.7-rc.1 起，本仓库根包 `dsh-plugin-beyond-simulator` 在构建时�
 
 先区分实际加载来源：支持目录预设的旧宿主中，若 `$DSH_HOME/.agent-presets/wonderland-lua-builder/agent.cordis.yml` 仍包含该句，需在保留其他自定义内容的前提下删除它并重启 Harness；插件不会覆盖此用户副本。Harness 0.2.1 改用 `@deepseek-ai/dsh-agent-preset-registry` 管理声明式注册项，默认不扫描这个旧目录；应更新含修复的插件包并重启，单改旧副本无效。声明式注册项和随包副本由构建从主维护源同步，不手改生成文件。来源与完整宿主验收见 [0.2.1 兼容性](../../dsh-plugin/README.md#harness-021-兼容性)。
 
-2026-10-18 提示词解析验证覆盖本机 0.1.5-rc.3 renderer，以及发布标签源码中的 0.2.0-rc.2、0.2.1-rc.2 renderer，修复后三组均成功，旧句在新版变量集合中复现原始错误（`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`）。后续完整宿主验证和限制统一记录在上述兼容性说明；提示词解析通过不等于 Desktop 浏览器界面或模型子代理已完成端到端验收。
+提示词解析的模拟器观察覆盖0.1.5-rc.3、0.2.0-rc.2、0.2.1-rc.2 renderer（`observed / simulator / not_required`）；完整宿主边界统一见上述兼容性说明。解析成功不等于Desktop界面或模型子代理端到端通过。
 
 ## 资料与验证边界
 
@@ -52,4 +52,4 @@ DSH 0.1.7-rc.1 起，本仓库根包 `dsh-plugin-beyond-simulator` 在构建时�
 
 步骤 7 同时负责交付后的协作：引导用户完成导入/挂载、核对真实索引并绑定脚本目录。AI 可按用户授权保存、预览并同步脚本，返回逐文件结果和备份位置；用户随后在千星沙箱保存试玩。手动修改也要同步回项目。详见 [真机交付步骤](skills/qxqy-game-studio/references/07-device-validation.md)及[实机脚本同步能力](../../studio/docs/script-sync.md)。
 
-模拟器只预览 `100001–100006` 六种基础图元，其他官方图片 ID 显示缺失框，需真机确认。行为评估见 [agent-behavior.md](evals/agent-behavior.md)；模拟器通过不等于真机通过。
+图片预览范围与缺失素材处理见 [素材说明](../../studio/docs/image-assets.md)，不把预览支持当真机资源已确认。行为评估见 [agent-behavior.md](evals/agent-behavior.md)；模拟器通过不等于真机通过。

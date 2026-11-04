@@ -23,7 +23,7 @@
 
 DSH 分发同时执行 `pnpm test:harness`，在隔离 profile 中安装并启动真实 Harness 0.2。旧/新工具运行时矩阵、完整宿主和预设资源的验证范围见 [插件兼容说明](dsh-plugin/README.md#harness-02-兼容性)。构建与上述测试应顺序运行，`pnpm test` 和 `pack:release` 都会重建同一批资源，不能并行。
 
-`release/`、`dist/`、依赖与生成资源不提交。重复打包可能保留旧版本 tarball，以 `manifest.json` 为本轮产物清单。根包的 `prepare` 服务于源码安装；预构建交付使用根打包命令产生的清洁 tarball。DSH 安装包内保留 `dsh-plugin/` 路径，根 exports 和 bundle 声明定位到该目录的构建产物。
+`release/`、`dist/`、依赖与生成资源不提交。重复打包可能保留旧版本 tarball，以 `manifest.json` 识别当次产物。根包的 `prepare` 服务于源码安装；预构建交付使用根打包命令产生的清洁 tarball。DSH 安装包内保留 `dsh-plugin/` 路径，根 exports 和 bundle 声明定位到该目录的构建产物。
 
 ## Harness 安装入口
 
@@ -46,11 +46,11 @@ dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
 
 `pnpm test:git-install` 会把 Git 跟踪文件和未忽略的新文件复制成临时纯源码仓库，确认不包含 `dist`，再通过真实 Git 依赖安装并验证。可传入本机 DSH CLI 的 `lib/bin.js` 绝对路径，额外在临时 `DSH_HOME` 中执行真正的 `dsh plugin add` 和 `--dump-config`；不会修改原仓库历史或用户 profile。它与 `test:packages` 分别覆盖源码安装和预构建包安装。
 
-`dsh.bundle.patch` 与包内 `cordis.patch.yml` 保留，适配社区目录的插件入口要求。[社区收录](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md)及实际下载地址待发布完成后补充。
+`dsh.bundle.patch` 与包内 `cordis.patch.yml` 保留，适配[社区目录](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/main/contributing.md)的插件入口要求；收录与下载状态以实际公开页面为准。
 
 ## Web 部署边界
 
-本轮 Web 是 Node 单用户自托管服务，保留 `/` 的存档监听预览并新增 `/editor` 共用编辑器。每个会话独立 Controller / Worker；保存要求最新 revision，且校验加载时磁盘内容哈希，防止覆盖 MCP 或其他标签页的更新。
+Web 是Node单用户自托管服务，`/` 为存档监听预览，`/editor` 为共用编辑器。每个会话独立Controller / Worker；保存要求最新revision并校验加载时磁盘内容哈希，防止覆盖MCP或其他标签页的更新。
 
 默认监听回环地址；绑定非回环地址必须提供口令，所有业务页面/API 都需要认证。请求 JSON 和同源校验用于限制浏览器跨站写入。工作区路径检查复用核心逻辑，不允许相对路径越界或符号链接逃逸。它们不是多租户授权或不可信代码执行隔离；不要将同一实例交给互不信任的用户。
 
@@ -60,7 +60,7 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 根包的 `repository` 已指向 `1475505/miliastra-beyond-simulator`。采用 [GPL-3.0-only](LICENSE)，三个分发包均附带完整许可证，并已通过 `dudukl` 发布到 npm。自动发布使用 [GitHub Actions](.github/workflows/publish-npm.yml)，从 Git tag 构建并验收三个 tarball，再通过 npm Trusted Publishing 暂存版本有变化的包，等待维护者审核后上线；不创建专用产物分支。
 
-源码版本以各产品 `package.json` 为准，本轮本地安装包以 `release/manifest.json` 为准；npm 公开版本以 registry 为准，暂存工作流成功不表示已经公开上线。原 MCP 包名 `qxqy-simulator-mcp` 已由 `beyond-simulator-mcp` 替代。旧版 DSH 缺少新版 Agent 预设模块时跳过注册项，保留目录复制入口。
+源码版本以各产品 `package.json` 为准，本地安装包以 `release/manifest.json` 为准；npm公开版本以registry为准，暂存工作流成功不表示已经公开上线。MCP现行包名为 `beyond-simulator-mcp`，不再使用 `qxqy-simulator-mcp`。旧版DSH缺少新版Agent预设模块时跳过注册项，保留目录复制入口。
 
 ## 自动发布到 npm
 

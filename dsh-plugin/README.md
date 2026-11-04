@@ -32,7 +32,7 @@ Host Tools为`qxqy_script_sync`、`qxqy_studio_get/patch/export/play/load`、`qx
 
 2.1.2起把完整protobufjs编入Host/Worker，GIA解析不再依赖宿主共享CommonJS导出。遇到旧包`hu.parse is not a function`，更新后保存工作、从托盘完整退出Harness再启动；仅禁用/启用不能清除失败的ESM导入缓存。
 
-2026-10-18 Desktop0.2.1-rc.2旧进程有此报告，新进程可加载旧包，具体触发链未确认。`test/protobuf-bundle.test.mjs`在子进程令外部parse缺失，旧包同型失败、新包GIA往返通过；此为依赖隔离证据，不等于复现原进程。Windows / Node22及Desktop自带Node24.21.0、临时完整SDK宿主验证为`observed / simulator / not_required`；用户原窗口回验未取得。
+原报告环境为Desktop0.2.1-rc.2，完整触发链与用户原窗口回验未确认。`test/protobuf-bundle.test.mjs`用独立进程验证缺失外部parse时仍可加载并往返GIA；这是依赖隔离证据，不等于原进程复现。Windows / Node22及Desktop自带Node24.21.0的隔离SDK宿主为`observed / simulator / not_required`。
 
 ## Desktop 内嵌试玩（2.0.8）
 
@@ -69,4 +69,4 @@ DSH Desktop0.2拒绝页面子窗口；插件从2.0.8起在保存成功后回退�
 
 构建/安装检查统一见[分发验收](../DISTRIBUTION.md#验收入口与证据范围)。`test:packages`覆盖dsh-tools0.1.0-rc.6、0.2.0-rc.2、0.2.1-rc.2；`test:harness`默认0.2.1-rc.2，可传已有CLI路径测旧版本。浏览器语言验收另设`QXQY_BROWSER`。
 
-2026-10-18 Windows / Node22.23.2的三组安装与两个完整Web宿主通过，标为`observed / simulator / not_required`；未调用真实模型/Agent Team，未证明完整签名Desktop、Linux/macOS、SSH或子路径public-url部署。Windows隔离Git安装曾因已加载Canvas DLL无法unlink报EPERM，测试子进程采用`npm_config_package_import_method=copy`；这与构建审批拒绝不同。
+安装与完整Web宿主证据范围为Windows / Node22.23.2，`observed / simulator / not_required`；不涵盖真实模型/Agent Team、完整签名Desktop、Linux/macOS、SSH或子路径public-url部署。Windows隔离Git安装以`npm_config_package_import_method=copy`避免已加载Canvas DLL的unlink/EPERM冲突；该文件占用错误与构建审批拒绝不同。

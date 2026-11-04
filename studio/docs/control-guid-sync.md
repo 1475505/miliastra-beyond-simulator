@@ -28,9 +28,7 @@ WOO 的 `TemplateGuids` 配置表可使用全量替换。希望保留非索引�
 - `gia/guid.js` 集中定义新索引合法性与旧存储ID合法性。编辑器和服务端写入口共用新区间；分配器保留原有高水位递增策略，到上界明确失败，不偷偷回收空洞。
 - 正整数旧控件/脚本ID及历史映射的两端仍可读取、JSON保存和检查。读取快照不因新增区间限制自动改掉旧ID；GIA导出遇到范围外已有ID明确失败，保留原值。没有索引的节点继续分配新区间编号。
 - 控件用已有 `setControlGuid` 显式校准：一次性更新已知模板引用，记录 `controlGuidChanges`，Lua保留原文等待语义同步。脚本旧ID和GenericSlot挂载也原样保留；旧脚本索引修复需结合真实脚本映射及代码引用处理，当前没有脚本索引校准UI，不能把自动分配新号当成完整迁移。
-- 最小回归：#23初版对旧模板1001执行 `get` 后改为1073742105，引用仍是1001、无变更记录且revision未变；旧记录 `newGuid=19001` 无法读取；仅槽位挂载的脚本1500000000被分配新号后脱挂。审查后采用“读旧值、严校验新值、显式校准、导出只验证”的边界，避免这些静默变化。
-- 长期测试合并至 `control-guid.test.mjs` / `control-guid-autofill.test.mjs`，删除重复的 `control-guid-range.test.mjs`。覆盖上下边界、分配耗尽、旧ID/记录/挂载保留、导出拒绝原子性、显式修复及Lua映射；恢复MR改夹具时丢失的重叠置换和外部脚本碰撞条件。脚本GIA范围校验沿用 `gia-reference.test.mjs` 的独立wire夹具，Web端到端夹具使用合法新索引。
-- Windows / Node22.23.2 / Edge验收：索引1001被前端拒绝且revision不变，1073745100成功并生成映射；`observed / simulator`，不新增真机验证。
+- 回归：`control-guid.test.mjs` / `control-guid-autofill.test.mjs` 覆盖上下界、分配耗尽、旧ID/记录/挂载保留、导出拒绝原子性、显式校准、重叠置换及外部脚本碰撞；`gia-reference.test.mjs` 用独立wire验证脚本GIA范围。读取旧值不得改变引用、挂载或revision。
 
 ## 宿主与文件事务
 
@@ -47,8 +45,8 @@ WOO 的 `TemplateGuids` 配置表可使用全量替换。希望保留非索引�
 
 ## 验证
 
-`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`。Windows/Node 22 下：
+证据范围为 Windows / Node22 / Edge，`observed / simulator / not_required`：
 
 - `studio/test/control-guid-sync.test.mjs`：重叠映射与真实 Lua 实例化、连续校准、备份/保存/重载、预览不写、磁盘分歧与过期计划、旧记录/文件型源码，以及配置表/字符串/注释/非索引数字的全量替换。
-- 一次性隔离 Edge 验收实际点击两条路径，验证两个主按钮、风险说明、一键全量替换、125 项映射读取方法、剪贴板失败回退、AI 结果重新载入，以及保存与实机入口。2026-10-12 发版清理前连同索引批量校准、旋转显示再次验收，4/4 通过；对应的三个浏览器功能脚本已清理，核心回归保留。
+- 浏览器观察覆盖全量替换与AI两条路径、风险说明、完整映射读取、剪贴板回退和存档重载；不表示当前存在对应的长期浏览器用例。
 - 现有索引/GIA、脚本复制测试继续执行。这些测试不代表游戏内新 Lua 已通过。

@@ -2,13 +2,8 @@
 
 独立的 MCP stdio server，让 Codex 或其他 MCP client 直接驱动千星沙箱模拟器。它不依赖 DSH；编辑和试玩仍复用 `../studio`、`../client/lua-runtime` 与 `../server`。
 
-## 0.5.2 更新
-
-- 支持列举、预览并导出选定客户端控件的 GIA，导出前检查依赖。
-- 试玩快照提供动效状态，配套 Web 可播放界面／全屏动效；PNG 截图省略视频帧并返回 `assetWarnings`。
-- AI 启动试玩默认静音，改善输入顺序并兼容 Lua 控件 `id` 别名。
-
-完整公告见 [DSH 2.2.2 / Web 0.5.2 / MCP 0.5.2](../dsh-plugin/CHANGELOG.md#222--2026-10-30)。更新或修改字体后重启 MCP 服务；配套 Web 请同步升级至 0.5.2。
+<a id="052-更新"></a>
+发布变化统一见 [版本公告](../dsh-plugin/CHANGELOG.md)，本页只维护当前接入与工具契约。更新或修改字体后重启 MCP 服务；配套 Web 使用兼容版本。
 
 ## 安装与自检
 
@@ -84,7 +79,8 @@ qxqy_preview_open({ path: "workspace/flappy-fish/flappy-fish.save.json" })
 
 截图工具以标准 MCP image content 返回 PNG；`qxqy_studio_play_screenshot` 需要先启动试玩，截图本身不调用 step。MCP 默认使用手动时钟：等待下一次工具调用、读取状态和截图都不推进游戏时间。
 
-### 试玩时钟（0.3.5）
+<a id="试玩时钟035"></a>
+### 试玩时钟
 
 ```text
 qxqy_studio_play({ handle: "project-1", action: "start" })
@@ -104,7 +100,21 @@ qxqy_studio_play({ handle: "project-1", action: "start", args: { clockMode: "rea
 - `device` 重建运行时并保留本局模式，也可显式指定模式；新的 `start` 未指定时恢复 MCP 默认 manual。
 - 运行快照和截图回执含 `clockMode`。Web/DSH 的交互试玩默认仍为 realtime。
 
-这是用户确认的模拟器工具设计，自 MCP 0.3.5 起用于解决 [#5](https://github.com/1475505/miliastra-beyond-simulator/issues/5) 调用间计时问题。来源与尚未复现的相关问题见 [MCP 问题核验摘要](../studio/docs/issue-review-20261006.md)。脚本重载时，非空内联 `scripts[].source` 优先于磁盘 `path`，文件保存后使用 `stop → load → start` 重新加载对应工程。
+这是用户确认的模拟器工具策略，不是游戏时钟契约，关联 [#5](https://github.com/1475505/miliastra-beyond-simulator/issues/5)。异步截图准备不推进 manual 时钟，非法模式在替换 Worker 前拒绝。回归入口为 `mcp/test/protocol.test.mjs`、`studio/test/host-clock.test.mjs`，覆盖真实 stdio → Controller → Worker → Lua；Windows / Node22.23.2，`observed / simulator / not_required`。
+
+### 脚本重载与问题边界
+
+非空内联 `scripts[].source` 优先于磁盘 `path`。保存文件后，使用 `stop → load → start` 重新加载对应工程；只改磁盘或另一个进程的工程不会更新当前 handle。该路径可加载新源码，但报告者原始旧脚本问题未复现、原因未知，不将源码优先级直接认定为其根因。
+
+| 问题 | 已核验与未解决范围 |
+|---|---|
+| [#4 光标事件](https://github.com/1475505/miliastra-beyond-simulator/issues/4) | 合成动态光标区可收到 pointer down/up 与按名 click；raycast/showCursor 关闭会阻止。按名 click 必须传名称，不能用它替代坐标命中；原工程仍缺存档和调用参数，不能凭合成通过关闭问题。 |
+| [#6 运行树与导入](https://github.com/1475505/miliastra-beyond-simulator/issues/6) | `get {inspect:true}` 可取得运行树；本工具打开完整 JSON，Studio/Web/DSH 支持 GIA 子集，不支持 GIL 整关卡导入。 |
+| [#7 GetChildren](https://github.com/1475505/miliastra-beyond-simulator/issues/7) | 元素是可操作的 Control 引用。历史本地 API rev223 未约定数组顺序；最上层在前是[模拟器策略](../client/lua-runtime/docs/observed-contract.md#默认动态实例层序2026-09-28)，不等于真机数组顺序已通过。逆序逐个调用 Last 后最终顺序可不变，不能据此认定 setter 无效。 |
+
+`client/lua-runtime/test/children-reference.test.mjs` 按名称识别引用，验证显隐和显式排序，不固定数组顺序。上述合成核验不替代未提供原工程的复现。
+
+### 截图、声音与 Web 预览
 
 白名单图片截图会先准备远程静态素材，首次可能需要下载，后续复用与 Web/DSH 相同的磁盘缓存。失败项返回 `assetWarnings` 并显示占位，不影响 Lua 状态。缓存目录可用 `QXQY_IMAGE_CACHE_DIR` 指定，详见 [素材缓存](../studio/docs/image-assets.md)。
 

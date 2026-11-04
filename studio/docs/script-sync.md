@@ -72,14 +72,15 @@ MCP 的每次调用使用同一个 `handle`；Harness 使用同一会话。计�
 - AI 工具：`qxqy_script_sync`，开放 discover/status/configure/save/preview/apply，使用同一复制核心与校验。
 - MCP 与 Web 为独立进程。AI 可在 MCP 中完成同步；若改用 Web 编辑器确认，先加载 AI 保存的同一存档并重新预览，MCP 返回的 planId 不跨进程使用。只读 `/` 预览页不执行复制。
 
-## AI 接口验证（2026-10-19）
+<a id="ai-接口验证2026-10-19"></a>
+<a id="验证记录2026-09-26"></a>
+## 验证入口与边界
 
-- `evidence_source: observed`，运行端 `simulator`，`device_status: not_required`，Windows / Node22.23.2：回归覆盖保存时revision/磁盘变更、显式文件选择、布尔确认、备份与结果查询，以及过期计划、路径约束和索引引用检查。
-- MCP 经真实 stdio 子进程完成配置、保存、预览、部分复制与新增文件复制，核对备份原始字节、未选文件保留、过期和跨 handle 计划拒绝。Harness 经实际 `defineTool` 注册 / execute 与合成宿主上下文完成同一流程，覆盖 JSON 字符串参数和跨会话拒绝；不是 Desktop 窗口端到端验收。全部复制使用临时目录，未操作真实游戏脚本，真机保存与试玩仍待用户验证。
+Windows / Node22.23.2 / Edge 的模拟器证据为 `observed / simulator / not_required`，复制只使用临时目录，不操作真实游戏脚本或游戏UI。
 
-## 验证记录（2026-09-26）
+- `studio/test/script-sync.test.mjs`：源码优先级、配置/目录发现、显式选择与确认、备份、过期计划、路径及索引引用约束。
+- `web/test/script-sync-e2e.test.mjs`：合成GIA经HTTP导入、索引校准、保存/重载和实际复制字节的Lua执行，检查嵌套路径、备份与无关文件保留。
+- `web/test/script-sync-browser.test.mjs`：实际编辑器保存、预览、取消不复制、确认才复制；构建Web并配置 `QXQY_BROWSER` 后启用。
+- `mcp/test/protocol.test.mjs`、`dsh-plugin/test/plugin.test.mjs`：真实stdio或注册工具的保存/预览/复制、结果查询及跨handle/会话拒绝；不等于Desktop窗口端到端验收。
 
-- `evidence_source: observed`，运行端 `simulator`，`device_status: pending`，Windows + Node 22+：`web/test/script-sync-e2e.test.mjs` 以仓库合成 GIA 经实际 HTTP API 导入，校准模板索引、修改 Lua 语义引用、确认记录、保存/重载配置、预览/确认复制；校验嵌套路径、原文件备份、无关文件保留，并在模拟器中执行实际复制的字节验证新模板索引。此测试以临时目录模拟千星沙箱已导入的文件，不操作游戏 UI。
-- `evidence_source: observed`，运行端 `simulator`，`device_status: not_required`：`studio/test/script-sync.test.mjs` 覆盖源码优先级、过期计划、文件缺失、路径约束、目录发现、配置导入原子性和显式确认。
-- `evidence_source: observed`，运行端 `simulator`，`device_status: not_required`：`web/test/script-sync-browser.test.mjs` 使用临时 Edge headless profile 点击实际编辑器按钮，验证保存配置、预览、取消不复制，确认才复制。运行前构建 Web，设置 `QXQY_BROWSER` 为 Chrome/Edge 可执行文件路径；未配置时跳过该可选测试。
-- 真机待验：将 GIA 导入实际千星沙箱，按实际索引校准后同步已有脚本，在千星沙箱保存并试玩，确认无需重新导入 GIA 即使用新源码。保存脚本后还需在千星沙箱保存并试玩，依据本地官方指南“脚本上传规则”；本轮自动化结果不等于这一步通过。
+真机加载新源码仍为 `device_status=pending`：复制后须在千星沙箱保存并试玩，依据本地官方指南“脚本上传规则”。模拟器执行复制出的字节不能证明游戏已重新加载。

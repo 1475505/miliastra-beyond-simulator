@@ -39,7 +39,7 @@ Authoring JSON、GIA、四平台布局、试玩编排、日志、回放与断言
 
 同步关闭只写当前平台；开启时按各平台自身父矩形投影到其余平台。切换宽高比不写参数。GIA 向量已存在时，省略的标量表示 0；只有整向量缺失才采用默认值。
 
-来源：2026-09-24 Windows / Node 22.23.2 的日记存档复现中，37 个节点的平台槽为空，旧双表造成 STAGE 从1280×720导出为150×150。当前入口迁移取代该局部补槽方案（`superseded_by=四平台唯一来源及入口迁移`）。`test/platform-layout.test.mjs` 覆盖迁移、幂等、四平台/五视口、零分量与失败原子性；`observed / simulator`，新版包真机像素一致性 `pending`。
+入口迁移已取代旧双表的局部补槽方案（`superseded_by=四平台唯一来源及入口迁移`）。`test/platform-layout.test.mjs` 覆盖迁移、幂等、四平台/五视口、零分量与失败原子性；Windows / Node22.23.2，`observed / simulator`，真机像素一致性 `pending`。
 
 <a id="2026-09-25-日记-gia-的旋转与初始状态丢失"></a>
 ## 2026-09-25 GIA 图元与初始状态
@@ -50,13 +50,13 @@ Authoring JSON、GIA、四平台布局、试玩编排、日志、回放与断言
 
 ## 试玩场景与文字对齐
 
-Runtime 保留 Lua `EnumItem` 身份，`play/session.js` 在 scene/paint 边界投影为枚举 `Name`，并纳入增量指纹。PNG/Pixi 消费同一表示。2026-09-08 的居中失效源于把枚举对象直接交给比较字符串的渲染器；`test/text-alignment.test.mjs` 用实际 Lua 赋值、固定几何、PNG 字形位置和 Pixi anchor 验证。`observed / simulator / not_required`，不证明游戏精确字形。
+Runtime 保留 Lua `EnumItem` 身份，`play/session.js` 在 scene/paint 边界投影为枚举 `Name`，并纳入增量指纹；PNG/Pixi 消费同一表示。`test/text-alignment.test.mjs` 用实际 Lua 赋值、固定几何、PNG 字形位置和 Pixi anchor 验证；`observed / simulator / not_required`，不证明游戏精确字形。
 
 ## 图片填充渲染边界
 
 `play/image-fill.js` 统一水平/垂直矩形裁切；scene/paint 投影方向与进度，更新参与渲染缓存。0不画、1完整、Unused取消；只裁图片自身，子控件独立。径向填充未实现；超范围有限进度截到可见范围是模拟器策略。素材限制见 [图片说明](docs/image-assets.md)。
 
-2026-09-08 复现中，Lua `SetFillVertical(Top, 0.25)` 读回正确而 PNG 与 Unused 相同，原因是场景和渲染器漏字段。`test/image-fill.test.mjs` 用固定象限像素、Pixi mask bounds、父旋转与子控件验证；`observed / simulator / not_required`，真机素材条件另行判断。
+`test/image-fill.test.mjs` 用固定象限像素、Pixi mask bounds、父旋转与子控件验证；`observed / simulator / not_required`，真机素材条件另行判断。
 
 ## 浏览器图形缓存
 
@@ -64,15 +64,13 @@ Runtime 保留 Lua `EnumItem` 身份，`play/session.js` 在 scene/paint 边界�
 
 普通 HUD 原位更新 Text；只有尺寸、底色、裁切等几何变化才重建视觉对象。销毁释放自有 TextStyle，沿 Pixi 引用计数回收纹理，仅清除已失效文字键；不能递归销毁共享图片或池化纹理。
 
-[#16](https://github.com/1475505/miliastra-beyond-simulator/issues/16) 的 Windows / Pixi8.20 / Edge合成复现中，三轮各400次改字造成失效键400/800/1200、每轮399次重建；修复后重建0、键数1、清场归零。`test/pixi-cache.test.mjs` 与 `web/test/text-churn-browser.test.mjs` 验证资源复用、隐藏恢复和跨局释放。`observed / simulator / not_required`；macOS原工程、能耗与报告者纹理未释放路径未复现。
+[#16](https://github.com/1475505/miliastra-beyond-simulator/issues/16) 的回归入口为 `test/pixi-cache.test.mjs` 与 `web/test/text-churn-browser.test.mjs`，验证文字更新资源复用、隐藏恢复与跨局释放。Windows / Pixi8.20 / Edge，`observed / simulator / not_required`；macOS原工程、能耗与报告者纹理未释放路径未复现。
 
 清理依赖锁定的 Pixi8.20 内部表，升级时运行上述浏览器回归。加载修复须重启宿主并刷新页面，重开Lua游戏不会替换渲染代码。
 
 ### 2026-09-09 复发后的圆形绘制修复
 
-Windows Web 棋子出现黑三角而同会话 PNG 正常；完整 scene 重建可恢复。最初修复 visual key 被清空的错误后仍复发，不能把它称为唯一原因（`superseded_by=共享圆形纹理与自有几何释放`）。
-
-无填充圆形改用分辨率分档共享纹理/Sprite；删除单个实例不销毁共享纹理，Graphics形状与遮罩释放自有 context。`test/pixi-circle.test.mjs`、`test/pixi-cache.test.mjs` 保留资源与几何回归。2026-09-09 Edge 400帧及五种增量间隔的症状区域像素检查通过，证据在完整工作区 `workspace/topo5/records/web-stone-spike-20260909/`。`observed / simulator / not_required`；原Graphics的底层GPU触发条件未唯一定位。
+无填充圆形使用分辨率分档共享纹理/Sprite；删除实例不销毁共享纹理，Graphics形状与遮罩释放自有 context（`superseded_by=共享圆形纹理与自有几何释放`）。`test/pixi-circle.test.mjs`、`test/pixi-cache.test.mjs` 验证资源与几何；Windows / Edge观察证据见完整工作区 `workspace/topo5/records/web-stone-spike-20260909/`。`observed / simulator / not_required`；历史黑三角的底层GPU触发条件未唯一定位，不能仅归因于visual key。
 
 ### 2026-09-24 非正方形图元尺寸一致性
 

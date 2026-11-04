@@ -44,4 +44,4 @@ MCP / DSH 工具统一为 `qxqy_studio_export`，动作 `list` / `preview` / `ex
 
 源码更新后重建 Web/MCP/DSH 并重启宿主；仅刷新新前端而沿用旧后端会报 Unknown editor action。
 
-2026-10-25 本轮验证：Windows x64 / Node.js 22.23.2 / pnpm 10.15.0，冻结锁文件安装通过；根 `pnpm test` 为 415 pass / 16 环境相关 skip / 0 fail。另启用真实 Edge 执行本页 Web 测试 2/2，通过属性栏根/子控件导出、部分组合勾选、红色图元预览、下载内容检查、Escape 取消及中英文切换；小窗口截图核对预览完整缩放。`pnpm pack:release` 与 `pnpm test:packages` 通过，仓库外三组 dsh-tools（0.1.0-rc.6 / 0.2.0-rc.2 / 0.2.1-rc.2）均实际调用 DSH 导出工具、Web 部分导出及 MCP 导出写盘。只生成并验收本地安装包，未发布；本轮未做千星真机导入。
+模拟器证据范围为 Windows x64 / Node22.23.2 / Edge；实际编辑器覆盖下载、勾选、预览缩放、中英文与Escape，仓库外安装覆盖DSH/Web/MCP写盘。安装矩阵见 [分发验收](../../DISTRIBUTION.md#验收入口与证据范围)，这些结论不是当前包重新验收或真机导入证明。

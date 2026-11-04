@@ -49,7 +49,7 @@ LuaRuntime          时钟、日志、模板、脚本映射、信号/变量
 - 旋转后命中：不做精确旋转盒。
 - `return false` 的按键穿透：当前仅 `true` 中断链。
 - `game` 全局函数的参数个数：Lua 桥接按当前 API 签名逐项核对，冒号调用产生的隐式 `game` 实参会报错。真机已确认 `GetClientUIRoots()` 的零参数约束；其他函数的统一检查是模拟器防错策略。
-- 按键跨控件派发：创作者预告后续版本同层级上层控件先接收事件。模拟器按当前 `children[]` 的前到后层序派发；同一根容器内回调返回 `true` 后停止后续派发。前半是待版更规则，后半是依据现有 API 文案的模拟器策略；新版真机尚未验证。父子层级和不同容器的官方顺序仍未确定。
+- 按键跨控件派发：按 `children[]` 前到后的显示层序派发，同根回调返回 `true` 后停止。2026-10-24官方公开指南声明按渲染顺序优先（完整工作区 `knowledge/fact.md`）；客户端生效版本、新版真机及父子/跨容器消费边界仍未确认，同根消费按模拟器策略处理。
 - 网格视窗方法：基础模板项刷新/复用、排列、进度、定位和查询已实现；采用 0 起始索引、最多 2000 个完整实例等明确策略，见 [控件支持与滚动](../../../studio/docs/control-support.md)。
 - `GetText`：原样返回 id。
 - 音频：`PlayAudio2D` 创建实例，`StopAudio` 停指定实例，`IsAudioAlive` 查询存活；Studio 注入目录时长，Runtime 按自身时间自然结束并输出非消费式快照，不依赖浏览器/网络。无效 ID、上限、时停等模拟策略见 [音效与缓存](../../../studio/docs/audio-assets.md)。
@@ -61,12 +61,13 @@ LuaRuntime          时钟、日志、模板、脚本映射、信号/变量
 
 每个挂载脚本拥有一台 Lua VM；其 require 模块在同一 VM 中用独立 `_ENV` 执行。模块环境从挂载代码执行前的沙箱/宿主全局表复制，`_G` 指向模块自身，`script` 是该模块的独立身份；不会执行模块 OnInit/OnStart。模块导出值直接放入所属 VM 的 registry，路径别名共用缓存；不得经 `toJs` / `pushValue` 往返，否则循环表、metatable、函数 upvalue 与线程会损坏。嵌套 require 和测试启用的 coroutine 使用主线程 registry 中的同一缓存。卸载挂载脚本时一起释放缓存和环境。
 
-### 2026-09-08 require 原生值回归
+<a id="2026-09-08-require-原生值回归"></a>
+### require 原生值与验证边界
 
-- 症状与追因：含 `Counter.__index = Counter` / `Counter.self = Counter` 的类模块曾触发 stack overflow；即使无循环，跨 VM 的 `toJs` / `pushValue` 重建也不能保留 Lua metatable、闭包 upvalue 和嵌套模块表身份。修复位置为 [`src/runtime.js`](../src/runtime.js) 的模块加载、按主线程归属的 registry 缓存及卸载清理。
+- [`src/runtime.js`](../src/runtime.js) 的模块加载、主线程 registry 缓存及卸载清理必须保留自引用表、metatable、闭包 upvalue 与嵌套模块身份；不得经 JS 值重建。
 - 最小输入与独立预期：模块返回自引用的 `Counter`，`new(4)` 创建 metatable 为 `Counter` 的实例，`one:add(3)` 返回 `7, one`，闭包计数连续返回 `1, 2`。恒等式由夹具直接写定，另一个模块和路径别名 require 的结果必须与同一 VM 中已加载模块相等；不以生产游戏输出作为预期值。
-- 回归证据：[`test/require-native.test.mjs`](../test/require-native.test.mjs) 共 4 项，覆盖上述原生值、独立 `_ENV` / `script`、不同挂载 VM 的缓存隔离、失败后重试、循环加载报错和销毁清理。2026-09-08 在 Windows x64 / Node.js 22.23.2 / Fengari 0.1.5 本地运行 `node --test client/lua-runtime/test/require-native.test.mjs`（模拟器仓库根）4/4 通过；`evidence_source=observed`，运行端 `simulator`，`device_status=not_required`（本条只关闭模拟器实现缺陷）。
-- 未覆盖范围：循环 require 报 `cyclic require` 是模拟器策略；标准库/宿主库表在同一 VM 中共用是实现边界。第 4 项单独恢复测试 VM 的 coroutine 库，只验证续体与 registry 身份；生产沙箱仍裁剪 coroutine。本次没有新增真机观察，也不将测试中的扩展库认定为千星可用能力。
+- 回归：[`test/require-native.test.mjs`](../test/require-native.test.mjs) 覆盖原生值、独立 `_ENV` / `script`、挂载 VM 缓存隔离、失败后重试、循环加载与销毁。证据范围为 Windows x64 / Node.js 22.23.2 / Fengari 0.1.5，`observed / simulator / not_required`。
+- 边界：循环 require 报 `cyclic require` 是模拟器策略；标准库/宿主库表在同一 VM 中共用。续体测试临时恢复 coroutine，仅验证 registry 身份；生产沙箱仍裁剪该库，不构成千星可用能力或新增真机观察。
 
 ## 文件
 

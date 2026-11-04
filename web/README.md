@@ -2,15 +2,8 @@
 
 单用户自托管 Web 编辑器和磁盘存档预览，无需 Harness。复用共享 Studio、Lua Runtime、固定步长试玩 Worker、Pixi 渲染器及 `editor-ui` 编辑界面。
 
-## 0.5.2 更新
-
-- 支持界面／全屏动效素材搜索、编辑画布预览及 Lua 试玩播放，资源加载失败仅影响对应动效。
-- 支持单个客户端控件和勾选组合的 GIA 导出，导出前可预览并检查依赖。
-- 改进快速点击、拖拽和输入事件顺序；AI 启动试玩默认静音，可手动开启声音。
-
-完整公告见 [DSH 2.2.2 / Web 0.5.2 / MCP 0.5.2](../dsh-plugin/CHANGELOG.md#222--2026-10-30)。
-
-更新或修改字体后，重启 Web 服务并刷新页面。
+<a id="052-更新"></a>
+发布变化统一见 [版本公告](../dsh-plugin/CHANGELOG.md)，本页只维护当前使用与部署。更新或修改字体后，重启 Web 服务并刷新页面。
 
 ## 安装与启动
 
@@ -44,7 +37,7 @@ beyond-simulator-web --workspace /absolute/path/to/workspace --open
 
 ## 编辑与保存
 
-Web 0.3.5 起，浏览器拒绝试玩新标签页时自动回退到全屏内嵌试玩。正常新标签页行为保持不变；仅 `/editor/play` 允许同源嵌入，其他页面仍禁止被 frame 嵌入。关闭与焦点处理见 [共用编辑器](../editor-ui/README.md#试玩窗口与内嵌兜底)。
+浏览器拒绝试玩新标签页时自动回退到全屏内嵌试玩。仅 `/editor/play` 允许同源嵌入，其他页面禁止被 frame 嵌入。关闭与焦点处理见 [共用编辑器](../editor-ui/README.md#试玩窗口与内嵌兜底)。
 
 `/editor` 与 Harness 共用编辑界面，包括控件树、属性、五档设备画布、Lua 脚本、服务端变量/信号、导入导出和试玩。点击“保存存档”，输入工作区内相对路径，将三类资产写为完整存档 JSON。试玩或普通编辑不会自动写盘。
 
@@ -66,11 +59,14 @@ MCP 0.3.0 起提供 `qxqy_preview_status()` 和 `qxqy_preview_open({ path: "game
 
 大工作区可用 `QXQY_SCAN_DIR_LIMIT`、`QXQY_SCAN_ENTRY_LIMIT`、`QXQY_SCAN_DEPTH_LIMIT` 调整自动发现预算；只接受正安全整数，其他值使用上述默认值。每次扫描开始时读取一次，诊断回执返回实际限制。环境变量不会放宽显式文件路径的工作区边界。
 
-### 2026-09-26 预览同步修复记录
+<a id="2026-09-26-预览同步修复记录"></a>
+### 预览验证与错误恢复
 
-Web/MCP 0.3.0、共享宿主所在 DSH 2.0.3：修复空工作区启动后跳过新文件发现、默认保存路径与打开路径脱节、大文件不出现在列表及前 50 项截断遗漏最新文件。补充显式预览桥接、加载错误与版本信息。证据为仓库内 `web/test/preview-state.test.mjs`、`studio/test/workspace.test.mjs`、`studio/test/controller-archive.test.mjs` 与实际启动两个进程的 `mcp/test/web-integration.test.mjs`；`evidence_source: observed`，运行端 `simulator`，`device_status: not_required`。包公开状态以 npm 审核结果为准。
+回归入口为 `web/test/preview-state.test.mjs`、`studio/test/workspace.test.mjs`、`studio/test/controller-archive.test.mjs` 与实际启动两个进程的 `mcp/test/web-integration.test.mjs`，覆盖新文件发现、保存路径、大文件、列表预算与显式预览桥接。证据为 `observed / simulator / not_required`。
 
-同日浏览器实测：启动试玩后将临时存档替换为损坏 JSON，页面显示加载错误并停止旧试玩；恢复原文件（保留原大小与时间戳）后错误清除并自动回到编辑预览。轮询不得因旧试玩状态屏蔽错误事件；存在加载错误时，即使文件时间戳与上次成功加载相同也需要重试。
+错误恢复约束：存档损坏时显示加载错误并停止旧试玩，恢复文件后回到编辑预览；旧试玩状态不得屏蔽错误事件，加载失败后即使时间戳未变也要重试。
+
+## 试玩与素材
 
 试玩使用固定 30 FPS Worker、增量场景和 Pixi/WebGL；刷新试玩页会接回已有 Worker，保留暂停和当前玩家。截图仍由 Host 根据统一场景输出 PNG。
 

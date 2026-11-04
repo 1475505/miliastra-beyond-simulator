@@ -4,7 +4,7 @@ Parent: [Studio](../README.md#专题树).
 
 Authoring lists real siblings foreground-first. Native GIA lists them background-first. Keep the independent template list in its original order; it is not a single paint stack.
 
-The device comparison used one nested WOO template (11 containers, 236 images). Changing only its GUIDs restored the selected inspector, but the UI tree showed the last wire child first and dark base shapes covered the face. Reversing each parent's `children` and `relatedIds`, with matching accessory DFS order, was subsequently accepted by the user. The accepted patch SHA256 is `a3f11438b75f2018d62209cbf7fae90f952c9eaa79f629cb861040bfe9813173`. Latest acceptance is a user report, not a new screenshot or native reexport. This does not validate arbitrary GUID ranges, every widget type or full-game runtime.
+Device evidence comes from one nested WOO template (11 containers, 236 images): the user accepted background-first wire siblings with matching accessory DFS. Patch SHA256: `a3f11438b75f2018d62209cbf7fae90f952c9eaa79f629cb861040bfe9813173`; full-workspace evidence: `probes/client-template-order-guid-20261012/`. Acceptance is a user report, not a new screenshot or native reexport, and does not validate arbitrary GUID ranges, every widget type or full-game runtime.
 
 ## Codec behavior
 
@@ -13,20 +13,19 @@ The device comparison used one nested WOO template (11 containers, 236 images). 
 - Existing Authoring JSON already stores editor order and is not migrated. Importing an old incorrectly exported GIA now reflects its actual native direction; no filename-based heuristic silently flips an unknown source.
 - Runtime dynamic insertion, Lua sibling indices and the server-container codec are unchanged.
 
-## Relationship to `7d20283106ecb6b624af78c325d34bfe8440610f`
+<a id="relationship-to-7d20283106ecb6b624af78c325d34bfe8440610f"></a>
+## Asset registration is independent
 
-That commit replaces reused control-kind constants with persistent `Info.index` asset registration, and validates duplicate independent template indices. It also changes the default export game version. It does not change client sibling direction or the GUID allocator. Its parent already contains the forward client export/import paths; the earliest available repository commit `df5e003` contains them too. The current layer defect is not introduced by `7d20283`.
-
-`test/gia-asset-indices.test.mjs` still verifies the accepted legacy mapping: extra roots 13/14/15 and the same original child GUIDs mapped to 16–29. Its new-asset test expects bottom-first wire DFS but retains the same per-node asset numbers. Fixing paint order must not reinterpret asset registration as layering.
+Persistent `Info.index` identifies assets, not paint order or control GUIDs. `test/gia-asset-indices.test.mjs` verifies that wire reordering retains per-node asset numbers and accepted legacy mappings. Do not reinterpret asset registration as layering.
 
 ## Regression evidence
 
-`test/gia-client-order.test.mjs` constructs independent synthetic wire bytes with explicit nested sibling order. It checks import against known editor order, standalone/combined export against known wire order, preservation of template-list order, accessory DFS and no authoring tree mutation. Before the fix, directional tests failed while an import/export roundtrip passed; roundtrip symmetry alone is insufficient.
+`test/gia-client-order.test.mjs` constructs independent synthetic wire bytes with explicit nested sibling order. It checks known editor/wire order, template-list order, accessory DFS and no authoring mutation. A symmetric import/export roundtrip alone cannot prove the native direction.
 
 The directional regression passed locally on Windows / Node 22. These simulator checks are distinct from the prior single-template device acceptance. Restart existing Web/MCP/DSH hosts to load new builds.
 
 ## Imported index calibration (2026-10-12 follow-up)
 
-The user subsequently accepted the full WOO package and supplied five client GUIDs. A constant delta fits three template roots but fails for two descendants. Native preorder (root, then recursively visit bottom-first wire children, then the next independent template) fits all five: corolla 1073743766; sleeping corolla 1073744047; its scarf at offset 252 = 1073744299; its last image at offset 292 = 1073744339; next sprout 1073744340. The corolla and sleeping corolla contain 281 and 293 nodes respectively. This is provided device evidence for one unchanged import batch, not an official guarantee for partial imports, deduplicated assets or subsequently edited hierarchies.
+The accepted full WOO package supplied five client GUIDs consistent with native preorder: root, recursively visit bottom-first wire children, then the next independent template. A constant offset across all nodes does not fit. This is provided device evidence for one unchanged import batch, not an official guarantee for partial imports, deduplicated assets or edited hierarchies; original identities remain in the probe record above.
 
-`gia/client-order.js` now shares that traversal between export and opt-in `setControlGuid({id, guid, autoFillClientGuids: true})`. The latter applies only to the client-template asset, validates the complete interval and outside collisions before mutation, preserves internal IDs and script mounts, and updates explicit references simultaneously. A batch ID marks simultaneous mappings in the pending Lua ledger. Server and script GUIDs are separate; image asset IDs and Info.index never follow this numbering. Tests cover nested anchors, multiple roots, overlapping permutations, references, unchanged anchors, range/collision rejection and persistence. One-time Edge acceptance covered the checkbox, interval preview, submit and saved reload; the browser script was removed after the 2026-10-12 release check passed.
+`gia/client-order.js` shares that traversal between export and opt-in `setControlGuid({id, guid, autoFillClientGuids: true})`. The latter applies only to the client-template asset, validates the complete interval and outside collisions before mutation, preserves internal IDs and script mounts, and updates explicit references simultaneously. A batch ID marks simultaneous mappings in the pending Lua ledger. Server and script GUIDs are separate; image asset IDs and Info.index never follow this numbering. Regression: `test/control-guid-autofill.test.mjs` covers nested anchors, multiple roots, overlapping permutations, references, unchanged anchors, range/collision rejection and persistence.

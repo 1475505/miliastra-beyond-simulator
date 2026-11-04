@@ -20,9 +20,9 @@ Web 预览、Web 编辑器试玩及 DSH 共用试玩页提供「键位响应：�
 | 快捷轮盘／交互／普通攻击 | Tab／F／鼠标左键 |
 | 角色技能 1–4 | E、Q、R、T |
 
-来源：[官方客户端 API](https://kcnote9o8u33.feishu.cn/wiki/QF4qw7SEUig3q6kY0M3cUYYUnsh) 的 `KeyboardKeyCode` / `KeyEventType`。本轮使用完整知识工作区 `knowledge/guide/Lua客户端UI脚本API.md` 的本地加工稿（Git blob SHA-1 `a60c6404d5cbf3b45a3b71f5e740c92c427fbd9e`），并回查原始 `feishu-import/lua-client-ui-api/latest/02-all-sheets.json`、revision 223。未在线刷新飞书原表；`evidence_source=documented`、运行端 `official_document`（本地快照）。
+来源：[官方客户端 API](https://kcnote9o8u33.feishu.cn/wiki/QF4qw7SEUig3q6kY0M3cUYYUnsh) 的 `KeyboardKeyCode` / `KeyEventType`，采用历史本地rev223表（加工稿Git blob `a60c6404d5cbf3b45a3b71f5e740c92c427fbd9e`），`documented / official_document`。完整工作区当前官方来源查 `knowledge/guide/official-sources.md`；这里的rev223不表示在线最新版本。
 
-与 [PR #12 的作者回传](https://github.com/1475505/miliastra-beyond-simulator/pull/12#issuecomment-6220495342) 存在已知差异：回传的奇匠 33–35 为右方括号、反斜杠、逗号，当前官方快照为逗号、句点、斜杠。按用户要求采用文档表；不把第三方回传升级为本轮真机验证，不混用两套映射。
+与 [PR #12 的作者回传](https://github.com/1475505/miliastra-beyond-simulator/pull/12#issuecomment-6220495342) 存在已知差异：回传的奇匠33–35为右方括号、反斜杠、逗号，本地文档表为逗号、句点、斜杠。按用户要求采用文档表，不将第三方回传升级为独立真机验证。
 
 ## 浏览器策略
 
@@ -43,14 +43,10 @@ Web 预览、Web 编辑器试玩及 DSH 共用试玩页提供「键位响应：�
 
 源码更新后重建 Web/DSH 并重启宿主，刷新已打开页面。模拟器测试不证明上述默认表与任意真机版本或用户改键一致。
 
-2026-10-18 Windows / Node22.23.2 / Edge headless + SwiftShader的键位及内嵌试玩回归通过，含1280px工具栏可见性；`observed / simulator / not_required`。
+证据范围为 Windows / Node22.23.2 / Edge headless + SwiftShader，`observed / simulator / not_required`。
 
 ## 指针请求乱序（2026-10-24）
 
-WOO「播放花神诞祭」实际浏览器点击中，DOM 先发 pointerdown、后发 pointerup，位置都在可见命中区内；Worker history 却记录同一时刻 `up → down`，未产生 settle。旧浏览器代码对指针使用并发 `void act`，仅 Key 排队；`flushMove` 只保证调用顺序，无法保证 HTTP 到达顺序。直接串行调用 pointer API 或模拟点击曾成功，因此这类测试不能排除真实浏览器输入故障。本次复现没有层级遮挡证据。
+结论：并发Pointer请求可让DOM的 down→up 在Worker中变为 up→down，按名点击或直接串行API通过不能排除此类浏览器传输缺陷。共享 `play/browser-session.js` 将Pointer/Key、节流Move、滚轮和Cancel统一排队，以generation丢弃旧会话请求；不改变Lua点击逻辑、层级或拖动阈值。
 
-修复在共享 `play/browser-session.js`：Pointer/Key 统一排队；按下前和松开前的节流 Move、滚轮和 Cancel 都保持事件顺序；替换会话时通过 generation 丢弃旧队列。Lua 点击逻辑、按钮层级和拖动阈值沿用。更新 Web/DSH 构建后需刷新试玩页，让新模块生效。
-
-独立回归依据是实际DOM/HTTP/Worker时序及按下→松开的点击语义。`test/browser-session.test.mjs`覆盖延迟Down、微移、取消和重启队列；旧版两例失败，修复后与真实Edge键位、鼠标拖动、滚轮、触摸回归均通过。
-
-原始记录：完整工作区 `probes/browser-pointer-order-20261024/input-before.json`（含用户历史、DOM isTrusted、请求时间、Worker history），`input-fixed-user.json`为同一内置浏览器刷新后的可信点击，down/up有序且一次触发播放。WOO专项验收位于 `workspace/woo/records/simulator/finale-eyes-input-20261024/verification/`：真实Edge在实际canvas上走通30关、庆生及两次重播31项检查，包含延迟Down160ms、微移、长按和拖出取消。Windows / Node.js 22.23.2，`evidence_source=observed`、运行端`simulator`、`device_status=not_required`（仅此模拟器传输缺陷）。用户更早两次点击落在其他位置，缺当时DOM坐标，不能归为同一个已证实原因，也不能据此认定用户点错；本条不增加真机事件顺序结论。
+回归入口为 `test/browser-session.test.mjs` 与上述浏览器用例，覆盖延迟Down、微移、取消、重启和真实输入链。原始时序证据见完整工作区 `probes/browser-pointer-order-20261024/{input-before,input-fixed-user}.json`，项目对照见 `workspace/woo/records/simulator/finale-eyes-input-20261024/verification/`。Windows / Node22.23.2 / Edge，`observed / simulator / not_required`；更早缺DOM坐标的点击不能归为相同原因或判为用户点错，本结论不扩大为真机事件时序。
