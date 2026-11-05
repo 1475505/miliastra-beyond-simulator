@@ -7,7 +7,7 @@ const padded = data => join(data, Buffer.alloc((4 - data.length % 4) % 4))
 const checksum = data => { const b = padded(data); let sum = 0; for (let i = 0; i < b.length; i += 4) sum = (sum + b.readUInt32BE(i)) >>> 0; return sum }
 const rectangle = width => join(u16(1, 100, 0, 100 + width, 700, 3, 0), Buffer.from([1, 1, 1, 1]), u16(100, width, 0, -width, 0, 0, 700, 0))
 
-export function geometryFont() {
+export function geometryFont({ extended = false } = {}) {
   const glyphs = [Buffer.alloc(12), padded(rectangle(600)), padded(rectangle(200))]
   const head = Buffer.alloc(54)
   head.writeUInt32BE(0x00010000, 0); head.writeUInt32BE(0x00010000, 4)
@@ -18,7 +18,7 @@ export function geometryFont() {
   const os2 = Buffer.alloc(78)
   os2.writeInt16BE(633, 2); os2.writeUInt16BE(400, 4); os2.writeUInt16BE(5, 6)
   os2.writeUInt32BE(1, 42); os2.write('TEST', 58, 'ascii'); os2.writeUInt16BE(0x40, 62)
-  os2.writeUInt16BE(65, 64); os2.writeUInt16BE(66, 66)
+  os2.writeUInt16BE(extended ? 32 : 65, 64); os2.writeUInt16BE(extended ? 0x8bd5 : 66, 66)
   os2.writeInt16BE(800, 68); os2.writeInt16BE(-200, 70); os2.writeUInt16BE(800, 74); os2.writeUInt16BE(200, 76)
   const names = [[1, 'Qxqy Geometry Test'], [2, 'Regular'], [4, 'Qxqy Geometry Test Regular'], [5, 'Version 1.0'], [6, 'QxqyGeometryTest-Regular']]
   const strings = [], records = []; let offset = 0
@@ -26,9 +26,14 @@ export function geometryFont() {
     const bytes = Buffer.from(value, 'utf16le').swap16()
     records.push(u16(3, 1, 0x0409, id, bytes.length, offset)); strings.push(bytes); offset += bytes.length
   }
+  // Pixel regressions need visible, deterministic advances, not real letter
+  // outlines. Keep the original AB fixture unchanged for font-loading tests.
+  const points = [...Array.from({ length: 95 }, (_, i) => i + 32), 0x4e2d, 0x6d4b, 0x8bd5]
+  const extendedCmap = join(u16(0, 1, 3, 10), u32(12), u16(12, 0), u32(16 + points.length * 12, 0, points.length),
+    ...points.map(code => u32(code, code, code === 32 ? 0 : code % 2 ? 1 : 2)))
   const tables = {
     'OS/2': os2,
-    cmap: join(u16(0, 1, 3, 1), u32(12), u16(4, 32, 0, 4, 4, 1, 0, 66, 0xffff, 0, 65, 0xffff, -64, 1, 0, 0)),
+    cmap: extended ? extendedCmap : join(u16(0, 1, 3, 1), u32(12), u16(4, 32, 0, 4, 4, 1, 0, 66, 0xffff, 0, 65, 0xffff, -64, 1, 0, 0)),
     glyf: join(...glyphs), head, hhea,
     hmtx: u16(500, 0, 1000, 100, 400, 100),
     loca: u16(0, glyphs[0].length / 2, (glyphs[0].length + glyphs[1].length) / 2, glyphs.reduce((n, b) => n + b.length, 0) / 2),

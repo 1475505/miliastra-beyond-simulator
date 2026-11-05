@@ -1,7 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRuntime } from '../src/index.js'
-import { lua, sl } from '../src/lua-bridge.js'
 
 const messages = (rt) => rt.logs.map((entry) => entry.text).join('\n')
 const mount = (rt, source, path = 'main') => rt.mountScript({
@@ -11,7 +10,7 @@ const mount = (rt, source, path = 'main') => rt.mountScript({
 test('require retains recursive tables, metatables, closures and multi-return Lua values in the caller VM', () => {
   const rt = createRuntime()
   rt.registerScriptFile('classes/counter', `
-local Counter = {} Counter.__index = Counter
+local Counter = {7, 9, marker='mixed'} Counter.__index = Counter
 Counter.self = Counter
 local privateCount = 0
 function Counter.new(n) return setmetatable({ value=n }, Counter) end
@@ -24,6 +23,7 @@ local Counter=require('classes/counter')
 local one=Counter.new(4)
 local value,identity=one:add(3)
 assert(Counter==Counter.__index and Counter.self==Counter)
+assert(Counter[1]==7 and Counter[2]==9 and Counter.marker=='mixed')
 assert(getmetatable(one)==Counter and identity==one and value==7 and one.value==7)
 assert(Counter.next()==1 and Counter.next()==2)
 assert(require('default_import_file/classes/counter.lua')==Counter)
@@ -93,42 +93,5 @@ function Retry() assert(require('broken').fixed); print('retry works') end
   rt.invokeOn(script.env, 'Retry', [])
   assert.match(messages(rt), /errors isolated\tmain/)
   assert.match(messages(rt), /retry works/)
-  rt.destroy()
-})
-
-test('same-VM require preserves coroutine continuation and cache identity when a test VM explicitly enables it', () => {
-  const rt = createRuntime()
-  // Production sandbox keeps the observed coroutine restriction. This isolated
-  // VM fixture exposes the existing library solely to exercise VM transfer semantics.
-  const original = rt.newLuaThread.bind(rt)
-  rt.newLuaThread = () => {
-    const L = original()
-    lua.lua_getfield(L, lua.LUA_REGISTRYINDEX, sl('_LOADED'))
-    lua.lua_getfield(L, -1, sl('coroutine'))
-    lua.lua_setglobal(L, sl('testCoroutine'))
-    lua.lua_pop(L, 1)
-    return L
-  }
-  rt.registerScriptFile('worker', `
-local M={}
-function M.run(co)
-  assert(require('worker')==M)
-  local input=co.yield(M)
-  assert(input==M and require('default_import_file/worker.lua')==M)
-  return M
-end
-return M
-`)
-  mount(rt, `
-assert(coroutine==nil)
-local worker=require('worker')
-local co=testCoroutine.create(function() return worker.run(testCoroutine) end)
-local ok,value=testCoroutine.resume(co)
-assert(ok and value==worker and testCoroutine.status(co)=='suspended')
-local done,result=testCoroutine.resume(co,worker)
-assert(done and result==worker and testCoroutine.status(co)=='dead')
-print('native coroutine works')
-`)
-  assert.match(messages(rt), /native coroutine works/)
   rt.destroy()
 })

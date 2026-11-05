@@ -54,4 +54,6 @@ MCP 需要将变量设置在服务进程的本机环境中，DSH 需要在启动
 
 长期回归只维护互补边界：`test/local-font.test.mjs` 用合成几何字体核对 PNG、换行、自适应字号及真实 Controller → Worker 的字节快照传递；`web/test/local-font.test.mjs` 验证 HTTP 认证/字体资源与可选浏览器的 DOM/Pixi 字体、字号增量更新。描边 alpha 并入 `test/text-alignment.test.mjs`，不另维护单用例文件。测试不使用外部字体或真机样本；模拟器验证不代表真机字体一致。
 
+文字像素与换行回归共用 `test/fixtures/render-font.mjs`，从矩形生成 ASCII 与少量中文测试字形，并在测试结束时恢复环境；不依赖系统具体字形或字宽。Node 验证排版、PNG 与纹理生命周期，实际 WebGL 上传由浏览器用例验证，不重复比较 Node 纹理字节。
+
 2026-10-18 Windows / Node22.23.2 / Edge headless验证了重启加载、环境变量优先、错误路径保护、损坏配置恢复、game/all范围及DOM/Pixi字体一致。使用合成字形与隔离配置；`observed / simulator / not_required`。未在完整签名Harness Desktop、其他操作系统或游戏真机验收。

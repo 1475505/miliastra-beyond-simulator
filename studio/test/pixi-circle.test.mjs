@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createCanvas } from '@napi-rs/canvas'
-import { Container, DOMAdapter, Matrix, Sprite } from 'pixi.js'
+import { Container, DOMAdapter, Matrix, Point, Sprite } from 'pixi.js'
 import { createCircleTexture, PixiPlayRenderer } from '../play/pixi-renderer.js'
 
 function harness(t) {
@@ -75,27 +75,14 @@ test('circle sprites share textures and removing one does not invalidate another
   renderer.clearVisual(second)
 })
 
-test('stretched circle sprites and filled circles use both axes; ring uses an elliptical path', t => {
+test('filled circles and rings stretch across both axes while retaining distinct interiors', t => {
   const { renderer, root, item } = harness(t)
-  renderer.updateNode(root, { ...item, sourceWidth: 340, sourceHeight: 60 })
-  const sprite = root.__visual.__circle
-  assert.equal(sprite.width, 340)
-  assert.equal(sprite.height, 60)
-  assert.equal(sprite.visible, true)
-
-  const ellipse = (primitive, fillType) => {
-    renderer.updateNode(root, { ...item, primitive, imageId: primitive === 'ring' ? 100006 : 100002,
-      sourceWidth: 340, sourceHeight: 60, fillType, fillAmount: 1 })
+  for (const primitive of ['circle', 'ring']) {
+    renderer.updateNode(root, { ...item, primitive,
+      sourceWidth: 340, sourceHeight: 60, fillType: 'Horizontal', fillAmount: 1 })
     const graphic = root.__visual.children.at(-1)
-    const instruction = graphic.context.instructions[0]
-    return instruction.data.path.shapePath.shapePrimitives[0].shape
+    for (const [x, y, expected] of [[0, 0, primitive === 'circle'], [168, 0, true], [0, 28, true], [171, 0, false], [0, 31, false], [150, 25, false]]) {
+      assert.equal(graphic.containsPoint(new Point(x, y)), expected, `${primitive} at ${x},${y}`)
+    }
   }
-  const filled = ellipse('circle', 'Horizontal')
-  assert.equal(filled.type, 'ellipse')
-  assert.equal(filled.halfWidth, 170)
-  assert.equal(filled.halfHeight, 30)
-  const ring = ellipse('ring', 'Unused')
-  assert.equal(ring.type, 'ellipse')
-  assert.equal(ring.halfWidth, 166.5)
-  assert.equal(ring.halfHeight, 26.5)
 })

@@ -69,4 +69,6 @@ DSH Desktop0.2拒绝页面子窗口；插件从2.0.8起在保存成功后回退�
 
 构建/安装检查统一见[分发验收](../DISTRIBUTION.md#验收入口与证据范围)。`test:packages`覆盖dsh-tools0.1.0-rc.6、0.2.0-rc.2、0.2.1-rc.2；`test:harness`默认0.2.1-rc.2，可传已有CLI路径测旧版本。浏览器语言验收另设`QXQY_BROWSER`。
 
+`test/plugin.test.mjs` 与 `test/lifecycle.test.mjs` 只维护宿主协议、注册工具、会话隔离和 Worker 生命周期；共享编辑、存档、GIA 与 PNG 的功能回归归 Studio，安装包与真实 Harness 检查继续验证交付边界。
+
 安装与完整Web宿主证据范围为Windows / Node22.23.2，`observed / simulator / not_required`；不涵盖真实模型/Agent Team、完整签名Desktop、Linux/macOS、SSH或子路径public-url部署。Windows隔离Git安装以`npm_config_package_import_method=copy`避免已加载Canvas DLL的unlink/EPERM冲突；该文件占用错误与构建审批拒绝不同。

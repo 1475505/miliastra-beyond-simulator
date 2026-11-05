@@ -4,6 +4,47 @@ import { createStudio } from '../index.js'
 import * as giaCodec from '../gia/codec.js'
 import { join } from 'node:path'
 
+test('full saves keep both UI assets, scripts and server logic independent across reload', () => {
+  const source = createStudio()
+  for (const assetType of ['server-control-template', 'client-control-template']) {
+    source.patch({ op: 'selectAsset', assetType })
+    source.patch({ op: 'set', id: 'n2', key: 'text', value: assetType })
+    source.patch({ op: 'addScript', path: `${assetType}.lua`, source: `print("${assetType}")`, controlId: 'n1', controlAsset: assetType })
+  }
+  source.patch({ op: 'setServerLogic', logic: { rules: [{ signalName: 'EarnGold',
+    actions: [{ kind: 'setCustomVariable', entityType: 'PlayerSelf', name: 'Gold', value: { fromSignalParam: 0 } }],
+  }] } })
+  const exported = source.exportData('save'), target = createStudio()
+  target.importData('json', exported.data, exported.filename)
+  const saved = JSON.parse(Buffer.from(exported.data, 'base64'))
+  const restored = target.archiveData()
+  assert.deepEqual(restored.assets.scripts, saved.assets.scripts)
+  assert.deepEqual(restored.serverLogic, saved.serverLogic)
+  for (const asset of ['server', 'client']) {
+    assert.equal(restored.assets[asset].root.children[0].children.find(node => node.id === 'n2').text,
+      saved.assets[asset].root.children[0].children.find(node => node.id === 'n2').text)
+  }
+  assert.equal(target.get().scripts.filter(script => script.mounted).length, 2)
+  target.patch({ op: 'set', id: 'n2', key: 'text', value: 'client-only edit' })
+  target.patch({ op: 'selectAsset', assetType: 'server-control-template' })
+  assert.equal(target.get().root.children[0].children.find(node => node.id === 'n2').text, 'server-control-template')
+})
+
+test('script unmounting and control deletion detach mounts without deleting source', () => {
+  const studio = createStudio()
+  const script = studio.patch({ op: 'addScript', path: 'main.lua', source: 'return 42' }).scripts[0]
+  assert.equal(script.mounted, false)
+  const mount = controlId => studio.patch({ op: 'updateScript', id: script.id, controlId, controlAsset: 'server-control-template' }).scripts[0]
+  assert.equal(mount('n2').mounted, true)
+  assert.equal(mount('').mounted, false)
+  mount('n2')
+  const removed = studio.patch({ op: 'remove', id: 'n2' }).scripts[0]
+  assert.equal(removed.mounted, false)
+  assert.equal(removed.source, 'return 42')
+  assert.deepEqual(studio.patch({ op: 'removeScript', id: script.id }).scripts, [])
+  assert.throws(() => studio.exportData('lua', script.id))
+})
+
 test('v1 save migration preserves per-asset script mounts when constructing default UI assets', () => {
   const legacy = {
     format: 'qxqy-simulator-save',
@@ -74,6 +115,7 @@ test('script mounted on a client template control runs when the template is inst
   const text = snap.logs.map((entry) => entry.text).join('\n')
   assert.match(text, /on-template\t模板标题/)
   assert.match(text, /main-created\ttrue/)
+  assert.equal(studio.playGet({ inspect: true }).tree[0].children.some(child => child.instantiated && child.prefabId === 1073742100), true)
   studio.playStop()
 })
 

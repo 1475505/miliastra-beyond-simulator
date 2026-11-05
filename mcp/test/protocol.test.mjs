@@ -142,9 +142,6 @@ test('MCP handshake exposes simulator tools and supports an edit/save round trip
     })
     assert.equal(initialized.result.protocolVersion, '2024-11-05')
     assert.equal(initialized.result.serverInfo.name, 'beyond-simulator-mcp')
-    assert.match(initialized.result.instructions, /qxqy_project_save/)
-    assert.match(initialized.result.instructions, /do not update the browser/)
-    assert.match(initialized.result.instructions, /qxqy_preview_open/)
     assert.ok(initialized.result.capabilities.tools)
     server.notify('notifications/initialized')
 

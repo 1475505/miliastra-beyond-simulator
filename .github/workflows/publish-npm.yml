@@ -1,6 +1,7 @@
 name: Stage npm packages
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'npm-*'
@@ -32,20 +33,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Prepare system fonts for rendering tests
         run: |
-          node --input-type=module -e "import { GlobalFonts } from '@napi-rs/canvas'; console.log('Initial Canvas font families:', GlobalFonts.families.length)"
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends fontconfig fonts-dejavu-core fonts-noto-cjk
           fc-cache -f
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict'
-          import { createCanvas, GlobalFonts } from '@napi-rs/canvas'
-          import { DEFAULT_FONT } from './studio/fonts.js'
-          const context = createCanvas(160, 80).getContext('2d')
-          context.font = `20px ${DEFAULT_FONT}`
-          context.fillText('Line 0', 2, 40)
-          assert.ok(context.getImageData(0, 0, 160, 80).data.some((value, index) => index % 4 === 3 && value > 0), 'System fonts must rasterize text before running pixel tests')
-          console.log('Ready Canvas font families:', GlobalFonts.families.length)
-          NODE
       - name: Test
         run: pnpm test
       - name: Verify Git source installation
@@ -57,4 +47,5 @@ jobs:
       - name: Verify Harness 0.2 host integration
         run: pnpm test:harness
       - name: Stage changed versions
+        if: github.event_name == 'push'
         run: node scripts/publish-npm.mjs ${{ startsWith(github.ref_name, 'npm-dsh-') && '--product=dsh-plugin' || startsWith(github.ref_name, 'npm-mcp-') && '--product=mcp' || startsWith(github.ref_name, 'npm-web-') && '--product=web' || '' }}

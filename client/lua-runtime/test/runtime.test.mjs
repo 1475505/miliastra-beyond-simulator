@@ -97,6 +97,7 @@ test('GetParam keeps types; Color packs; typeof Script', () => {
     source: `
 function OnStart()
   print("typeof_script", typeof(script))
+  print("device_eq", game.GetDevice() == Enum.Device.KeyboardAndMouse, game.GetDevice() == game.GetDevice())
   print("s", script:GetParam("stringParam"), type(script:GetParam("stringParam")))
   print("i", script:GetParam("intParam"), math.type(script:GetParam("intParam")))
   print("f", script:GetParam("floatParam"), math.type(script:GetParam("floatParam")))
@@ -111,6 +112,7 @@ end
   })
   const t = logText(rt)
   assert.match(t, /typeof_script\tScript/)
+  assert.match(t, /device_eq\ttrue\ttrue/)
   assert.match(t, /s\thello\tstring/)
   assert.match(t, /i\t42\tinteger/)
   assert.match(t, /f\t3\.5\tfloat/)
@@ -241,38 +243,6 @@ end
   assert.match(t, /default-import-marker\tprobe_mod/)
   assert.match(t, /g\tnil/)
   assert.match(t, /failed to load script 'mods\/does_not_exist'/)
-})
-
-test('require caches the same Lua table identity across calls', () => {
-  const rt = createRuntime()
-  const root = rt.addRoot({ active: true,  name: 'R', kind: 'container' })
-  rt.registerScriptFile('mods/identity', `
-return { marker = "identity", ping = function() return "pong" end }
-`)
-  rt.mountScript({
-    path: 'identity-main',
-    control: root,
-    source: `
-function OnStart()
-  print("script_type", type(script), typeof(script))
-  print("device_eq", game.GetDevice() == Enum.Device.KeyboardAndMouse, game.GetDevice() == game.GetDevice())
-  local a = require("mods/identity")
-  a.round5Mutation = "written-through-first-reference"
-  local b = require("mods/identity")
-  print("require_same", a == b, b.round5Mutation, a.ping == b.ping, b.ping())
-  local x, y, z = script:Invoke("Round5Invoke")
-  print("invoke_multi", x, y, z)
-end
-function Round5Invoke()
-  return "invoke-a", 7, true
-end
-`,
-  })
-  const t = logText(rt)
-  assert.match(t, /script_type\ttable\tScript/)
-  assert.match(t, /device_eq\ttrue\ttrue/)
-  assert.match(t, /require_same\ttrue\twritten-through-first-reference\ttrue\tpong/)
-  assert.match(t, /invoke_multi\tinvoke-a\t7\ttrue/)
 })
 
 test('FindChild without slash is direct only; navigation and fill match device', () => {
@@ -443,23 +413,6 @@ end
 `,
   })
   assert.match(logText(rt), /after_destroy\ttrue\tB/)
-})
-
-test('require preserves mixed Lua table array and named entries', () => {
-  const rt = createRuntime()
-  const root = rt.addRoot({ active: true,  name: 'R', kind: 'container' })
-  rt.registerScriptFile('mods/mixed', 'return { 7, 9, marker = "mixed" }')
-  rt.mountScript({
-    path: 'mixed-main',
-    control: root,
-    source: `
-function OnStart()
-  local value = require("mods/mixed")
-  print("mixed", value[1], value[2], value.marker)
-end
-`,
-  })
-  assert.match(logText(rt), /mixed\t7\t9\tmixed/)
 })
 
 test('Tween default absolute; SetRelative true adds', () => {

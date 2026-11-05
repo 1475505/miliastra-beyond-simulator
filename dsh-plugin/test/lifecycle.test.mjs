@@ -91,6 +91,10 @@ test('one plugin can restart repeatedly without leaking routes or splitting HTTP
     assert.equal(exported.selection.templateCount, 1)
     await app.call('qxqy_studio_patch', { op: { op: 'renameSave', name: `cycle-${cycle}` } })
     assert.equal((await app.post('get')).save.name, `cycle-${cycle}`)
+    const other = await app.tools.execute({ callId: `other-${cycle}`, name: 'qxqy_studio_get', arguments: {},
+      agent: { id: 'other-session', session: { header: {} } }, signal: AbortSignal.timeout(10_000) })
+    assert.equal(other.isError, false)
+    assert.notEqual(other.value.save.name, `cycle-${cycle}`, 'registered tools must isolate sessions')
     await app.post('patch', { op: { op: 'renameSave', name: `http-${cycle}` } })
     assert.equal((await app.call('qxqy_studio_get')).save.name, `http-${cycle}`)
     await owner.restart()

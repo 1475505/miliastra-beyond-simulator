@@ -34,7 +34,7 @@ function runCli(job, suffix) {
 test('cli.mjs playRun loads lua path from workspace root, not studio cwd', t => {
   const workspace = mkdtempSync(join(tmpdir(), 'qxqy-cli-workspace-'))
   t.after(() => rmSync(workspace, { recursive: true, force: true }))
-  writeFileSync(join(workspace, 'external.lua'), 'function OnStart() print("EXTERNAL-FIXTURE") end')
+  writeFileSync(join(workspace, 'external.lua'), 'function OnStart() print("EXTERNAL-FIXTURE", game.GetUICanvasSize()) end')
   const data = runCli({
     cmd: 'playRun',
     frames: 0,
@@ -42,7 +42,8 @@ test('cli.mjs playRun loads lua path from workspace root, not studio cwd', t => 
     script: { path: 'external.lua', source: '' },
   }, 'play-job-path')
   assert.equal(data.canvasWidth, 1600)
-  assert.match(data.logs.map(line => line.text).join('\n'), /EXTERNAL-FIXTURE/)
+  assert.equal(data.canvasHeight, 900)
+  assert.match(data.logs.map(line => line.text).join('\n'), /EXTERNAL-FIXTURE\t1600\t900/)
 })
 
 test('cli.mjs patch then get via file job', () => {
@@ -52,18 +53,4 @@ test('cli.mjs patch then get via file job', () => {
   }, 'patch')
   const text = data.root.children[0].children.find((c) => c.kind === 'textbox')
   assert.equal(text.text, 'FROM-CLI')
-})
-
-test('cli.mjs playRun via the current Node executable and a file job', () => {
-  const data = runCli({
-    cmd: 'playRun',
-    frames: 0,
-    script: {
-      path: 'inline',
-      source: 'function OnStart()\n  local w,h = game.GetUICanvasSize()\n  print("canvas", w, h)\nend\n',
-    },
-  }, 'play')
-  assert.equal(data.canvasWidth, 1600)
-  assert.equal(data.canvasHeight, 900)
-  assert.match(data.logs.map((l) => l.text).join('\n'), /canvas\t1600\t900/)
 })

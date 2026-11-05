@@ -6,6 +6,7 @@ import { createRuntime } from '../../client/lua-runtime/src/index.js'
 import { paintList, playSnapshot } from '../play/session.js'
 import { renderScenePng } from '../host-png.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
+import './fixtures/render-font.mjs'
 
 function fixture(t) {
   const runtime = createRuntime({ canvasWidth: 240, canvasHeight: 160 })
@@ -63,7 +64,7 @@ async function whiteBounds(scene) {
   return { left, right, top, bottom, cx: (left + right) / 2, cy: (top + bottom) / 2 }
 }
 
-test('Lua alignment EnumItems become named scene/paint fields without changing Runtime enum identity', t => {
+test('Lua alignment changes preserve enum identity and reach scene, paint and PNG', async t => {
   const { runtime, label, session } = fixture(t)
   assert.equal(label.horizontalAlignment.Name, 'Middle')
   assert.equal(label.verticalAlignment.Name, 'Middle')
@@ -71,6 +72,8 @@ test('Lua alignment EnumItems become named scene/paint fields without changing R
   const node = first.nodes.find(item => item.name === 'Label')
   assert.equal(node.horizontalAlignment, 'Middle')
   assert.equal(node.verticalAlignment, 'Middle')
+  const centered = await whiteBounds(first)
+  assert.ok(Math.abs(centered.cx - 120) < 6 && Math.abs(centered.cy - 80) < 8, JSON.stringify(centered))
   assert.equal(paintList(session).find(item => item.name === 'Label').horizontalAlignment, 'Middle')
   runtime.step(0.25)
   const patch = playSnapshot(session, { view: true, sceneRev: first.revision }).scene
@@ -84,19 +87,9 @@ test('Lua alignment EnumItems become named scene/paint fields without changing R
   const paint = paintList(session).find(item => item.name === 'Label')
   assert.equal(paint.horizontalAlignment, 'Right')
   assert.equal(paint.verticalAlignment, 'Bottom')
-})
-
-test('PNG positions text at center then bottom-right after real Lua enum assignments', async t => {
-  const { runtime, session } = fixture(t)
-  const centered = await whiteBounds(playSnapshot(session, { view: true }).scene)
-  assert.ok(Math.abs(centered.cx - 120) < 6, JSON.stringify(centered))
-  assert.ok(Math.abs(centered.cy - 80) < 8, JSON.stringify(centered))
-  runtime.step(0.25)
   const corner = await whiteBounds(playSnapshot(session, { view: true }).scene)
   assert.ok(corner.left > 170 && corner.right < 202, JSON.stringify(corner))
   assert.ok(corner.top > 95 && corner.bottom <= 122, JSON.stringify(corner))
-  assert.ok(corner.cx - centered.cx > 60)
-  assert.ok(corner.cy - centered.cy > 20)
 })
 
 test('Pixi visuals consume the same normalized Lua scene and update anchors without a browser', t => {

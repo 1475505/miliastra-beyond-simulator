@@ -10,6 +10,7 @@ import { layoutTree } from '../ui/inspector.js'
 import { walk } from '../ui/authoring.js'
 import { textLayout } from '../play/text-layout.js'
 import { textPreviewContent, textPreviewStyle } from '../../editor-ui/text-preview.js'
+import './fixtures/render-font.mjs'
 
 function fixture(t, kind = 'textbox', extra = {}) {
   const runtime = createRuntime({ canvasWidth: 240, canvasHeight: 160 })

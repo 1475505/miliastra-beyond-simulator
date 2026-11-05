@@ -66,7 +66,9 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 工作流文件是 `.github/workflows/publish-npm.yml`，推送 `npm-*` Git tag 时触发。它在 GitHub 托管的 Ubuntu runner 上运行冻结锁文件安装、回归测试、Git 源码安装验收、三个包的构建和仓库外安装验收。`scripts/publish-npm.mjs` 在发布前校验 tarball 哈希；同版本同内容会跳过，同版本不同内容会失败并要求增加版本号。首次推送该工作流前，先把本地源码改动提交并推送到仓库；标记的提交必须包含这份工作流和要发布的版本。
 
-Ubuntu CI 显式安装 Fontconfig、DejaVu 和 Noto CJK，并在回归前检查 Canvas 能画出文字；不依赖 runner 镜像预装字体。字体只安装在验收环境，不进入源码或发布包。
+Ubuntu CI 显式安装 Fontconfig、DejaVu 和 Noto CJK，不依赖 runner 镜像预装字体。字体只安装在验收环境，不进入源码或发布包；文字绘制由常规渲染回归验证，不另设重复的 CI 绘字检查。
+
+仅验证测试或文档改动时，可手动运行同一工作流；仍执行完整验收，但跳过 npm 暂存，不必为重复验收创建发布 tag。
 
 在 npm 的以下三个包页面分别进入 **Settings → Trusted publishing → GitHub Actions**，配置相同的发布者：[DSH 插件](https://www.npmjs.com/package/dsh-plugin-beyond-simulator)、[Web](https://www.npmjs.com/package/beyond-simulator-web)、[MCP](https://www.npmjs.com/package/beyond-simulator-mcp)。填写 **Organization or user** `1475505`、**Repository** `miliastra-beyond-simulator`、**Workflow filename** `publish-npm.yml`；**Environment name** 留空，**Allow npm publish** 保持不勾选，只允许 `npm stage publish`。不需要在 GitHub 配置 `NPM_TOKEN`。工作流使用 `id-token: write` 获取 npm 的短期 OIDC 凭据。
 

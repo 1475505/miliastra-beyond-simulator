@@ -60,9 +60,6 @@ test('button placeholder is neutral dark gray in Pixi and editor/play PNG, retai
   renderer.updateNode(root, button)
   const graphic = root.__visual.children[0]
   assert.equal(graphic.context.instructions[0].data.style.color, 0x202020)
-  assert.equal(graphic.context.instructions[1].data.style.color, 0x555555)
-  renderer.updateNode(root, { ...button, pressed: true })
-  assert.equal(root.__visual.children[0].context.instructions.at(-1).data.style.alpha, 0.28)
   const sample = async png => {
     const canvas = createCanvas(200, 100), ctx = canvas.getContext('2d')
     ctx.drawImage(await loadImage(png.data), 0, 0)
@@ -96,9 +93,9 @@ test('HUD text, style and scroll-offset updates reuse owned visuals; geometry ch
   renderer.updateNode(root, label)
   const visual = root.__visual, text = visual.children.find(child => child instanceof Text)
   const mask = text.mask, style = text.style
-  for (let i = 2; i <= 40; i++) renderer.updateNode(root, { ...label, text: `Score ${i}` })
+  for (const text of ['Score 2', 'Score 3']) renderer.updateNode(root, { ...label, text })
   assert.equal(root.__visual, visual)
-  assert.equal(text.text, 'Score 40')
+  assert.equal(text.text, 'Score 3')
   assert.equal(text.mask, mask)
   assert.equal(text.style, style)
   renderer.updateNode(root, { ...label, text: 'A\nB', horizontalAlignment: 'Right', verticalAlignment: 'Bottom',

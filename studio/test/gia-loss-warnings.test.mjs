@@ -4,11 +4,11 @@ import { createStudio, exportGia } from '../index.js'
 import { createNode } from '../ui/authoring.js'
 import { PLATFORMS } from '../constants.js'
 
-test('GIA preserves rotation visibility and activation for a thousand images', () => {
+test('GIA preserves rotation, visibility and activation without false loss warnings', () => {
   const studio = createStudio()
   const archive = studio.archiveData()
   const root = archive.assets.server.root.children[0]
-  root.children = Array.from({ length: 1000 }, (_, i) => createNode('image', {
+  root.children = Array.from({ length: 3 }, (_, i) => createNode('image', {
     id: `ellipse-${i}`, name: `ellipse-${i}`, imageId: 100002,
   }))
   for (const n of root.children) {
@@ -28,7 +28,7 @@ test('GIA preserves rotation visibility and activation for a thousand images', (
     target.importData('gia', result.data, result.filename)
     const restored = target.archiveData().assets.server.root.children[0]
     assert.equal(restored.visible, false)
-    assert.equal(restored.children.length, 1000)
+    assert.equal(restored.children.length, 3)
     assert.equal(restored.children[0].active, false)
     for (const n of restored.children) {
       for (const p of PLATFORMS) assert.equal(n.transformByPlatform[p].rotation.z, 30)

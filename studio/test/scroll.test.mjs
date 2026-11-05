@@ -7,6 +7,7 @@ import { injectPlayPointer, paintList, playSnapshot, hitPlayControl, playAdapter
 import { renderScenePng, renderPaintPng } from '../host-png.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
 import { replayCase } from '../autotest/runner.js'
+import './fixtures/render-font.mjs'
 
 function fixture(t, spec = {}) {
   const runtime = createRuntime({ canvasWidth: 240, canvasHeight: 160 })
