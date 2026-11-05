@@ -21,6 +21,7 @@ import { uiVfxAsset } from '../assets/ui-vfx-catalog.js'
 import { imageSourceName, canSelectImageType } from '../assets/catalog.js'
 import { centerMaskMatrix, imageMaskSpec } from './image-mask.js'
 import { randomUUID } from 'node:crypto'
+import { KEY_HINT_DEVICES, keyHintCode, resolveKeyHint } from '../key-hints.js'
 
 function prepareScroll(session) {
   for (const control of session.runtime.scrollControls || []) {
@@ -133,6 +134,10 @@ export function controlSnapshot(control, boxes) {
     imageId: control.kind === 'image' ? (control.imageId ?? 0) : null,
     imageSource: control.kind === 'image' ? imageSourceName(control.imageSource) : null,
     imageType: control.kind === 'image' ? (control.imageType == null ? null : enumName(control.imageType)) : null,
+    ...(control.kind === 'keyhint' ? {
+      keyboardKeyCode: keyHintCode(control.keyboardKeyCode, 'keyboard'),
+      controllerKeyCode: keyHintCode(control.controllerKeyCode, 'controller'),
+    } : {}),
     primitive: control.kind === 'image' ? imagePrimitive(control.imageId, control.imageSource) : null,
     imageColor: control.kind === 'image' ? control.imageColor : null,
     enableMask: control.kind === 'image' ? control.enableMask === true : null,
@@ -182,6 +187,7 @@ function createPlayerRuntime(compiled, templateBundle, scripts, language) {
     canSelectImageType,
     ...(language ? { language } : {}),
   })
+  rt.keyHintDevice = compiled.keyHintDevice
   for (const template of [...(compiled.templates || []), ...(templateBundle?.templates || [])]) {
     if (Number.isSafeInteger(template.prefabIndex) && template.prefabIndex > 0) {
       rt.registerTemplate(template.prefabIndex, template)
@@ -216,10 +222,12 @@ function bindCurrentView(session) {
   }
 }
 
-export function startPlay(project, { templatesProject = null, scripts = [], sceneScripts = null, templateScripts = null, serverConfig = null, canvasId = '', playerCount = 1, viewPlayerIndex = 1, language = '' } = {}) {
+export function startPlay(project, { templatesProject = null, scripts = [], sceneScripts = null, templateScripts = null, serverConfig = null, canvasId = '', playerCount = 1, viewPlayerIndex = 1, language = '', keyHintDevice = project.keyHintDevice || 'auto' } = {}) {
+  if (!KEY_HINT_DEVICES.includes(keyHintDevice)) throw new Error(`unknown key hint preview device: ${keyHintDevice}`)
   const sceneList = sceneScripts || scripts
   const templateList = templateScripts || scripts
   const compiled = compileProject(project, sceneList, canvasId)
+  compiled.keyHintDevice = keyHintDevice
   const templateBundle = templatesProject ? compileProject(templatesProject, templateList, canvasId) : null
   const count = normalizePlayerCount(playerCount)
   const view = normalizePlayerIndex(viewPlayerIndex, count)
@@ -273,7 +281,7 @@ function historyRows(session) {
   return session?.history?.events || []
 }
 
-const PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button', 'grid'])
+const PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button', 'grid', 'keyhint'])
 
 // Pixi receives an affine matrix so nested non-uniform scale and rotation do
 // not lose information through a single angle/size decomposition.
@@ -351,6 +359,7 @@ function compactPaint(control, box, transform) {
     item.horizontalAlignment = enumName(control.horizontalAlignment)
     item.verticalAlignment = enumName(control.verticalAlignment)
   }
+  if (control.kind === 'keyhint') item.keyHint = resolveKeyHint(control, control.runtime.device, control.runtime.keyHintDevice)
   return item
 }
 
@@ -421,6 +430,7 @@ function visualFields(control, box) {
     fields.horizontalAlignment = enumName(control.horizontalAlignment)
     fields.verticalAlignment = enumName(control.verticalAlignment)
   }
+  if (control.kind === 'keyhint') fields.keyHint = resolveKeyHint(control, control.runtime.device, control.runtime.keyHintDevice)
   return fields
 }
 
@@ -449,7 +459,7 @@ function sceneFingerprint(node) {
     node.text, node.fontSize, node.fontColor, node.bgColor,
     node.adaptiveFontSize, node.minimumFontSize, JSON.stringify(node.textLayout),
     node.enableOutline, node.outlineColor, node.horizontalAlignment, node.verticalAlignment,
-    JSON.stringify(node.scroll), node.clipToParent,
+    JSON.stringify(node.scroll), node.clipToParent, JSON.stringify(node.keyHint),
   ].join('\t')
 }
 
@@ -642,6 +652,7 @@ export function playSnapshot(session, { inspect = false, view = false, paint = f
     canvasId: compiled.canvasId,
     platform: compiled.platform,
     device: rt.device,
+    keyHintDevice: rt.keyHintDevice || 'auto',
     canvasWidth: w,
     canvasHeight: h,
     canvasPresets: CANVAS_PRESET_LIST,

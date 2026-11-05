@@ -13,6 +13,8 @@ const INTEGER_FIELDS = new Set(['id', 'Id', 'prefabIndex', 'imageId', 'fontSize'
   'itemCount', 'itemPrefabIndex', 'animationId', 'referencedPrefabIndex'])
 const COLOR_FIELDS = new Set(['imageColor', 'fontColor', 'bgColor', 'outlineColor'])
 const ENUM_FIELDS = {
+  keyboardKeyCode: 'KeyboardKeyCode',
+  controllerKeyCode: 'ControllerKeyCode',
   horizontalAlignment: 'TextHorizontalAlignment',
   verticalAlignment: 'TextVerticalAlignment',
   imageSource: 'ImageSource',
@@ -1038,6 +1040,9 @@ export class LuaRuntime {
             throw new Error(`bad argument #2 to '${key}' (integer expected, got ${valueType})`)
           }
           const enumType = ENUM_FIELDS[key]
+          if ((key === 'keyboardKeyCode' || key === 'controllerKeyCode') && val?.EnumType !== enumType) {
+            throw new Error(`${key} requires Enum.${enumType}`)
+          }
           if (key === 'animationId' && !Number.isSafeInteger(val)) throw new Error('animationId requires an integer')
           if (key === 'playSoundEffect' && typeof val !== 'boolean') throw new Error('playSoundEffect requires a boolean')
           if (key === 'layer' && (val?.EnumType !== 'UIAnimationLayer' || !['AboveAllControls', 'BelowAllControls'].includes(val.Name))) throw new Error('layer requires Enum.UIAnimationLayer')

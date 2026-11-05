@@ -33,7 +33,10 @@
         <div class="log-stack"><main class="panel log-panel"><div class="panel-head"><span data-i18n="客户端脚本日志">客户端脚本日志 </span><small data-i18n="最近 100 条">最近 100 条</small></div><div class="log" id="log"></div></main><aside class="panel log-panel"><div class="panel-head"><span data-i18n="服务端日志">服务端日志 </span><small data-i18n="变量 / 信号">变量 / 信号</small></div><div class="log" id="serverLog"></div></aside><section class="panel case-panel"><div class="panel-head"><span data-i18n="自动测用例">自动测用例 </span><small id="caseHint" data-i18n="先试玩，再保存回放">先试玩，再保存回放</small></div><div class="case-body"><textarea id="caseAsserts" spellcheck="false" placeholder='断言 JSON 数组，例如 [{"kind":"log","contains":"clicked"}]' data-i18n-placeholder="断言 JSON 数组，例如 [{&quot;kind&quot;:&quot;log&quot;,&quot;contains&quot;:&quot;clicked&quot;}]"></textarea><button id="saveCase" data-i18n="保存用例">保存用例</button><button id="runCase" data-i18n="回放用例">回放用例</button></div></section></div>
       </section>
     </div>
-    <footer class="status"><span class="live" id="state" data-i18n="● 正在启动">● 正在启动</span><span id="viewMode" data-i18n="页面：试玩">页面：试玩</span><span class="spacer"></span><span class="metric" id="frame">Frame 0</span><span class="metric" id="time">0.00s</span></footer>
+    <footer class="status"><span class="live" id="state" data-i18n="● 正在启动">● 正在启动</span><span id="viewMode" data-i18n="页面：试玩">页面：试玩</span><span class="spacer"></span>
+      <select id="keyHintSel" class="devsel" aria-label="按键图标预览" data-i18n-aria-label="按键图标预览" title="切换按键图标并重新试玩" data-i18n-title="切换按键图标并重新试玩">
+        <option value="auto" data-i18n="按键：跟随画布">按键：跟随画布</option><option value="keyboard" data-i18n="按键：键鼠">按键：键鼠</option><option value="controller" data-i18n="按键：手柄">按键：手柄</option>
+      </select><span class="metric" id="frame">Frame 0</span><span class="metric" id="time">0.00s</span></footer>
   </div>
   <script type="module">
     import { PixiPlayRenderer, createPlaySession, loadBrowserFont, t, getLocale, localizePage, subscribeLocale, loadSystemLanguage } from '/qxqy-simulator/play-renderer.js'
@@ -226,6 +229,7 @@
         fitStage()
         syncDeviceSelect(next)
         syncPlayerSelects(next)
+        $('keyHintSel').value = next.keyHintDevice || 'auto'
         $('resolution').textContent = next.canvasWidth + '×' + next.canvasHeight
         const viewLabel = next.playerCount > 1 ? (t(' · 玩家') + (next.viewPlayerIndex || 1)) : ''
         $('stageLabel').textContent = next.canvasWidth + '×' + next.canvasHeight + viewLabel + t(' · 点击输入')
@@ -293,6 +297,7 @@
           if (snapshot?.canvasId) keepArgs.canvasId = snapshot.canvasId
           if (snapshot?.playerCount) keepArgs.playerCount = snapshot.playerCount
           if (snapshot?.viewPlayerIndex) keepArgs.viewPlayerIndex = snapshot.viewPlayerIndex
+          if (snapshot?.keyHintDevice) keepArgs.keyHintDevice = snapshot.keyHintDevice
           await play.start(keepArgs)
           fitStage(true)
         } catch (error) { showError(error) }
@@ -305,6 +310,7 @@
           fittedCanvas = ''
           const args = { playerCount, viewPlayerIndex: 1 }
           if (play.snapshot?.canvasId) args.canvasId = play.snapshot.canvasId
+          if (play.snapshot?.keyHintDevice) args.keyHintDevice = play.snapshot.keyHintDevice
           await play.start(args)
           fitStage(true)
           revealStage()
@@ -327,10 +333,22 @@
             canvasId,
             playerCount: play.snapshot?.playerCount || 1,
             viewPlayerIndex: play.snapshot?.viewPlayerIndex || 1,
+            keyHintDevice: play.snapshot?.keyHintDevice || 'auto',
           })
           fitStage(true)
           revealStage()
         } catch (error) { showError(error) }
+      })
+      $('keyHintSel').addEventListener('change', async () => {
+        const select = $('keyHintSel'), snapshot = play.snapshot
+        select.disabled = true
+        try {
+          await play.start({ canvasId: snapshot?.canvasId, playerCount: snapshot?.playerCount || 1,
+            viewPlayerIndex: snapshot?.viewPlayerIndex || 1, keyHintDevice: select.value })
+          fitStage(true)
+          revealStage()
+        } catch (error) { showError(error) }
+        finally { select.disabled = false }
       })
       function quiesce() {
         closing = true

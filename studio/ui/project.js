@@ -28,6 +28,7 @@ import { assignGuids } from '../gia/codec.js'
 import { collectUsedGuids, nextFreeGuid } from '../gia/guid.js'
 import { migrateLayout } from './migrate-layout.js'
 import { ensureClientAssetIndices } from '../gia/asset-indices.js'
+import { KEY_HINT_DEVICES, normalizeKeyHintCode } from '../key-hints.js'
 
 function parentBoxOf(project, nodeId, boxes, canvasId = project.canvasId) {
   const parent = findParent(project.root, nodeId)
@@ -68,6 +69,7 @@ export function createProject(seed, { warnings = [] } = {}) {
         : {}),
     },
     canvasId: seed.canvasId && CANVAS_PRESETS[seed.canvasId] ? seed.canvasId : DEFAULT_CANVAS_ID,
+    keyHintDevice: KEY_HINT_DEVICES.includes(seed.keyHintDevice) ? seed.keyHintDevice : 'auto',
     selectedId: seed.selectedId || base.selectedId,
     root: sanitizeNode(seed.root || base.root),
   }
@@ -133,7 +135,7 @@ function visibleBoxesForProject(project, boxes) {
 }
 
 export function snapshotProject(project) {
-  const { canvas, boxes } = layoutTree(project.root, project.canvasId)
+  const { canvas, boxes } = layoutTree(project.root, project.canvasId, undefined, project.keyHintDevice)
   const guidById = assignGuids(project, new Set(), { preserveLegacy: true })
   const selected = findNode(project.root, project.selectedId)
   const selectedBox = selected ? boxes[selected.id] : null
@@ -142,6 +144,7 @@ export function snapshotProject(project) {
     version: project.version,
     meta: { ...project.meta },
     canvasId: project.canvasId,
+    keyHintDevice: project.keyHintDevice || 'auto',
     canvas: {
       id: project.canvasId,
       width: canvas.width,
@@ -244,7 +247,7 @@ const NUMBER_FIELDS = new Set([
   'fontSize', 'minimumFontSize', 'imageId', 'clickAudioId', 'softEdgeWidthX',
   'softEdgeWidthY', 'horizontalSoftRange', 'verticalSoftRange', 'fillAmount',
   'cellSizeX', 'cellSizeY', 'spacingX', 'spacingY', 'padding1X', 'padding1Y',
-  'padding2X', 'padding2Y', 'previewCount', 'keyboardKeyCode', 'controllerKeyCode',
+  'padding2X', 'padding2Y', 'previewCount',
   'itemPrefabId', 'layoutConstraintFixedCount',
 ])
 const BOOLEAN_FIELDS = new Set([
@@ -294,6 +297,11 @@ function applyPatchMutating(project, op) {
     if (op.canvasId && CANVAS_PRESETS[op.canvasId]) project.canvasId = op.canvasId
     return project
   }
+  if (type === 'setKeyHintDevice') {
+    if (!KEY_HINT_DEVICES.includes(op.device)) throw new Error(`unknown key hint preview device: ${op.device}`)
+    project.keyHintDevice = op.device
+    return project
+  }
   if (type === 'setScript') {
     throw new Error('脚本由存档统一管理，请使用 addScript / updateScript / removeScript 操作')
   }
@@ -304,6 +312,7 @@ function applyPatchMutating(project, op) {
     project.version = next.version
     project.meta = next.meta
     project.canvasId = next.canvasId
+    project.keyHintDevice = 'auto'
     project.selectedId = next.selectedId
     project.root = next.root
     return project
@@ -417,13 +426,17 @@ function applyPatchMutating(project, op) {
       return project
     }
     if (DIRECT_FIELDS.has(key)) {
+      if (key === 'keyboardKeyCode' || key === 'controllerKeyCode') {
+        if (node.kind !== 'keyhint') throw new Error(`${key} requires a key hint control`)
+        value = normalizeKeyHintCode(value, key === 'keyboardKeyCode' ? 'keyboard' : 'controller')
+      }
       if (key === 'layer' && node.kind !== 'animation') throw new Error('layer is only available on UI animations')
       if (key === 'playSoundEffect' && !['animation', 'fullscreen'].includes(node.kind)) throw new Error('playSoundEffect requires an animation control')
       if (key.endsWith('Color')) value = parseColor(value)
       if (NUMBER_FIELDS.has(key)) {
         value = finiteNumber(value, key)
         if (value < 0) throw new Error(`${key} must not be negative`)
-        if (key === 'imageId' || key === 'clickAudioId' || key === 'keyboardKeyCode' || key === 'controllerKeyCode') value = Math.trunc(value)
+        if (key === 'imageId' || key === 'clickAudioId') value = Math.trunc(value)
         if (key === 'fillAmount' && value > 1) throw new Error('fillAmount must be between 0 and 1')
       }
       if (BOOLEAN_FIELDS.has(key)) value = booleanValue(value)
@@ -469,8 +482,9 @@ function applyPatchMutating(project, op) {
         node.giaRaw.templateRefSlot = value
       }
       if (node.kind === 'grid' && key === 'previewCount') node.giaRaw.gridField511 = Math.trunc(value)
-      if (node.kind === 'keyhint' && key === 'keyboardKeyCode') node.giaRaw.keyHintField502 = Math.trunc(value)
-      if (node.kind === 'keyhint' && key === 'controllerKeyCode') node.giaRaw.keyHintField501 = Math.trunc(value)
+      if (node.kind === 'keyhint' && (key === 'keyboardKeyCode' || key === 'controllerKeyCode') && typeof value === 'number') {
+        node.giaRaw[key === 'keyboardKeyCode' ? 'keyHintField502' : 'keyHintField501'] = value
+      }
       if ((node.kind === 'animation' || node.kind === 'fullscreen') && key === 'animationId') {
         node.giaRaw[node.kind === 'animation' ? 'effectSlot' : 'fullscreenEffectSlot'] = value
       }

@@ -9,6 +9,7 @@ import { scrollBarGeometry } from './play/scroll-geometry.js'
 import { localFontStack } from './host/local-font.js'
 import { textLayout } from './play/text-layout.js'
 import { drawRichText } from './play/rich-text-paint.js'
+import { drawKeyHint } from './play/key-hint-paint.js'
 
 const require = createRequire(import.meta.url)
 
@@ -16,7 +17,7 @@ const TRI_POINTS = [0, -0.5, 0.5, 0.5, -0.5, 0.5]
 const STAR4_POINTS = [0, -0.5, 0.12, -0.12, 0.5, 0, 0.12, 0.12, 0, 0.5, -0.12, 0.12, -0.5, 0, -0.12, -0.12]
 const STAR5_POINTS = [0, -0.5, 0.11, -0.15, 0.48, -0.15, 0.18, 0.07, 0.29, 0.41, 0, 0.2, -0.29, 0.41, -0.18, 0.07, -0.48, -0.15, -0.11, -0.15]
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-const SCENE_PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button', 'grid'])
+const SCENE_PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button', 'grid', 'keyhint'])
 const KIND_LABEL = {
   cursor: '光标检测区域',
   reference: '模板引用控件',
@@ -262,6 +263,10 @@ function drawPaintItem(ctx, item, canvasHeight, assets) {
   }
   applyItemTransform(ctx, item, canvasHeight)
   if (item.kind === 'textbox' || item.kind === 'textwindow') drawTextItem(ctx, item, width, height)
+  else if (item.kind === 'keyhint') {
+    ctx.translate(0, -height / 2)
+    drawKeyHint(ctx, item, width, height)
+  }
   else if (item.kind === 'button') drawButtonItem(ctx, item, width, height)
   else if (item.kind !== 'grid') {
     const clip = imageFillRect(item, width, height)
@@ -519,6 +524,9 @@ function drawEditorItem(ctx, item, canvasHeight, assets) {
     ctx.restore()
   } else if (item.kind === 'textbox' || item.kind === 'textwindow') {
     drawTextItem(ctx, item, box.width, box.height)
+  } else if (item.kind === 'keyhint') {
+    ctx.translate(0, -box.height / 2)
+    drawKeyHint(ctx, item, box.width, box.height)
   } else if (item.kind === 'button') {
     drawButtonItem(ctx, item, box.width, box.height)
     drawEditorLabel(ctx, item.name || KIND_LABEL.button, box.width)

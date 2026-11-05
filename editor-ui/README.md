@@ -14,6 +14,7 @@
   - [语言、联系作者与更新](../studio/docs/interface.md)：`footer.js`、`studio/i18n.js`。
   - [本地字体](../studio/docs/local-fonts.md)：`font-settings.js`，独立于项目revision。
 - **画布**（能力契约由[Studio](../studio/README.md#专题树)维护）
+  - [按键提示](../studio/docs/control-support.md#按键提示图标2026-11-05)：`key-hint-preview.js`，共用键帽/手柄图标绘制与设备预览选择。
   - [图片素材](../studio/docs/image-assets.md)：`image-preview.js`，使用`imageSource + imageId`身份、同源`/qxqy-assets/`及`image-refresh`。
   - [动效](../studio/docs/ui-vfx-playback.md)：`ui-vfx-preview.js`，搜索、静音预览、重播/重试与停止。
   - [旋转](../studio/docs/control-support.md#xy-旋转投影2026-10-12)与[遮罩](../studio/docs/control-support.md#编辑画布遮罩与羽化2026-10-20)：`control-transform.js`、`mask-preview.js`；选框独立于效果层。

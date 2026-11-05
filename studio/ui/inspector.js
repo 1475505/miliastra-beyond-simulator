@@ -15,6 +15,7 @@ import { readCurrentTransform } from './sync.js'
 import { getPlatformTransform } from './transforms.js'
 import { textLayout } from '../play/text-layout.js'
 import { centerMaskMatrix, imageMaskSpec } from '../play/image-mask.js'
+import { keyHintOptions, resolveKeyHint } from '../key-hints.js'
 
 export function painterBoxes(root, boxes) {
   const out = []
@@ -27,7 +28,7 @@ export function painterBoxes(root, boxes) {
   return out
 }
 
-export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)) {
+export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId), keyHintDevice = 'auto') {
   const canvas = canvasBox(canvasId)
   const boxes = {}
   function rec(node, parentBox, parentMatrix, parentVisible = true, masks = []) {
@@ -64,6 +65,7 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       renderMatrix: matrix,
       ...(nextMasks.length ? { masks: nextMasks } : {}),
       primitive: node.kind === 'image' ? imagePrimitive(node.imageId, node.imageSource) : null,
+      ...(node.kind === 'keyhint' ? { keyHint: resolveKeyHint(node, platform, keyHintDevice) } : {}),
       ...(['animation', 'fullscreen'].includes(node.kind) ? { animationId: node.animationId ?? null,
         playSoundEffect: node.playSoundEffect !== false, layer: node.layer || 'AboveAllControls' } : {}),
       ...((node.kind === 'textbox' || node.kind === 'textwindow') ? {
@@ -331,10 +333,10 @@ export function inspectorDto(node, canvasId, box, guidById) {
     )
   }
   if (node.kind === 'keyhint') {
-    fields.push(
-      field('keyboardKeyCode', '键鼠按键', 'number', node.keyboardKeyCode ?? node.giaRaw?.keyHintField502 ?? 1, { gia: 'W' }),
-      field('controllerKeyCode', '手柄按键', 'number', node.controllerKeyCode ?? node.giaRaw?.keyHintField501 ?? 1),
-    )
+    for (const [device, label] of [['keyboard', '键鼠按键'], ['controller', '手柄按键']]) {
+      const value = node[`${device}KeyCode`] ?? 1
+      fields.push(field(`${device}KeyCode`, label, 'enum', value, { options: keyHintOptions(device, value) }))
+    }
   }
   if (node.kind === 'animation' || node.kind === 'fullscreen') {
     fields.push(field('animationId', node.kind === 'animation' ? '动效索引' : '全屏动效索引', 'string', node.animationId ?? ''))
@@ -346,6 +348,7 @@ export function inspectorDto(node, canvasId, box, guidById) {
   if (!CORE_KINDS.includes(node.kind) || node.kind === 'textwindow' || node.kind === 'grid') {
     fields.push(field('incomplete', '完整度', 'note', node.kind === 'textwindow' || node.kind === 'grid'
       ? '试玩支持基础滚动；滚动交互、滚动条及列表配置以 JSON/Lua 为准，相关 GIA 开关映射尚未核实。'
+       : node.kind === 'keyhint' ? '支持键帽和手柄图标预览；尚无 GIA 数字映射的键位请在 Lua 中设置。'
        : ['animation', 'fullscreen'].includes(node.kind) ? '支持浏览器动效播放；非空动效 GIA 配置尚未核实。' : '本阶段仅公共变换，业务槽不完整'))
   }
   return {

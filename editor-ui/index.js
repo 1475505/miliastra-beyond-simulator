@@ -6,6 +6,7 @@ import { createUIVfxComponents } from './ui-vfx-preview.js'
 import { createColorField } from './color-field.js'
 import { controlTransformStyle } from './control-transform.js'
 import { createTextPreview } from './text-preview.js'
+import { createKeyHintPreview } from './key-hint-preview.js'
 import { createMaskedControls } from './mask-preview.js'
 import { GUID_MIN, GUID_MAX, isValidGuid } from '../studio/gia/guid.js'
 import { isRemoteImage, imageAssetKey } from '../studio/assets/catalog.js'
@@ -24,6 +25,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
     const ImagePreview = createImagePreview(React)
     const { Effects: UIVfxEffects, Picker: UIVfxPicker } = createUIVfxComponents(React)
     const TextPreview = createTextPreview(React)
+    const KeyHintPreview = createKeyHintPreview(React)
     const MaskedControls = createMaskedControls(React)
     const ImageTypeField = createImageTypeField(React)
     const ColorField = createColorField(React)
@@ -573,7 +575,8 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       if (kind === 'image') Object.assign(style, shape(item.primitive, argb(item.imageColor, 0xffffffff)))
       else if (textKind) { style.background = argb(item.bgColor, 0x00ffffff); style.justifyContent = item.horizontalAlignment === 'Right' ? 'flex-end' : item.horizontalAlignment === 'Middle' ? 'center' : 'flex-start'; style.alignItems = item.verticalAlignment === 'Bottom' ? 'flex-end' : item.verticalAlignment === 'Middle' ? 'center' : 'flex-start'; style.textShadow = item.enableOutline === false ? 'none' : `0 0 2px ${argb(item.outlineColor, 0xff000000)}` }
       else if (kind === 'container') style.background = 'transparent'
-      const content = kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: imageAssetKey(item.imageId, item.imageSource), item }) : textKind ? e(TextPreview, { item, zoom, fontFamily }) : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, t`缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || t(KIND_META[kind]?.[1]) || kind) : null
+      else if (kind === 'keyhint') { style.background = 'transparent'; style.border = 'none' }
+      const content = kind === 'keyhint' ? e(KeyHintPreview, { item, zoom }) : kind === 'image' && item.primitive === 'sprite' ? e(ImagePreview, { key: imageAssetKey(item.imageId, item.imageSource), item }) : textKind ? e(TextPreview, { item, zoom, fontFamily }) : kind === 'image' && item.primitive === 'missing' ? e('span', { className: 'qxsim-box-label' }, t`缺少图片 ${item.imageId || ''}`) : kind !== 'container' && kind !== 'image' ? e('span', { className: 'qxsim-box-label' }, item.name || t(KIND_META[kind]?.[1]) || kind) : null
       return e('div', { key: item.id, 'data-control-id': item.id, className: `qxsim-box ${kind}${item.instantiated ? ' dynamic' : ''}${item.pressed ? ' pressed' : ''}`, style }, content)
     }
 
@@ -928,6 +931,8 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
               DEVICE_GROUPS.map((group) => e('button', { key: group.key, className: snap.canvas.platform === group.key ? 'active' : '', title: t(group.title), onClick: () => switchDevice(group.key) }, t(group.label)))),
             e('select', { className: 'qxsim-control ratio', 'aria-label': t('屏幕比例'), value: snap.canvasId, onChange: (event) => void patch({ op: 'setCanvas', canvasId: event.target.value }).catch(() => {}) },
               devicePresets.map((preset) => e('option', { key: preset.id, value: preset.id }, `${presetRatio(preset)} · ${preset.width}×${preset.height}`))),
+            e('select', { className: 'qxsim-control', 'aria-label': t('按键图标预览'), title: t('按键图标预览'), value: snap.keyHintDevice || 'auto', onChange: event => void patch({ op: 'setKeyHintDevice', device: event.target.value }).catch(() => {}) },
+              [['auto', '按键：跟随画布'], ['keyboard', '按键：键鼠'], ['controller', '按键：手柄']].map(([value, label]) => e('option', { key: value, value }, t(label)))),
             e('select', { className: 'qxsim-control zoom', 'aria-label': t('画布缩放'), value: zoom, onChange: (event) => setZoom(event.target.value) }, [['fit', t('适应')], ['0.25', '25%'], ['0.5', '50%'], ['0.75', '75%'], ['1', '100%']].map(([value, label]) => e('option', { key: value, value }, label)))) : e('span', { className: 'qxsim-muted' }, page === 'logic' ? t('服务端逻辑：监听信号 / 自定义变量 / 玩家1-8 回传') : t('Lua 脚本资产编辑'))),
           e('div', { className: 'qxsim-actions' },
             saveToWorkspace ? e('button', { className: 'qxsim-action', title: t('保存完整存档到工作区'), onClick: () => { setError(''); setSavePath(snapRef.current?.storage?.path || 'qxqy-simulator.save.json') } }, t('保存存档')) : null,

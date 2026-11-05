@@ -137,7 +137,7 @@ const DEFAULTS = {
   button: { interactable: true, clickAudioId: 0, raycastTarget: true, defaultChildId: null, hoverChildId: null, pressedChildId: null, unavailableChildId: null, pressed: false },
   cursor: { raycastTarget: true },
   grid: { itemCount: 0, itemPrefabIndex: null, raycastTarget: true, interactable: true, showScrollBar: true, scrollDirection: 'Vertical', layoutConstraint: 'AutoWrap', layoutConstraintFixedCount: null, scrollProgress: 0, cellSizeX: 50, cellSizeY: 50, spacingX: 8, spacingY: 8, padding1X: 20, padding1Y: 20, padding2X: 20, padding2Y: 20, previewCount: 5 },
-  keyhint: { keyboardKeyCode: null, controllerKeyCode: null },
+  keyhint: { keyboardKeyCode: 'None', controllerKeyCode: 'None' },
   animation: { animationId: null, playSoundEffect: null, layer: null, raycastTarget: false },
   fullscreen: { animationId: null, playSoundEffect: null, raycastTarget: false },
   reference: { referencedPrefabIndex: null },

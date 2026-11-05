@@ -26,7 +26,7 @@ function observeOptions(args = {}) {
 
 function startOptions(args = {}) {
   const options = observeOptions(args)
-  for (const key of ['canvasId', 'playerCount', 'viewPlayerIndex', 'language']) {
+  for (const key of ['canvasId', 'playerCount', 'viewPlayerIndex', 'language', 'keyHintDevice']) {
     if (args[key] !== undefined && args[key] !== null && args[key] !== '') options[key] = args[key]
   }
   return options

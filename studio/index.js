@@ -1043,6 +1043,7 @@ export function createStudio(seed, options = {}) {
       playerCount: playPlayerCount,
       viewPlayerIndex: playViewPlayerIndex,
       language: options.language || '',
+      keyHintDevice: options.keyHintDevice ?? projects.server.keyHintDevice ?? 'auto',
     })
     return playGet(options)
   }

@@ -36,6 +36,23 @@ const all = (b, n) => fields(b).filter(([k]) => k === n).map(([, v]) => v)
 const first = (b, n) => all(b, n)[0] ?? Buffer.alloc(0)
 const details = u => all(first(first(u, 19), 1), 505).map(d => first(d, 503))
 const slot = (n, value) => msg(505, msg(503, msg(n, value)))
+test('key hint native keyboard sample 502=24 is preserved, and explicit None clears the old raw slot', () => {
+  // Independent wire leaf from the key-hint single-variable sample (7.1.0).
+  // field501=1 is only an unchanged default; no controller mapping is asserted.
+  const platforms = PLATFORMS.map((_, i) => msg(501, cat(num(501, i), msg(502, Buffer.alloc(0)))))
+  const content = cat(num(501, 1073744900), slot(13, msg(12, cat(...platforms))), slot(83, hex('a81f01b01f18')))
+  const input = envelope(msg(1, cat(msg(1, num(4, 1073744900)), str(3, 'hint'), num(5, 70), msg(19, msg(1, content)))))
+  const project = importGia(input).project
+  const key = project.root.children[0]
+  assert.equal(key.keyboardKeyCode, 24)
+  const studio = createStudio(project)
+  assert.equal(studio.get().boxes.find(b => b.kind === 'keyhint').keyHint.tokens[0].label, '1')
+  studio.patch({ op: 'set', id: key.id, key: 'keyboardKeyCode', value: 'None' })
+  const payload = exportGia(studio.archiveData().assets.client).buffer.subarray(20, -4)
+  const hint = all(payload, 1).flatMap(details).flatMap(d => all(d, 83))[0]
+  assert.equal(first(hint, 502), 1)
+})
+
 function unit(id, name, rotation, hidden, vertical) {
   const rt = msg(508, hex(rotation))
   const platforms = PLATFORMS.map((_, i) => msg(501, cat(num(501, i), msg(502, rt))))

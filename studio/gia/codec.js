@@ -6,6 +6,7 @@ import { createNode, walk } from '../ui/authoring.js'
 import { GUID_BASE, assertExportGuid, collectUsedGuids, isStoredGuid, isValidGuid, nextFreeGuid } from './guid.js'
 import { ensureClientAssetIndices, isValidAssetIndex } from './asset-indices.js'
 import { collectClientNodes } from './client-order.js'
+import { keyHintWireCode } from '../key-hints.js'
 
 export { GUID_BASE, collectUsedGuids, isValidGuid, nextFreeGuid }
 
@@ -445,8 +446,8 @@ function typeData(node, guid, guidById, warnings) {
   }
   if (node.kind === 'keyhint') {
     return [generic, ref(72, 95, 'empty82', 'keyHint', {
-      field501: Number.isFinite(raw.keyHintField501) ? Math.trunc(raw.keyHintField501) : (node.controllerKeyCode ?? 1),
-      field502: Number.isFinite(raw.keyHintField502) ? Math.trunc(raw.keyHintField502) : (node.keyboardKeyCode ?? 1),
+      field501: keyHintWireCode(node.controllerKeyCode ?? raw.keyHintField501, 'controller', node.name),
+      field502: keyHintWireCode(node.keyboardKeyCode ?? raw.keyHintField502, 'keyboard', node.name),
     }), footer]
   }
   if (node.kind === 'animation') {

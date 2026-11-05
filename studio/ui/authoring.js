@@ -12,6 +12,7 @@ import { assertPlatformNode, assertPlatformTransforms, getPlatformTransform } fr
 import { createGiaRaw } from '../gia/raw-fields.js'
 import { stampMissingGuids } from '../gia/guid.js'
 import { ensureClientAssetIndices, isValidAssetIndex } from '../gia/asset-indices.js'
+import { normalizeKeyHintCode } from '../key-hints.js'
 
 let _seq = 1
 export function nextId(prefix = 'n') {
@@ -171,13 +172,10 @@ export function createNode(kind, extras = {}) {
     if (!Object.hasOwn(extras.giaRaw || {}, 'gridField511')) node.giaRaw.gridField511 = Math.trunc(node.previewCount)
   }
   if (kind === 'keyhint') {
-    node.keyboardKeyCode = extras.keyboardKeyCode ?? extras.giaRaw?.keyHintField502 ?? null
-    node.controllerKeyCode = extras.controllerKeyCode ?? extras.giaRaw?.keyHintField501 ?? null
-    if (!Object.hasOwn(extras.giaRaw || {}, 'keyHintField502')) {
-      node.giaRaw.keyHintField502 = Math.trunc(node.keyboardKeyCode ?? 1)
-    }
-    if (!Object.hasOwn(extras.giaRaw || {}, 'keyHintField501')) {
-      node.giaRaw.keyHintField501 = Math.trunc(node.controllerKeyCode ?? 1)
+    for (const [device, rawKey] of [['keyboard', 'keyHintField502'], ['controller', 'keyHintField501']]) {
+      const value = normalizeKeyHintCode(extras[`${device}KeyCode`] ?? extras.giaRaw?.[rawKey] ?? 1, device)
+      node[`${device}KeyCode`] = value
+      if (typeof value === 'number') node.giaRaw[rawKey] = value
     }
   }
   if (kind === 'animation' || kind === 'fullscreen') {

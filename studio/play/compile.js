@@ -8,6 +8,7 @@
 import { CANVAS_PRESETS } from '../constants.js'
 import { selectedTemplateRoot } from '../ui/authoring.js'
 import { readCurrentTransform } from '../ui/sync.js'
+import { keyHintCode } from '../key-hints.js'
 
 const KIND_TO_RUNTIME = {
   container: 'container',
@@ -136,8 +137,8 @@ export function compileControl(node, canvasId, scriptsByNode = null) {
     spec.previewCount = node.previewCount
   }
   if (node.kind === 'keyhint') {
-    spec.keyboardKeyCode = node.keyboardKeyCode
-    spec.controllerKeyCode = node.controllerKeyCode
+    spec.keyboardKeyCode = keyHintCode(node.keyboardKeyCode, 'keyboard')
+    spec.controllerKeyCode = keyHintCode(node.controllerKeyCode, 'controller')
   }
   if (node.kind === 'animation' || node.kind === 'fullscreen') {
     spec.raycastTarget = false
