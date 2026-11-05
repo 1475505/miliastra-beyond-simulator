@@ -117,7 +117,8 @@ export class SimulatorController {
     const absolute = resolveWorkspaceOutput(this.activeWorkspacePath(), path)
     if (existsSync(absolute)) {
       const original = this.archivePath ? resolveWorkspaceOutput(this.activeWorkspacePath(), this.archivePath) : ''
-      if (absolute !== original || contentHash(readFileSync(absolute)) !== this.archiveStamp) throw new Error('File changed or already exists; load it again or save under a new path')
+      if (absolute !== original) throw new Error('保存失败：目标文件已存在，但当前会话未关联此文件。请改用一个未使用的存档文件名保存；如需使用已有文件，请先导出「资产包 JSON（三类合一）」备份当前修改，再从顶部「⤓ 工作区存档」选择该文件。')
+      if (contentHash(readFileSync(absolute)) !== this.archiveStamp) throw new Error('保存失败：磁盘上的存档已被外部修改，当前版本无法直接覆盖。请改用一个未使用的存档文件名保存；如需使用磁盘上的最新版本，请先导出「资产包 JSON（三类合一）」备份当前修改，再从顶部「⤓ 工作区存档」重新选择该文件。')
     }
     return this.saveArchive(path)
   }

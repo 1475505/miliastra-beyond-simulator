@@ -58,7 +58,7 @@ test('AI save checks revisions and existing files before persisting the current 
   assert.throws(() => controller.scriptSyncAction('save', { path: 'game.save.json', expectedRevision: revision - 1 }), /revision conflict/)
   assert.equal(existsSync(join(workspace, 'game.save.json')), false)
   writeFileSync(join(workspace, 'existing.json'), '-- unrelated')
-  assert.throws(() => controller.scriptSyncAction('save', { path: 'existing.json', expectedRevision: revision }), /already exists/)
+  assert.throws(() => controller.scriptSyncAction('save', { path: 'existing.json', expectedRevision: revision }), /目标文件已存在/)
   assert.equal(readFileSync(join(workspace, 'existing.json'), 'utf8'), '-- unrelated')
   const saved = controller.scriptSyncAction('save', { path: 'game.save.json', expectedRevision: revision })
   assert.equal(saved.path, 'game.save.json')
@@ -66,7 +66,7 @@ test('AI save checks revisions and existing files before persisting the current 
   assert.equal(controller.scriptSyncAction('save', { expectedRevision: revision }).path, saved.path)
   assert.equal(JSON.parse(readFileSync(join(workspace, saved.path), 'utf8')).assets.scripts[0].source, '-- second')
   writeFileSync(join(workspace, saved.path), '-- external changes')
-  assert.throws(() => controller.scriptSyncAction('save', { expectedRevision: revision }), /File changed/)
+  assert.throws(() => controller.scriptSyncAction('save', { expectedRevision: revision }), /存档已被外部修改/)
   assert.equal(readFileSync(join(workspace, saved.path), 'utf8'), '-- external changes')
 })
 

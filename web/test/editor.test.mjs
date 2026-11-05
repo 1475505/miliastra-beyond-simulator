@@ -31,11 +31,11 @@ test('editor isolates tabs, preserves sessions on reload, and protects disk save
   assert.equal(b.save.name, 'Editor A')
   a = (await call('a', 'patch', { op: { op: 'renameSave', name: 'Editor A2', expectedRevision: a.version } })).value
   assert.equal((await call('a', 'save', { path: saved.value.path, expectedRevision: a.version })).status, 200)
-  assert.match((await call('b', 'save', { path: saved.value.path, expectedRevision: b.version })).error, /File changed/)
+  assert.match((await call('b', 'save', { path: saved.value.path, expectedRevision: b.version })).error, /存档已被外部修改/)
   assert.match((await call('a', 'save', { path: '../outside.json', expectedRevision: a.version })).error, /workspace/)
   assert.match((await call('a', 'save', { path: 'other.json', expectedRevision: -1 })).error, /revision conflict/)
   writeFileSync(path, readFileSync(path, 'utf8') + ' ')
-  assert.match((await call('a', 'save', { path: saved.value.path, expectedRevision: a.version })).error, /File changed/)
+  assert.match((await call('a', 'save', { path: saved.value.path, expectedRevision: a.version })).error, /存档已被外部修改/)
   const started = await call('a', 'play', { action: 'start', args: { view: true } })
   assert.equal(started.value.scene.format, 'tree-v1')
   assert.equal((await call('a', 'play', { action: 'pause' })).value.paused, true)

@@ -428,6 +428,8 @@ export default {
   "例如 my-game.save.json": "e.g. my-game.save.json",
   "填写工作区里的存档文件名或路径。保存设置时会一起保存项目，下次打开存档即可复用。": "Enter a save filename or path within the workspace. Saving these settings also saves the project so they are available next time.",
   "保存存档并查看更新": "Save and Preview Changes",
+  "保存失败：目标文件已存在，但当前会话未关联此文件。请改用一个未使用的存档文件名保存；如需使用已有文件，请先导出「资产包 JSON（三类合一）」备份当前修改，再从顶部「⤓ 工作区存档」选择该文件。": "Save failed: the destination file already exists, but this session is not linked to it. Save under a new, unused filename. To use the existing file, first back up your current edits via Export → Complete Save JSON (all three asset types), then select the file from “⤓ Workspace Saves” in the top toolbar.",
+  "保存失败：磁盘上的存档已被外部修改，当前版本无法直接覆盖。请改用一个未使用的存档文件名保存；如需使用磁盘上的最新版本，请先导出「资产包 JSON（三类合一）」备份当前修改，再从顶部「⤓ 工作区存档」重新选择该文件。": "Save failed: the save file on disk was modified outside this session and cannot be overwritten with the current version. Save under a new, unused filename. To use the latest version on disk, first back up your current edits via Export → Complete Save JSON (all three asset types), then select the file again from “⤓ Workspace Saves” in the top toolbar.",
   "请先填写千星沙箱脚本文件夹，并点击「保存设置」。": "Enter the Miliastra Sandbox script folder and click “Save Settings” first.",
   "脚本位置已改动，请先点击「保存设置」。": "Script folders changed. Click “Save Settings” first.",
   "请先填写模拟器存档文件名。": "Enter a simulator save filename first.",
