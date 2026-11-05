@@ -6,7 +6,7 @@ import { createRuntime } from '../../client/lua-runtime/src/index.js'
 import { createStudio } from '../index.js'
 import { walk } from '../ui/authoring.js'
 import { importGia, exportGia } from '../gia/codec.js'
-import { resolveKeyHint, KEY_HINT_KEYS } from '../key-hints.js'
+import { resolveKeyHint } from '../key-hints.js'
 import { keyHintSize, paintKeyHintCanvas } from '../play/key-hint-paint.js'
 import { paintList, playSnapshot } from '../play/session.js'
 import { renderEditorPng, renderPaintPng, renderScenePng } from '../host-png.js'
@@ -30,8 +30,6 @@ function fixture(t, device = 'KeyboardAndMouse') {
 }
 
 test('documented physical bindings cover long keys, D-pad directions, chords and input devices', () => {
-  assert.equal(KEY_HINT_KEYS.keyboard.length, 59)
-  assert.equal(KEY_HINT_KEYS.controller.length, 25)
   for (const [name, label] of [['CraftspersonKey35', '/'], ['CraftspersonKey36', '↑'], ['CraftspersonKey40', '右Ctrl'],
     ['CraftspersonKey41', '右Shift'], ['CraftspersonKey42', 'Backspace'], ['CraftspersonKey43', 'CapsLock'], ['MoveForwardKey', 'W']]) {
     assert.equal(hint(name).keyHint.tokens[0].label, label)

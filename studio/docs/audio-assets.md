@@ -90,7 +90,7 @@ https://oss.070077.xyz/audio/50888.mp3
 证据范围为Windows x64 / Node22.23.2 / Edge。`documented / official_document` 指本地API签名；`observed / simulator / not_required` 指实现验证。真机暂停/结束边界未独立确认。
 
 - `client/lua-runtime/test/audio.test.mjs`：真实 Lua 的返回值、独立实例、停止/自然结束、参数拒绝、回收上限。
-- `studio/test/audio-assets.test.mjs`：固定目录、按需/并发/离线/损坏恢复/失败退避、多人隔离、非消费式快照。
+- `studio/test/audio-assets.test.mjs`：时长单位和非法 ID、按需/并发/离线/损坏恢复/失败退避、多人隔离、非消费式快照。
 - `studio/test/audio-player.test.mjs`：独立声音叠加、轮询去重、暂停定位、换玩家、冷下载取消、自然结束后的首次加载、自动播放解锁与销毁竞态。
 - `web/test/audio-assets.test.mjs`：HTTP 缓存/ETag/Range；设置 `QXQY_BROWSER` 后运行生产试玩页面，由真实 Lua 触发，使用 Web Audio 解码合成 MP3，检查非零波形、真实按键解锁、播放/停止计数与冷加载取消。
 - `dsh-plugin/test/image-assets.test.mjs` 同时覆盖 DSH 注册的音频 HTTP 路由及缓存复用。

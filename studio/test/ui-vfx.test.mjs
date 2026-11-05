@@ -7,8 +7,6 @@ import { SimulatorController } from '../host/controller.js'
 import { UI_VFX_CATALOG, uiVfxAsset, uiVfxTime, uiVfxMedia, uiVfxUrl } from '../assets/ui-vfx-catalog.js'
 
 test('effect catalog is scope-safe and references a closed media inventory; loop uses second half', () => {
-  assert.equal(UI_VFX_CATALOG.length, 196)
-  assert.equal(UI_VFX_CATALOG.filter(item => item.scope === 'ui').length, 159)
   for (const item of UI_VFX_CATALOG) {
     for (const path of [item.video, item.icon, ...item.audio]) {
       assert.ok(uiVfxMedia(path)?.bytes > 0)

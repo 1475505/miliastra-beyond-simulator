@@ -56,10 +56,10 @@ Harness可选locale服务负责刷新`conversation.view`的缓存标签，插件
 
 ## 验证与边界
 
-- `studio/test/i18n.test.mjs`：语言选择、占位参数、内容保留及真实inspector的类型/枚举显示。
+- `studio/test/i18n.test.mjs`：语言选择、占位参数和用户内容保留。
 - `studio/test/translation-terms.test.mjs`：查询批处理、等值匹配与失败语义；不访问在线服务。
 - `studio/test/system-language.test.mjs`、`updates.test.mjs`：系统来源、回环范围、分产品版本匹配、缓存与重试。
-- `web/test/i18n-footer-browser.test.mjs`、`system-language.test.mjs`：真实浏览器语言持久化、草稿/存档保留、联系弹窗与更新重试。字体配置用隔离夹具。
+- `web/test/i18n-footer-browser.test.mjs`、`system-language.test.mjs`：真实浏览器控件/枚举翻译、语言持久化、草稿/存档保留、联系弹窗与更新重试。字体配置用隔离夹具。
 - `scripts/smoke-harness-language.mjs`：真实Harness ModuleLoader、延迟语言响应、缓存标签和试玩页；通过配置`QXQY_BROWSER`的`test:harness`运行。
 
 2026-10-18 Windows / Node22.23.2及Harness0.2.0-rc.2、0.2.1-rc.2验收为`observed / simulator / not_required`；macOS/Linux仅合成平台夹具，完整签名Desktop和游戏英文界面不在该验收范围。模拟器测试不能证明译法本身或游戏真机行为。

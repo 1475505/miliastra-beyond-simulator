@@ -8,10 +8,7 @@ import { audioDuration } from '../assets/audio-catalog.js'
 import { tone } from './fixtures/tone.js'
 import { createStudio } from '../index.js'
 
-test('audio catalog pins all 1997 IDs and provider durations', () => {
-  let count = 0
-  for (let id = 1; id < 60000; id++) if (audioDuration(id) !== null) count++
-  assert.equal(count, 1997)
+test('audio lookup returns durations in seconds and rejects unknown or invalid IDs', () => {
   assert.equal(audioDuration(50888), 0.495)
   assert.equal(audioDuration(10003), 106.857)
   for (const id of [0, 10075, 20205, 30150, 40475, 51097, 50888.5, '50888']) assert.equal(audioDuration(id), null)

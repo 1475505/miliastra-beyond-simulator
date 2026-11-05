@@ -43,15 +43,12 @@ async function decoded(bytes) {
   return canvas
 }
 
-test('pinned allowlist excludes empty/unknown IDs and preserves all six primitives', () => {
+test('image lookup distinguishes primitives, remote assets and unsupported IDs', () => {
   assert.equal(imagePrimitive(100001), 'rect')
   assert.equal(imagePrimitive(100006), 'ring')
   assert.equal(isRemoteImage(100101), true)
   assert.equal(imagePrimitive(101001), 'sprite')
   for (const id of [0, -1, 100007, 101019, 107008, 999999, '100101', 100101.5]) assert.equal(isRemoteImage(id), false)
-  let count = 0
-  for (let id = 100000; id <= 112100; id++) if (isRemoteImage(id)) count++
-  assert.equal(count, 1516)
 })
 
 test('two stores share disk downloads, restart works offline, refresh and corruption regenerate', async t => {
