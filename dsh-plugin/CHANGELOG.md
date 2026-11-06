@@ -2,6 +2,11 @@
 
 上级：[DSH 插件](README.md)。这里统一维护 DSH、Web、MCP 的用户可见发布变化；各模块 README 不重复摘录。当前安装、契约和支持边界回所属模块，源码版本查各产品 `package.json`，公开版本查 registry / Release。
 
+## 未发布
+
+- 修复 TweenSequence 插入动画/回调错误推迟后续 Append、AppendInterval、AppendCallback 的问题，整体完成仍等待最晚结束项。
+- 按 PC 真机反馈对齐连续 Join：同一追加组仅第一个 Join 执行，后续加入项保持未播放。实测范围与未覆盖边界见 [Runtime 契约](../client/lua-runtime/docs/observed-contract.md#tweensequence-追加与插入排程2026-11-06twpar)。
+
 ## v2.2.4 · 2026-11-06
 
 仅 DSH 插件更新，Web/MCP 版本不变。

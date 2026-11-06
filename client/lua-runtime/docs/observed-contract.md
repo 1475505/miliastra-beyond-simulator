@@ -37,6 +37,14 @@
 - 当前桥接仅接受 true/false；nil、遗漏实参及其他非布尔值在转换前报错，拒绝后值不变。对其他类型的统一拒绝是模拟器防错策略，未逐类真机验证，不扩展到其他方法或宿主内部 scene 调用。
 - 回归：`test/set-visible.test.mjs` 覆盖无效类型、拒绝原子性、active 与 OnUpdate 不受显隐影响；`observed / simulator`，完整游戏真机复验仍为 `pending`。
 
+## TweenSequence 追加与插入排程（2026-11-06，TWPAR）
+
+- 来源：PC 真机/模拟器对照视频及 20 例 JSON 存档，探针构建标记 `2.2.0-20261103`，实际客户端版本未知。完整工作区的 `probes/tween-parallel-20261106/README.md` 保存原件哈希、视频时点和前后重放；真机结论统一见根 `knowledge/fact.md` 的 TWPAR 条目。视频可读泳道为 `observed / device / failed`（相对于旧模拟器参考行为），未提供真机 print 报告。
+- 排程实现（`src/tween.js` `_schedule`）：追加游标只由 `Append`、`AppendInterval`、首个有效 `Join` 推进，`AppendCallback` 位于该游标；`Insert`/`InsertCallback` 使用绝对时间且不改变它。序列结束取追加末尾与全部插入项末尾的最大值，`SetOnComplete` 由该结束点触发。T15/T17/T19/T20 验证追加独立性，T18 的画面 PASS 支持尾回调早于插入项及整体完成。
+- 连续 Join：同一追加组仅排入第一个 Join，后续项不启动、不写值、不触发其回调、不延长组时长。T03–T06 视频确认不启动及无子项完成；不延长组时长为采用策略，T06 视频未展开尾回调/整体完成的具体时刻。保留旧 TWSEM 的同刻事件顺序和 TWALL 的子 Tween 循环槽位。
+- 未测边界的策略（`inferred / simulator`，对应真机 `pending`）：新的 `Append`/`AppendInterval` 开启新的 Join 名额；回调和 Insert 不重开；无 Append 时首个 Join 从零开始。纯 Insert 后追加等待/尾回调沿同一游标规则处理（用户已报告，视频未展示 T08/T14）。循环、Restart、Pause、Complete/Kill 复用同一排程；本轮组合的真机边界未测。这些策略不证明内部实际有两条序列，也不证明整个序列全局只允许一个 Join。
+- 回归：`test/tween-sequence.test.mjs` 通过真实 Lua 验证子项位置/回调、插入后的追加、尾回调与整体完成，并覆盖循环重播、暂停、强制完成与清理；用例不依赖外部原件。原 JSON 内置的 PASS/DIFF 参考值来自旧行为，不能以它全部 PASS 作为真机一致性标准。修复在共享 Runtime 中生效，DSH/Web/MCP 须重建并重启所用宿主加载新代码。
+
 ## Tween 缓动、生命周期边界与字段读回（2026-09-29，TWALL v1）
 
 - 来源：TWALL v1 真机探针，PC，2026-09-29 聊天粘贴日志（完整 294 帧已存档，原始文件待补），见 `probes/tween-coverage-20260929/` 与根 `knowledge/fact.md` 同名条目。`evidence_source=observed`，运行端 `device`。

@@ -286,40 +286,49 @@ export class TweenSequence {
   }
 
   _schedule() {
-    let t = 0
-    // Join starts alongside the latest appended tween or interval.  Keep its
-    // start separately from the sequence cursor: a Join must not be delayed
-    // until the preceding Append has finished.
+    // TWPAR (PC, 2026-11-06): Insert/InsertCallback extend total duration but
+    // do not move the Append cursor (T15/T17/T19/T20). Append callbacks and
+    // intervals use that cursor; completion waits for both parts (T18).
+    let appendEnd = 0
+    let insertEnd = 0
     let lastAppendStart = 0
     let hasAppend = false
+    let hasJoin = false
     const entries = []
     const span = (tween) => tween.duration * tween.loopCount
     for (const s of this.steps) {
       if (s.kind === 'tween' && s.parallel) {
-        const at = hasAppend ? lastAppendStart : t
+        // T03-T06: only the first Join in a group runs; later children never
+        // start or fire callbacks. A new appended tween/interval opens another
+        // Join slot (simulator policy; multiple groups are not device-tested).
+        if (hasJoin) continue
+        hasJoin = true
+        const at = hasAppend ? lastAppendStart : appendEnd
         entries.push({ at, tween: s.tween })
-        t = Math.max(t, at + span(s.tween))
+        appendEnd = Math.max(appendEnd, at + span(s.tween))
       } else if (s.kind === 'tween') {
-        entries.push({ at: t, tween: s.tween })
-        lastAppendStart = t
+        entries.push({ at: appendEnd, tween: s.tween })
+        lastAppendStart = appendEnd
         hasAppend = true
-        t += span(s.tween)
+        hasJoin = false
+        appendEnd += span(s.tween)
       } else if (s.kind === 'interval') {
-        lastAppendStart = t
+        lastAppendStart = appendEnd
         hasAppend = true
-        t += s.duration
+        hasJoin = false
+        appendEnd += s.duration
       } else if (s.kind === 'callback') {
-        entries.push({ at: t, fn: s.fn })
+        entries.push({ at: appendEnd, fn: s.fn })
       } else if (s.kind === 'insert') {
         entries.push({ at: s.time, tween: s.tween })
-        t = Math.max(t, s.time + span(s.tween))
+        insertEnd = Math.max(insertEnd, s.time + span(s.tween))
       } else if (s.kind === 'insertCb') {
         entries.push({ at: s.time, fn: s.fn })
-        t = Math.max(t, s.time)
+        insertEnd = Math.max(insertEnd, s.time)
       }
     }
     this._entries = entries.map((entry, index) => ({ ...entry, index, end: entry.tween ? entry.at + span(entry.tween) : entry.at }))
-    this._end = t
+    this._end = Math.max(appendEnd, insertEnd)
     this._resetEntries()
   }
 
