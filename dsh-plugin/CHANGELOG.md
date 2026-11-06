@@ -2,6 +2,15 @@
 
 上级：[DSH 插件](README.md)。这里统一维护 DSH、Web、MCP 的用户可见发布变化；各模块 README 不重复摘录。当前安装、契约和支持边界回所属模块，源码版本查各产品 `package.json`，公开版本查 registry / Release。
 
+## v2.2.4 · 2026-11-06
+
+仅 DSH 插件更新，Web/MCP 版本不变。
+
+- 修复 Harness 0.2.2 升级后游戏制作 Agent 预设及历史会话无法加载的问题。
+- 修复历史会话的模拟器工作区绑定，兼容旧版 Harness。
+
+更新后完整重启 Harness，再打开原会话。详见[历史恢复指引](docs/session-recovery.md)。
+
 ## v2.2.3 · 2026-11-06
 
 版本：DSH 2.2.3 / Web 0.5.3 / MCP 0.5.3

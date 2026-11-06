@@ -4,12 +4,12 @@
 
 ## 安装与更新
 
-需要Node.js22+和DeepSeek Harness；GitHub源码安装另需Git。任选一种：
+插件需要Node.js22+，Harness 0.2.2宿主要求Node.js24.9+；GitHub源码安装另需Git。以下为CLI Web安装示例，Desktop内置命令与profile操作见[恢复指引](docs/session-recovery.md#用户恢复步骤)。任选一种：
 
 ```powershell
 dsh plugin --profile web add dsh-plugin-beyond-simulator
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.3.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.4.tgz
 ```
 
 更新也用`add`，之后重启Harness；`dsh --profile web --dump-config`检查加载，`dsh web`启动。tarball文件名以当次`release/manifest.json`为准，在其他目录安装时使用绝对路径。
@@ -21,6 +21,7 @@ dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.3.tgz
 - [版本公告](CHANGELOG.md)：面向使用者的发布变化。
 - [模拟器操作Skill](../skill/SKILL.md)：工具工作流；构建复制到包内`dsh-plugin/skill.md`，通过独立skills组件注册`qxqy-simulator`。
 - [游戏制作预设](../agent/wonderland-lua-builder/README.md)：源码、七步流程与行为评估。构建嵌入声明式预设，并携带旧宿主目录副本；已有用户副本不覆盖。
+- [升级后会话无法加载与历史恢复](docs/session-recovery.md)：0.2.2 预设入口迁移、应急修复、原始日志位置与导出。
 - [共用编辑器](../editor-ui/README.md)：UI、Lua、服务端逻辑、主题、语言、字体与试玩窗口。
 - [Studio专题](../studio/README.md#专题树)：图片/音频/动效缓存、输入、部分导出、索引与脚本同步。
 
@@ -67,8 +68,8 @@ DSH Desktop0.2拒绝页面子窗口；插件从2.0.8起在保存成功后回退�
 
 ## 验证入口与边界
 
-构建/安装检查统一见[分发验收](../DISTRIBUTION.md#验收入口与证据范围)。`test:packages`覆盖dsh-tools0.1.0-rc.6、0.2.0-rc.2、0.2.1-rc.2；`test:harness`默认0.2.1-rc.2，可传已有CLI路径测旧版本。浏览器语言验收另设`QXQY_BROWSER`。
+构建/安装检查统一见[分发验收](../DISTRIBUTION.md#验收入口与证据范围)。`test:packages`覆盖dsh-tools0.1.0-rc.6、0.2.0-rc.2、0.2.1-rc.2、0.2.2-rc.1；`test:harness`默认0.2.2-rc.1，可传已有CLI路径测旧版本。DSH 0.2.2 要求 Node.js 24.9+（Desktop 使用自带运行时）；Web/MCP 的 Node.js 最低版本仍查各自清单。浏览器语言验收另设`QXQY_BROWSER`。
 
 `test/plugin.test.mjs` 与 `test/lifecycle.test.mjs` 只维护宿主协议、注册工具、会话隔离和 Worker 生命周期；共享编辑、存档、GIA 与 PNG 的功能回归归 Studio，安装包与真实 Harness 检查继续验证交付边界。
 
-安装与完整Web宿主证据范围为Windows / Node22.23.2，`observed / simulator / not_required`；不涵盖真实模型/Agent Team、完整签名Desktop、Linux/macOS、SSH或子路径public-url部署。Windows隔离Git安装以`npm_config_package_import_method=copy`避免已加载Canvas DLL的unlink/EPERM冲突；该文件占用错误与构建审批拒绝不同。
+本轮安装与完整Web宿主证据范围为Windows / Node24.21.0 / Harness0.2.1-rc.2与0.2.2-rc.1，`observed / simulator / not_required`；恢复用例见[会话恢复](docs/session-recovery.md#依据与回归入口)。不涵盖真实模型/Agent Team、完整签名Desktop、Linux/macOS、SSH或子路径public-url部署。Windows隔离Git安装以`npm_config_package_import_method=copy`避免已加载Canvas DLL的unlink/EPERM冲突；该文件占用错误与构建审批拒绝不同。

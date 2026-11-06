@@ -8,16 +8,23 @@ import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot'
 import { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import * as simulator from 'dsh-plugin-beyond-simulator'
 
-export const inject = ['webServer', 'tools', 'agentPresets', 'skills', 'sessions', 'systemPrompt', 'workspaceController', 'sessionController']
+export const inject = ['webServer', 'tools', 'agentPresets', 'skills', 'sessions', 'agents', 'sessionPersistence', 'systemPrompt', 'workspaceController', 'sessionController']
 export function apply(ctx, config) {
   ctx.webServer.register({ kind: 'exact', path: '/qxqy-smoke', async handler(_request, response) {
     response.setHeader('content-type', 'application/json')
     const sessionId = 'harness-smoke'
-    const session = ctx.sessions.get(sessionId) || ctx.sessions.create(sessionId, { meta: { cwd: config.workspace } })
-    const agent = { id: sessionId, session }
+    let owned
+    let agent
+    const presetId = 'wonderland-lua-builder'
+    const agentOptions = { provider: 'deepseek', model: 'deepseek-chat' }
+    const setup = async agentCtx => { await ctx.agentPresets.mount(agentCtx, presetId) }
     let callId = 0
     const call = async (name, args = {}) => {
-      const result = await ctx.tools.execute({ callId: `smoke-${++callId}`, name, arguments: args, agent, signal: AbortSignal.timeout(10_000) })
+      const id = `smoke-${++callId}`
+      const signal = AbortSignal.timeout(10_000)
+      const result = typeof ctx.tools.setExecutor === 'function'
+        ? (await ctx.tools.execute({ calls: [{ type: 'tool-call', id, name, arguments: JSON.stringify(args) }], agent, signal })).results[0].result
+        : await ctx.tools.execute({ callId: id, name, arguments: args, agent, signal })
       assert.equal(result.isError, false, JSON.stringify(result))
       return result
     }
@@ -38,11 +45,11 @@ export function apply(ctx, config) {
       assert.deepEqual(await readLanguage({ 'x-forwarded-for': '192.0.2.1' }), { language: '', source: 'browser' })
       const require = createRequire(import.meta.url)
       const manifest = JSON.parse(await readFile(require.resolve('dsh-plugin-beyond-simulator/package.json'), 'utf8'))
-      for (const version of ['0.1.0-rc.6', '0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.1', '0.2.1-rc.2']) {
+      for (const version of ['0.1.0-rc.6', '0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.2-rc.1']) {
         assert.equal(evaluatePluginCompatibility(manifest, {}, version), undefined, version)
       }
       assert.ok(evaluatePluginCompatibility(manifest, {}, '0.3.0-rc.1'), 'Do not silently admit a future minor API')
-      const preset = await ctx.agentPresets.resolve('wonderland-lua-builder')
+      const preset = await ctx.agentPresets.resolve(presetId)
       assert.equal(preset.broken, undefined, JSON.stringify(preset))
       const lease = await ctx.agentPresets.acquireScope(preset.id)
       try {
@@ -60,7 +67,38 @@ export function apply(ctx, config) {
         assert.match(skill.content, /PREFLIGHT/)
         assert.equal(skill.resourceBase.kind, 'directory')
         assert.match(await readFile(join(skill.resourceBase.path, 'references/workflow.md'), 'utf8'), /PREFLIGHT/)
+        for (const name of ['list_agents', 'send_message', 'subagent', 'qxqy_studio_get']) {
+          assert.equal(ctx.tools.schemas(lease.key).filter(tool => tool.name === name).length, 1, `${name} is available exactly once in the preset`)
+        }
       } finally { await lease[Symbol.asyncDispose]() }
+      // Recover the SAME stored identity after its Agent is gone. Merely listing
+      // a preset or reading its Skill misses mount failures on historical chats.
+      owned = await ctx.agents.create({ sessionId, meta: { cwd: config.workspace, agentPreset: presetId }, agentOptions, setup })
+      const historyText = 'Persisted game-studio conversation survives preset reload'
+      owned.agent.session.append('turn/start', { turn: 1 })
+      owned.agent.session.append('user/message', { id: 'recovery-message', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: historyText }] }, { surfaceOp: 'append' })
+      owned.agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      await ctx.sessions.flush(owned.agent.session)
+      await owned.dispose()
+      owned = undefined
+      assert.equal(ctx.agents.get(sessionId), undefined)
+      const stored = await ctx.sessionPersistence.open(sessionId, 'read')
+      try {
+        assert.equal(stored.header.agentPreset, presetId)
+        assert.match(JSON.stringify(await stored.read()), new RegExp(historyText))
+      } finally { await stored.close() }
+      assert.equal(await simulator.lookupSessionWorkspace(sessionId, {
+        sessions: ctx.sessions, sessionPersistence: ctx.sessionPersistence,
+      }), config.workspace, 'cold history retains its workspace before Agent activation')
+      owned = await ctx.agents.resume({ resumeSessionId: sessionId, agentOptions, setup })
+      agent = owned.agent
+      assert.equal(agent.id, sessionId)
+      assert.equal(ctx.agentPresets.composedPreset(agent.ctx), presetId)
+      assert.match(JSON.stringify(agent.session.snapshotEvents()), new RegExp(historyText))
+      const { workspace } = await ctx.workspaceController.create({ path: config.workspace })
+      const created = await ctx.sessionController.create({ workspaceId: workspace.workspaceId, agentPreset: presetId })
+      assert.equal(created.agentPreset, presetId)
+      assert.equal(ctx.agentPresets.composedPreset(ctx.agents.get(created.sessionId).ctx), presetId)
       assert.ok(await ctx.skills.get('qxqy-simulator'))
       assert.equal(ctx.tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 8)
       const before = (await call('qxqy_studio_get')).value
@@ -101,8 +139,6 @@ export function apply(ctx, config) {
         }
       }
       if (config.languageBrowser) {
-        const { workspace } = await ctx.workspaceController.create({ path: config.workspace })
-        const created = await ctx.sessionController.create({ workspaceId: workspace.workspaceId })
         // A synthetic persisted message exposes the normal conversation tabs;
         // no prompt is submitted to an Agent or model.
         const uiSession = ctx.sessions.get(created.sessionId)
@@ -121,6 +157,6 @@ export function apply(ctx, config) {
     } catch (error) {
       response.statusCode = 500
       response.end(JSON.stringify({ ok: false, error: error.stack || String(error) }))
-    }
+    } finally { await owned?.dispose() }
   } })
 }

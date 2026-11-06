@@ -138,10 +138,15 @@ export async function lookupSessionWorkspace(sessionId, services = {}) {
   const live = services.sessions?.get?.(sessionId)
   const liveCwd = headerWorkspace(live?.header)
   if (liveCwd) return liveCwd
-  const inspect = services.sessionPersistence?.inspect
-  if (typeof inspect !== 'function') return ''
+  const persistence = services.sessionPersistence
   try {
-    const inspection = await inspect.call(services.sessionPersistence, sessionId)
+    // Current Harness exposes header-only stat; inspect belonged to older
+    // hosts. Cold history views need the cwd before an Agent is activated.
+    if (typeof persistence?.stat === 'function') {
+      return headerWorkspace((await persistence.stat(sessionId))?.header)
+    }
+    if (typeof persistence?.inspect !== 'function') return ''
+    const inspection = await persistence.inspect(sessionId)
     return headerWorkspace(inspection?.meta)
   } catch {
     return ''

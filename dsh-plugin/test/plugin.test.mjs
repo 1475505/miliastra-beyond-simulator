@@ -142,8 +142,19 @@ test('sessionWorkspace reads the DSH session header cwd and tolerates missing co
   assert.equal(sessionWorkspace(), '')
 })
 
-test('lookupSessionWorkspace prefers the live session then persistence inspect', async () => {
+test('lookupSessionWorkspace reads live and cold headers across Harness persistence APIs', async () => {
   assert.equal(await lookupSessionWorkspace('s1', { sessions: { get: () => ({ header: { cwd: testWorkspace } }) } }), testWorkspace)
+  const persistence = {
+    async stat(id) { assert.equal(id, 's1'); assert.equal(this, persistence); return { header: { cwd: 'E:\\cold-history' } } },
+    async inspect() { assert.fail('stat must not read the entire conversation') },
+  }
+  assert.equal(await lookupSessionWorkspace('s1', { sessionPersistence: persistence }), 'E:\\cold-history')
+  assert.equal(await lookupSessionWorkspace('s1', {
+    sessions: { get: () => ({ header: { cwd: testWorkspace } }) },
+    sessionPersistence: { stat() { assert.fail('live session takes precedence') } },
+  }), testWorkspace)
+  assert.equal(await lookupSessionWorkspace('s1', { sessionPersistence: { stat: async () => undefined } }), '')
+  assert.equal(await lookupSessionWorkspace('s1', { sessionPersistence: { stat: async () => { throw new Error('unreadable') } } }), '')
   assert.equal(await lookupSessionWorkspace('s1', {
     sessions: { get: () => undefined }, sessionPersistence: { inspect: async () => ({ meta: { cwd: 'E:\\from-disk' } }) },
   }), 'E:\\from-disk')

@@ -11,6 +11,7 @@ const harnessVersions = [
   { tools: '0.1.0-rc.6', cordis: '4.0.1' },
   { tools: '0.2.0-rc.2', cordis: '4.0.4' },
   { tools: '0.2.1-rc.2', cordis: '4.0.5' },
+  { tools: '0.2.2-rc.1', cordis: '4.1.0', executor: true },
 ]
 for (const harness of harnessVersions) {
   const destination = await mkdtemp(join(tmpdir(), 'qxqy-package-smoke-'))
@@ -21,7 +22,8 @@ for (const harness of harnessVersions) {
     await writeFile(join(destination, 'package.json'), JSON.stringify({ private: true, type: 'module' }))
     npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock',
       ...artifacts.map(a => join(root, 'release', a.filename)),
-      `@deepseek-ai/dsh-tools@${harness.tools}`, `@deepseek-ai/cordis@${harness.cordis}`], { cwd: destination, stdio: 'inherit', timeout: 180000 })
+      `@deepseek-ai/dsh-tools@${harness.tools}`, `@deepseek-ai/cordis@${harness.cordis}`,
+      ...(harness.executor ? [`@deepseek-ai/dsh-tool-executor-native@${harness.tools}`] : [])], { cwd: destination, stdio: 'inherit', timeout: 180000 })
     await copyFile(join(root, 'scripts/smoke-installed.mjs'), join(destination, 'smoke.mjs'))
     await copyFile(join(root, 'scripts/smoke-dsh-tools.mjs'), join(destination, 'smoke-dsh-tools.mjs'))
     const license = await readFile(join(root, 'LICENSE'), 'utf8')
