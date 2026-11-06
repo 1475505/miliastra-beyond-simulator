@@ -340,8 +340,9 @@ test('MCP export lists/previews client controls and writes selected GIA without 
 
 test('MCP realtime is opt-in, pauses correctly and preserves mode on device changes (#5)', { timeout: 15000 }, async t => {
   const { raw, handle, play } = await clockFixture(t)
-  const start = await play('start', { clockMode: 'realtime' })
+  const start = await play('start', { clockMode: 'realtime', fps: 60 })
   assert.equal(start.clockMode, 'realtime')
+  assert.equal(start.fps, 60)
   assert.ok((await waitForFrames(play, start)).time > start.time)
   const paused = await play('pause')
   await delay(250)
@@ -350,7 +351,11 @@ test('MCP realtime is opt-in, pauses correctly and preserves mode on device chan
   assert.ok((await waitForFrames(play, paused)).time > paused.time)
   const device = await play('device', { canvasId: 'pc-21-9' })
   assert.equal(device.clockMode, 'realtime')
+  assert.equal(device.fps, 60)
   await waitForFrames(play, device)
+  const slower = await play('fps', { fps: 30 })
+  assert.equal(slower.fps, 30)
+  assert.ok(slower.frame > 0, 'fps does not replace the Worker')
   const restarted = await play('start')
   assert.equal(restarted.clockMode, 'manual', 'a fresh MCP start returns to its default')
   assert.equal(restarted.audioMuted, true)

@@ -34,6 +34,7 @@
       </section>
     </div>
     <footer class="status"><span class="live" id="state" data-i18n="● 正在启动">● 正在启动</span><span id="viewMode" data-i18n="页面：试玩">页面：试玩</span><span class="spacer"></span>
+      <select id="fpsSel" class="playersel" aria-label="试玩帧率" data-i18n-aria-label="试玩帧率" title="切换目标帧率，游戏速度保持不变" data-i18n-title="切换目标帧率，游戏速度保持不变"><option value="30">30 FPS</option><option value="60">60 FPS</option></select>
       <select id="keyHintSel" class="devsel" aria-label="按键图标预览" data-i18n-aria-label="按键图标预览" title="切换按键图标并重新试玩" data-i18n-title="切换按键图标并重新试玩">
         <option value="auto" data-i18n="按键：跟随画布">按键：跟随画布</option><option value="keyboard" data-i18n="按键：键鼠">按键：键鼠</option><option value="controller" data-i18n="按键：手柄">按键：手柄</option>
       </select><span class="metric" id="frame">Frame 0</span><span class="metric" id="time">0.00s</span></footer>
@@ -155,6 +156,7 @@
       }
 
       function applyStatus(next) {
+        if (next.fps) $('fpsSel').value = String(next.fps)
         $('frame').textContent = 'Frame ' + (next.frame || 0)
         $('time').textContent = Number(next.time || 0).toFixed(2) + 's'
         $('pause').textContent = next.paused ? t('▶ 继续运行') : t('Ⅱ 暂停运行')
@@ -277,7 +279,15 @@
       })
       $('audio').addEventListener('click', () => play.audio?.toggle())
 
-      $('step').addEventListener('click', () => void play.act('step', { dt: 1 / 30 }))
+      $('fpsSel').value = String(play.fps)
+      $('fpsSel').addEventListener('change', async () => {
+        const select = $('fpsSel')
+        select.disabled = true
+        try { await play.setFps(Number(select.value)) }
+        catch (error) { showError(error) }
+        finally { select.value = String(play.fps); select.disabled = false }
+      })
+      $('step').addEventListener('click', () => void play.act('step'))
       $('pause').addEventListener('click', () => void play.act(play.snapshot?.paused ? 'resume' : 'pause'))
       $('stop').addEventListener('click', async () => {
         if (!play.running) return

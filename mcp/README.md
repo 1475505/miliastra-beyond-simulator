@@ -95,12 +95,27 @@ qxqy_studio_play({ handle: "project-1", action: "start", args: { clockMode: "rea
 ```
 
 - `manual`：只有显式 `step` 或用例回放推进时间；不必先 pause。输入回调仍会同步执行。
-- `realtime`：Worker 以固定 30 FPS 自动推进。get/截图不主动 step，但调用间的等待会改变游戏时间。
+- `realtime`：Worker 按所选帧率以固定步长自动推进，默认 30 FPS，可选 60 FPS。get/截图不主动 step，但调用间的等待会改变游戏时间。
 - `pause/resume` 不切换模式；manual 下 resume 后仍需 step。暂停状态也允许手动 step。
 - `device` 重建运行时并保留本局模式，也可显式指定模式；新的 `start` 未指定时恢复 MCP 默认 manual。
-- 运行快照和截图回执含 `clockMode`。Web/DSH 的交互试玩默认仍为 realtime。
+- 运行快照和截图回执含 `clockMode` 和目标 `fps`。Web/DSH 的交互试玩默认仍为 realtime。
 
 这是用户确认的模拟器工具策略，不是游戏时钟契约，关联 [#5](https://github.com/1475505/miliastra-beyond-simulator/issues/5)。异步截图准备不推进 manual 时钟，非法模式在替换 Worker 前拒绝。回归入口为 `mcp/test/protocol.test.mjs`、`studio/test/host-clock.test.mjs`，覆盖真实 stdio → Controller → Worker → Lua；Windows / Node22.23.2，`observed / simulator / not_required`。
+
+### 30 / 60 FPS
+
+```text
+qxqy_studio_play({ handle: "project-1", action: "start", args: { clockMode: "realtime", fps: 60 } })
+qxqy_studio_play({ handle: "project-1", action: "fps", args: { fps: 30 } })
+```
+
+- `start` 的 `fps` 仅接受数字 `30` / `60`，省略时为 30；`device` 省略时保留本局帧率。非法值在替换 Worker 前拒绝。
+- `fps` 动作原地切换，不重启 Lua，不改变暂停状态、时钟模式或已累计的游戏时间。实时逻辑步长为 `1 / fps`，按时间计算的移动和 Tween 时长保持一致。
+- `step` 省略 `dt` 时前进所选帧率的一帧；显式 `dt` 仍按给定秒数前进。`saveCase` / `history.case` 默认记录当前帧率对应的 `dt`，可显式指定用例 `dt`；用例仅有一个步长，不记录中途帧率切换。
+- Web 预览工具栏、Web/DSH 独立或内嵌试玩底栏均有 30 / 60 FPS 选择，浏览器场景轮询同步切换；选择记在当前浏览器本地，并在重新试玩、切设备时沿用。刷新预览接回已有 Worker 时以该 Worker 为准。
+- `fps` 是目标帧率，实际画面更新受 Lua、场景规模、网络和浏览器负载影响；视频动效仍受素材自身帧率限制。
+
+实现：`studio/play/frame-rate.js`、`studio/host/worker.js`、`studio/play/browser-session.js`。验证入口：`studio/test/host-clock.test.mjs`（Lua/Tween 时长、单帧、暂停、非法参数）、`studio/test/browser-session.test.mjs`（场景轮询）、`web/test/frame-rate-browser.test.mjs`（两个界面入口）。2026-11-06 / Windows / Node22.23.2 / Edge，`observed / simulator / not_required`；合成场景验证，不保证所有工程满帧，也不构成真机帧率契约。
 
 ### 脚本重载与问题边界
 

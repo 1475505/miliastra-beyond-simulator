@@ -27,7 +27,7 @@ test('a muted browser asks restarted play to stay silent without dropping caller
 test('reloading a browser attaches to the existing paused game without a start or player change', async t => {
   const calls = [], rendered = []
   const snapshot = { running: true, paused: true, frame: 1254, time: 41.8,
-    canvasWidth: 1280, canvasHeight: 720, viewPlayerIndex: 2,
+    canvasWidth: 1280, canvasHeight: 720, viewPlayerIndex: 2, fps: 60,
     scene: { format: 'tree-v1', revision: 7, reset: true, nodes: [] } }
   const play = createPlaySession({
     renderer: { async applyScene(scene) { rendered.push(scene) } },
@@ -41,8 +41,43 @@ test('reloading a browser attaches to the existing paused game without a start o
   assert.equal(play.snapshot.paused, true)
   assert.equal(play.snapshot.frame, 1254)
   assert.equal(play.snapshot.viewPlayerIndex, 2)
+  assert.equal(play.fps, 60)
   assert.equal(play.sceneRev, 7)
   assert.equal(rendered.length, 1)
+})
+
+test('browser doubles scene polling at 60 FPS and preserves the choice across restarts and device changes', async t => {
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] })
+  const calls = []
+  let fps = 30
+  const play = createPlaySession({ renderer: { async applyScene() {} }, async api(action, args = {}) {
+    calls.push({ action, args })
+    if (args.fps !== undefined) fps = args.fps
+    return { running: true, frame: 20, time: 0.5, fps }
+  } })
+  t.after(() => play.destroy())
+  const pollsPerSecond = async () => {
+    const first = calls.length
+    for (let ms = 0; ms < 1000; ms++) {
+      t.mock.timers.tick(1)
+      await new Promise(resolve => setImmediate(resolve))
+    }
+    return calls.slice(first).filter(call => call.action === 'get').length
+  }
+  await play.start()
+  const slow = await pollsPerSecond()
+  await play.setFps(60)
+  const fast = await pollsPerSecond()
+  assert.ok(slow >= 29 && slow <= 31, `30 FPS requests: ${slow}`)
+  assert.ok(fast >= 59 && fast <= 64, `60 FPS requests: ${fast}`)
+  assert.equal(calls.filter(call => call.action === 'start').length, 1, 'switching must not restart Lua')
+  await play.start()
+  assert.equal(calls.at(-1).args.fps, 60)
+  await play.device({ canvasId: 'mobile-16-9' })
+  assert.equal(calls.at(-1).args.fps, 60)
+  await play.setFps(30)
+  const restored = await pollsPerSecond()
+  assert.ok(restored >= 29 && restored <= 32, `restored 30 FPS requests: ${restored}`)
 })
 
 test('shared play loop polls compact scene views and sends light input', async () => {

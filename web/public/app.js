@@ -20,6 +20,7 @@ const elements = {
   device: byId('device-select'),
   playControls: byId('play-controls'),
   playStart: byId('play-start'),
+  playFps: byId('play-fps'),
   playKeys: byId('play-keys'),
   playAudio: byId('play-audio'),
   playPause: byId('play-pause'),
@@ -300,6 +301,7 @@ function applyPlayStatus(next) {
     height: Number(next.canvasHeight || previous.height || 0),
     frame: Number(next.frame || 0),
     time: Number(next.time || 0),
+    fps: next.fps ?? previous.fps,
     logs: Array.isArray(next.logs) ? next.logs.slice(-100) : previous.logs,
   }
 }
@@ -333,6 +335,8 @@ function renderControls() {
   elements.modePlay.classList.toggle('active', mode === 'play')
   elements.playControls.classList.toggle('visible', mode === 'play')
   elements.playStart.disabled = busy || !hasArchive || running
+  elements.playFps.disabled = busy
+  elements.playFps.value = String(play.fps)
   elements.playPause.disabled = busy || !running
   elements.playResume.disabled = busy || !running
   elements.playStep.disabled = busy || !running
@@ -419,6 +423,10 @@ elements.playKeys.addEventListener('click', () => {
   if (play.keyInputEnabled) elements.stageShell.focus()
 })
 elements.playAudio.addEventListener('click', () => play.audio?.toggle())
+elements.playFps.addEventListener('change', () => {
+  const fps = Number(elements.playFps.value)
+  void run(() => play.setFps(fps))
+})
 
 elements.archive.addEventListener('change', () => run(async () => {
   if (play.running) await play.stop().catch(() => {})
@@ -487,7 +495,7 @@ elements.playStart.addEventListener('click', () => run(async () => {
 }))
 elements.playPause.addEventListener('click', () => void play.act('pause'))
 elements.playResume.addEventListener('click', () => void play.act('resume'))
-elements.playStep.addEventListener('click', () => void play.act('step', { dt: 1 / 30 }))
+elements.playStep.addEventListener('click', () => void play.act('step'))
 elements.playStop.addEventListener('click', () => run(async () => {
   await play.stop()
   applyPlayStatus({ running: false, logs: [] })

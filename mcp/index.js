@@ -107,9 +107,9 @@ const tools = [
       ...handleProperty,
       action: {
         type: 'string',
-        enum: ['start', 'device', 'view', 'get', 'step', 'pointer', 'key', 'click', 'pause', 'resume', 'stop', 'serverGet', 'serverSet', 'serverSend', 'history', 'saveCase', 'runCase'],
+        enum: ['start', 'device', 'fps', 'view', 'get', 'step', 'pointer', 'key', 'click', 'pause', 'resume', 'stop', 'serverGet', 'serverSet', 'serverSend', 'history', 'saveCase', 'runCase'],
       },
-      args: { type: 'object', description: '动作参数。pointer 使用 type/x/y；step 使用 dt（秒）；start/device 使用 canvasId 和可选 clockMode="manual"|"realtime"；device 省略模式时保留当前模式，start 省略时恢复 manual；pause/resume 不改变时钟模式；start/device 默认 muteAudio:true，传 false 才让浏览器出声；serverSet 使用 entityType/name/value。', additionalProperties: true },
+      args: { type: 'object', description: '动作参数。pointer 使用 type/x/y；step 使用 dt（秒），省略时推进当前帧率的一帧；start/device 可传 fps:30|60（start 默认30，device省略则保留），fps 动作用 fps:30|60 原地切换；start/device 使用 canvasId 和可选 clockMode="manual"|"realtime"；device 省略模式时保留当前模式，start 省略时恢复 manual；pause/resume 不改变时钟模式；start/device 默认 muteAudio:true，传 false 才让浏览器出声；serverSet 使用 entityType/name/value。', additionalProperties: true },
     }, ['handle', 'action']),
   },
   {
@@ -119,7 +119,7 @@ const tools = [
   },
   {
     name: 'qxqy_studio_play_screenshot',
-    description: '获取当前试玩 Runtime 画面的 PNG；必须先 start，截图不调用 step。默认 manual 模式保持当前帧；显式 realtime 模式在调用之间仍自动运行。回执含 frame/time/clockMode。',
+    description: '获取当前试玩 Runtime 画面的 PNG；必须先 start，截图不调用 step。默认 manual 模式保持当前帧；显式 realtime 模式在调用之间仍自动运行。回执含 frame/time/clockMode/fps。',
     inputSchema: objectSchema(handleProperty, ['handle']),
   },
   {

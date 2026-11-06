@@ -1,18 +1,24 @@
 import { parentPort } from 'node:worker_threads'
 import { createStudio } from '../index.js'
+import { DEFAULT_PLAY_FPS, validatePlayFps } from '../play/frame-rate.js'
 
 let studio = null
 let ticking = false
-let lastTick = 0
+let lastTick = null
 let accumulator = 0
 let clockMode = 'realtime'
 let audioMuted = false
+let fps = DEFAULT_PLAY_FPS
+let clockTimer = null
 
-// Web/DSH use the 30 FPS wall clock. MCP defaults to manual: only explicit
+// Web/DSH use a fixed-step wall clock. MCP defaults to manual: only explicit
 // step / case replay advances Lua, including between observation requests.
-const CLOCK_INTERVAL_MS = 33
-const FIXED_DT = 1 / 30
-const MAX_CATCHUP_STEPS = 5
+const MAX_CATCHUP_SECONDS = 5 / 30
+
+function scheduleClock() {
+  if (clockTimer) clearInterval(clockTimer)
+  clockTimer = clockMode === 'realtime' ? setInterval(tickClock, Math.floor(1000 / fps)) : null
+}
 
 function observeOptions(args = {}) {
   return {
@@ -42,12 +48,12 @@ function tickClock() {
   if (!studio || ticking || clockMode !== 'realtime') return
   const status = studio.playStatus()
   if (!status.running || status.paused) {
-    lastTick = 0
+    lastTick = null
     accumulator = 0
     return
   }
-  const now = Date.now()
-  if (!lastTick) {
+  const now = performance.now()
+  if (lastTick === null) {
     lastTick = now
     return
   }
@@ -56,35 +62,47 @@ function tickClock() {
     accumulator += Math.min(0.25, Math.max(0, (now - lastTick) / 1000))
     lastTick = now
     let steps = 0
-    while (accumulator >= FIXED_DT && steps < MAX_CATCHUP_STEPS) {
-      studio.playStep(FIXED_DT, { observe: false })
-      accumulator -= FIXED_DT
+    const dt = 1 / fps
+    while (accumulator >= dt && steps < Math.ceil(fps * MAX_CATCHUP_SECONDS)) {
+      studio.playStep(dt, { observe: false })
+      accumulator -= dt
       steps += 1
     }
-    if (accumulator > FIXED_DT) accumulator = FIXED_DT
+    if (accumulator > dt) accumulator = dt
   } finally {
     ticking = false
   }
 }
 
-const clockTimer = setInterval(tickClock, CLOCK_INTERVAL_MS)
-
 function run(action, args = {}) {
   if (action === 'start') {
     const requestedMode = args.clockMode ?? 'realtime'
     if (requestedMode !== 'manual' && requestedMode !== 'realtime') throw new Error('clockMode must be manual or realtime')
+    const requestedFps = validatePlayFps(args.fps ?? DEFAULT_PLAY_FPS)
     if (studio) studio.playStop()
     studio = createStudio(args.archive || args.project, { workspacePath: args.workspacePath || '' })
     clockMode = requestedMode
+    fps = requestedFps
     audioMuted = args.muteAudio === true
-    lastTick = 0
+    lastTick = null
     accumulator = 0
-    return studio.playStart(startOptions(args))
+    const value = studio.playStart(startOptions(args))
+    lastTick = performance.now()
+    scheduleClock()
+    return value
   }
   if (!studio) throw new Error('play session has not started')
   if (action === 'get') return args.light ? respond(args) : studio.playGet(observeOptions(args))
+  if (action === 'fps') {
+    const requestedFps = validatePlayFps(args.fps)
+    // Account for elapsed time at the old rate, retaining the fractional step.
+    tickClock()
+    fps = requestedFps
+    scheduleClock()
+    return respond(args)
+  }
   if (action === 'step') {
-    const value = studio.playStep(args.dt, args.light ? { observe: false } : observeOptions(args))
+    const value = studio.playStep(args.dt === undefined ? 1 / fps : args.dt, args.light ? { observe: false } : observeOptions(args))
     return args.light ? respond(args) : value
   }
   if (action === 'pointer') {
@@ -101,13 +119,13 @@ function run(action, args = {}) {
   }
   if (action === 'pause') {
     studio.playPause({ observe: false })
-    lastTick = 0
+    lastTick = null
     accumulator = 0
     return respond(args)
   }
   if (action === 'resume') {
     studio.playResume({ observe: false })
-    lastTick = 0
+    lastTick = performance.now()
     accumulator = 0
     return respond(args)
   }
@@ -121,8 +139,15 @@ function run(action, args = {}) {
   if (action === 'serverGet') return studio.playServerGet(args.entityType, args.name)
   if (action === 'serverSet') return studio.playServerSet(args.entityType, args.name, args.value)
   if (action === 'serverSend') return studio.playServerSend(args.name, args.params || [], args.target || 'PlayerSelf')
-  if (action === 'history') return studio.playHistory()
-  if (action === 'saveCase') return studio.playSaveCase(args.case || args)
+  if (action === 'history') {
+    const value = studio.playHistory()
+    value.case.dt = 1 / fps
+    return value
+  }
+  if (action === 'saveCase') {
+    const spec = args.case || args
+    return studio.playSaveCase({ ...spec, dt: spec.dt ?? 1 / fps })
+  }
   if (action === 'runCase') {
     return studio.playRunCase(args.case || args, {
       canvasId: args.canvasId,
@@ -133,8 +158,10 @@ function run(action, args = {}) {
   if (action === 'stop') {
     const value = studio.playStop()
     studio = null
-    lastTick = 0
+    lastTick = null
     accumulator = 0
+    clearInterval(clockTimer)
+    clockTimer = null
     return value
   }
   throw new Error(`unknown play action: ${action}`)
@@ -145,7 +172,7 @@ parentPort.on('message', (message) => {
   try {
     const value = run(action, args)
     // Include the clock on all play snapshots, including light/input responses.
-    const result = typeof value?.running === 'boolean' ? { ...value, clockMode, audioMuted } : value
+    const result = typeof value?.running === 'boolean' ? { ...value, clockMode, fps, audioMuted } : value
     parentPort.postMessage({ id, ok: true, value: result, error: null })
   } catch (error) {
     parentPort.postMessage({ id, ok: false, value: null, error: error?.message || String(error) })

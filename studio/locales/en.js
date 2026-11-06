@@ -1,6 +1,8 @@
 // Bundled UI messages. Project content and API identifiers stay unchanged.
 // Terminology and review guidance: ../docs/interface.md#术语核对
 export default {
+  "试玩帧率": "Play frame rate",
+  "切换目标帧率，游戏速度保持不变": "Change the target frame rate without changing game speed",
   "感谢@xiaomol444提供的图片、音效、界面动效素材": "Thanks to @xiaomol444 for providing the image, sound effect, and UI animation assets.",
   "播放动效音效": "Play effect sound",
   "动效层级": "Effect layer",

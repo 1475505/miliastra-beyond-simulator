@@ -459,12 +459,12 @@ function registerTools(ctx, registry) {
       action: {
         type: 'string',
         enum: [
-          'start', 'device', 'view', 'get', 'step', 'pointer', 'key', 'click', 'pause', 'resume', 'stop',
+          'start', 'device', 'fps', 'view', 'get', 'step', 'pointer', 'key', 'click', 'pause', 'resume', 'stop',
           'serverGet', 'serverSet', 'serverSend', 'history', 'saveCase', 'runCase',
         ],
         required: true,
       },
-      args: { type: 'json', description: '动作参数；pointer 使用 type/x/y，step 使用 dt；get/start 可用 inspect:true 拉运行树；start/device 用 canvasId 切换设备画布（如 pc-16-9 / mobile-19.5-9）；start 可用 playerCount(1-8)；view 用 playerIndex 切换当前玩家视角；runCase 可带 canvasId/playerCount；serverSet 使用 entityType/name/value；runCase 使用 case。' },
+      args: { type: 'json', description: '动作参数；pointer 使用 type/x/y；step 使用 dt（秒），省略则推进当前帧率的一帧；start/device 可传 fps:30|60（start 默认30，device省略则保留），fps 动作用 fps:30|60 原地切换；get/start 可用 inspect:true 拉运行树；start/device 用 canvasId 切换设备画布（如 pc-16-9 / mobile-19.5-9）；start 可用 playerCount(1-8)；view 用 playerIndex 切换当前玩家视角；runCase 可带 canvasId/playerCount；serverSet 使用 entityType/name/value；runCase 使用 case。' },
     },
     output: {
       schema: { type: 'json' },

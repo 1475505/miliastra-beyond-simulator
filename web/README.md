@@ -68,7 +68,7 @@ MCP 0.3.0 起提供 `qxqy_preview_status()` 和 `qxqy_preview_open({ path: "game
 
 ## 试玩与素材
 
-试玩使用固定 30 FPS Worker、增量场景和 Pixi/WebGL；刷新试玩页会接回已有 Worker，保留暂停和当前玩家。截图仍由 Host 根据统一场景输出 PNG。
+试玩使用可选 30 / 60 FPS 的固定步长 Worker、增量场景和 Pixi/WebGL；预览工具栏或独立试玩底栏可直接切换，默认 30，浏览器记住选择。刷新预览页会接回已有 Worker，保留暂停、帧率和当前玩家。截图仍由 Host 根据统一场景输出 PNG。完整时钟与工具契约见 [30 / 60 FPS](../mcp/README.md#30--60-fps)。
 
 试玩工具栏「键位响应」默认开启，按官方文档转发键盘及鼠标左右键的 Down/Up；关闭后光标点击和滚动仍可用，失焦会释放已按键。映射、文档/回传差异及范围见 [浏览器键位响应](../studio/docs/browser-input.md)。
 

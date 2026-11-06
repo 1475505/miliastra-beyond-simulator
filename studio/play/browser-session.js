@@ -1,10 +1,17 @@
 import { BrowserAudioPlayer } from './audio-player.js'
 import { browserAudioMutedByDefault } from './audio-policy.js'
 import { keyEventName, mouseKeyEventName } from './key-bindings.js'
+import { DEFAULT_PLAY_FPS, validatePlayFps } from './frame-rate.js'
 export { keyEventName } from './key-bindings.js'
 
-export const PLAY_POLL_INTERVAL_MS = 33
+export const PLAY_POLL_INTERVAL_MS = Math.floor(1000 / DEFAULT_PLAY_FPS)
 export const PLAY_MOVE_THROTTLE_MS = 60
+
+const fpsStorageKey = 'qxqy-play-fps'
+function preferredFps() {
+  try { return validatePlayFps(Number(globalThis.localStorage?.getItem(fpsStorageKey))) }
+  catch { return DEFAULT_PLAY_FPS }
+}
 
 export function stagePoint(event, rect, width, height) {
   return {
@@ -28,6 +35,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   let running = false
   let polling = false
   let timer = null
+  let fps = preferredFps()
   let pollSoonTimer = null
   let sceneRev = 0
   let moveTimer = null
@@ -64,10 +72,26 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     if (onError) onError(error)
   }
 
+  function syncFps(value) {
+    if (value === undefined) return
+    const next = validatePlayFps(value)
+    if (fps === next) return
+    fps = next
+    if (timer) { stopPolling(); startPolling() }
+    try { globalThis.localStorage?.setItem(fpsStorageKey, String(fps)) } catch { /* Session-only if storage is blocked. */ }
+  }
+
+  async function setFps(value) {
+    const next = validatePlayFps(value)
+    if (running) return act('fps', { fps: next })
+    syncFps(next)
+  }
+
   async function applyScene(next, { freshAudio = false } = {}) {
     const current = generation
     snapshot = next
     running = next?.running !== false
+    syncFps(next?.fps)
     audio?.sync(next, { fresh: freshAudio })
     if (next?.scene && next.scene.format === 'tree-v1') {
       if (next.scene.reset) sceneRev = 0
@@ -104,7 +128,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
 
   function startPolling() {
     if (timer) return
-    timer = setInterval(() => { void poll() }, PLAY_POLL_INTERVAL_MS)
+    timer = setInterval(() => { void poll() }, Math.floor(1000 / fps))
   }
 
   function stopPolling() {
@@ -115,7 +139,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     if (isActive && !isActive()) { audio?.reset(); renderer.resetEffects?.() }
   }
 
-  function pollSoon(delay = 30) {
+  function pollSoon(delay = Math.floor(1000 / fps)) {
     if (pollSoonTimer) return
     pollSoonTimer = setTimeout(() => {
       pollSoonTimer = null
@@ -156,8 +180,9 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     try {
       const value = await api(action, { light: true, ...(args || {}) })
       if (current !== generation || !running) return value
+      syncFps(value?.fps)
       if (value && typeof value === 'object' && value.frame !== undefined && onStatus) onStatus(value)
-      pollSoon(30)
+      pollSoon()
       return value
     } catch (error) {
       if (current === generation) emitError(error)
@@ -166,6 +191,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   }
 
   function playbackArgs(args = {}) {
+    args = { ...args, fps: args.fps ?? fps }
     if (!audio || args.muteAudio != null) return args
     if (audio.audioChoice === 'on') return { ...args, muteAudio: false }
     if (audio.audioChoice === 'off' || audio.muted) return { ...args, muteAudio: true }
@@ -404,6 +430,8 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     get snapshot() { return snapshot },
     get running() { return running },
     get sceneRev() { return sceneRev },
+    get fps() { return fps },
+    setFps,
     get keyInputEnabled() { return keyInputEnabled },
     setKeyInputEnabled,
     releaseKeys,

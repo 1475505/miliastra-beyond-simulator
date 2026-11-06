@@ -4,6 +4,7 @@
 
 ## 未发布
 
+- 试玩新增 30 / 60 FPS 选择，逻辑步长和浏览器刷新同步切换，保持游戏时间与 Tween 时长；支持运行中切换、记住浏览器选择及对应帧率的单帧调试。MCP / DSH 工具支持 `fps` 参数与动作。
 - 修复 TweenSequence 插入动画/回调错误推迟后续 Append、AppendInterval、AppendCallback 的问题，整体完成仍等待最晚结束项。
 - 按 PC 真机反馈对齐连续 Join：同一追加组仅第一个 Join 执行，后续加入项保持未播放。实测范围与未覆盖边界见 [Runtime 契约](../client/lua-runtime/docs/observed-contract.md#tweensequence-追加与插入排程2026-11-06twpar)。
 

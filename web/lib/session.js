@@ -10,7 +10,7 @@ import {
 
 const ASSET_TYPES = new Set(['server-control-template', 'client-control-template'])
 const PLAY_ACTIONS = new Set([
-  'start', 'device', 'view', 'get', 'step', 'pointer', 'key', 'click', 'pause', 'resume', 'stop',
+  'start', 'device', 'fps', 'view', 'get', 'step', 'pointer', 'key', 'click', 'pause', 'resume', 'stop',
   'serverGet', 'serverSet', 'serverSend', 'history', 'saveCase', 'runCase',
 ])
 function normalizePath(value) {
@@ -46,6 +46,7 @@ function playSummary(previous, value, action) {
     height: Number(value?.canvasHeight || previous.height || 0),
     frame: Number(value?.frame || 0),
     time: Number(value?.time || 0),
+    fps: value?.fps ?? previous.fps ?? 30,
     logs,
   }
 }
@@ -203,7 +204,7 @@ export class WebSession {
     this.playState = playSummary(this.playState, value, action)
     this.emit({ type: 'play', action, frame: this.playState.frame })
     // Match the DSH standalone play page: return only the worker snapshot.
-    // Editor tree / archive listing stay on /api/state, not the 30 FPS path.
+    // Editor tree / archive listing stay on /api/state, not the frame polling path.
     return value
   }
 

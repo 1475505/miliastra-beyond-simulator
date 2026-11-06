@@ -10,6 +10,7 @@ import { ScriptSync, contentHash, discoverScriptDirectories } from './script-syn
 import { sharedImageAssets } from './image-assets.js'
 import { ControlGuidSync } from './control-guid-sync.js'
 import { localFont } from './local-font.js'
+import { DEFAULT_PLAY_FPS, validatePlayFps } from '../play/frame-rate.js'
 
 // Keep the interactive default short, but allow project replay runners to raise
 // it for control-heavy pixel-art scenes and long deterministic golden cases.
@@ -47,6 +48,7 @@ export class SimulatorController {
     this.imageAssets = imageAssets
     this.defaultClockMode = validateClockMode(clockMode)
     this.playClockMode = this.defaultClockMode
+    this.playFps = DEFAULT_PLAY_FPS
   }
 
   /** Serialize calls for one project handle, including worker operations. */
@@ -242,13 +244,16 @@ export class SimulatorController {
     }
     if (action === 'start') {
       const clockMode = validateClockMode(args.clockMode ?? this.defaultClockMode)
+      const fps = validatePlayFps(args.fps ?? DEFAULT_PLAY_FPS)
       await this.terminateWorker()
       this.playClockMode = clockMode
+      this.playFps = fps
       return this.request('start', {
         archive: this.studio.archiveData(),
         workspacePath: this.activeWorkspacePath(),
         ...args,
         clockMode,
+        fps,
       }, signal)
     }
     if (action === 'device') {
@@ -257,14 +262,17 @@ export class SimulatorController {
         throw new Error(`unknown canvas preset: ${canvasId || '(empty)'} (available: ${Object.keys(CANVAS_PRESETS).join(', ')})`)
       }
       const clockMode = validateClockMode(args.clockMode ?? this.playClockMode)
+      const fps = validatePlayFps(args.fps ?? this.playFps)
       await this.terminateWorker()
       this.playClockMode = clockMode
+      this.playFps = fps
       return this.request('start', {
         archive: this.studio.archiveData(),
         workspacePath: this.activeWorkspacePath(),
         ...args,
         canvasId,
         clockMode,
+        fps,
       }, signal)
     }
     if (action === 'stop') {
@@ -276,6 +284,12 @@ export class SimulatorController {
       }
     }
     if (!this.worker) throw new Error('play session has not started')
+    if (action === 'fps') {
+      const fps = validatePlayFps(args.fps)
+      const value = await this.request(action, { ...args, fps }, signal)
+      this.playFps = fps
+      return value
+    }
     return this.request(action, args, signal)
   }
 
@@ -290,6 +304,7 @@ export class SimulatorController {
       frame: Number.isFinite(Number(snapshot.frame)) ? Number(snapshot.frame) : 0,
       time: Number.isFinite(Number(snapshot.time)) ? Number(snapshot.time) : 0,
       clockMode: snapshot.clockMode,
+      fps: snapshot.fps,
       width: image.width,
       height: image.height,
       pixelWidth: image.pixelWidth,
