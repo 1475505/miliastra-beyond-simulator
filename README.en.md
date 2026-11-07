@@ -161,7 +161,7 @@ Follow the branch for your task. Each module README owns its topic links.
   - [Web](web/README.md): editor, disk previews, and deployment.
   - [MCP](mcp/README.md): project handles, tools, and clocks.
   - [Harness plugin](dsh-plugin/README.md): installation, compatibility, and troubleshooting.
-    - [Release notes](dsh-plugin/CHANGELOG.md)
+    - [Release notes (GitHub Releases)](https://github.com/1475505/miliastra-beyond-simulator/releases)
     - [Simulator usage skill](skill/SKILL.md)
   - [Game-building preset](agent/wonderland-lua-builder/README.md): workflow, references, and behavior evaluations.
 - **Implementation and maintenance**

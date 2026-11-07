@@ -42,11 +42,9 @@ Harness 0.2.2 升级后若预设报 `tool-subagent-list-agents … never started
 
 ### Persona 工作目录变量兼容性
 
-本预设只在 persona 中使用仍受支持的 `{{model}}`，不依赖 `{{cwd}}`。Harness 0.2.0-rc.2 的 Agent Loop 注册 `provider`、`model`、`cwd`，而 0.2.1-rc.2 只注册前两项；新版由 working-directory 服务提供当前目录上下文。旧 persona 中的 `Your working directory is {{cwd}}.` 因此会在新版请求组装时触发 `unknown prompt variable`，模型尚未收到请求。删除这一句也兼容旧版：提示词没有义务引用所有已注册变量，文件和 Shell 工具仍使用会话工作目录。来源为 [0.2.0-rc.2 源码](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/core/agent-loop/src/index.ts)与 [0.2.1-rc.2 迁移说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/packages/core/system-prompt/README.md#contribute-a-prompt-variable)（2026-10-18 核对，`evidence_source=documented`，运行端 `official_document`，`device_status=not_required`）。这项修复不提高最低宿主版本，保留旧版复制入口；不表示整个插件已完成 0.2.1 的全部接口验收。
+Persona 仅引用 `{{model}}`；工作目录由宿主上下文与工具提供。Harness0.2.1 移除了 `cwd` 提示词变量，旧 `Your working directory is {{cwd}}.` 会在请求组装时触发 `unknown prompt variable`，见[官方迁移说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/packages/core/system-prompt/README.md#contribute-a-prompt-variable)（2026-10-18 核对）。
 
-先区分实际加载来源：支持目录预设的旧宿主中，若 `$DSH_HOME/.agent-presets/wonderland-lua-builder/agent.cordis.yml` 仍包含该句，需在保留其他自定义内容的前提下删除它并重启 Harness；插件不会覆盖此用户副本。Harness 0.2.1 改用 `@deepseek-ai/dsh-agent-preset-registry` 管理声明式注册项，默认不扫描这个旧目录；应更新含修复的插件包并重启，单改旧副本无效。声明式注册项和随包副本由构建从主维护源同步，不手改生成文件。来源与完整宿主验收见 [0.2.1 兼容性](../../dsh-plugin/README.md#harness-021-兼容性)。
-
-提示词解析的模拟器观察覆盖0.1.5-rc.3、0.2.0-rc.2、0.2.1-rc.2 renderer（`observed / simulator / not_required`）；完整宿主边界统一见上述兼容性说明。解析成功不等于Desktop界面或模型子代理端到端通过。
+遇到旧引用先确认来源：旧目录预设需保留自定义内容、删除该句并重启；新版声明式预设需更新插件或修正用户 profile 覆盖，单改 `.agent-presets` 无效。注册项和包内副本由构建同步，不手改生成文件。宿主兼容范围及验证入口统一见[DSH 插件](../../dsh-plugin/README.md#宿主兼容契约)。
 
 ## 资料与验证边界
 

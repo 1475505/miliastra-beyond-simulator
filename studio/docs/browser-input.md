@@ -45,8 +45,13 @@ Web 预览、Web 编辑器试玩及 DSH 共用试玩页提供「键位响应：�
 
 证据范围为 Windows / Node22.23.2 / Edge headless + SwiftShader，`observed / simulator / not_required`。
 
-## 指针请求乱序（2026-10-24）
+<a id="指针请求乱序2026-10-24"></a>
+## 输入队列与请求顺序
 
 结论：并发Pointer请求可让DOM的 down→up 在Worker中变为 up→down，按名点击或直接串行API通过不能排除此类浏览器传输缺陷。共享 `play/browser-session.js` 将Pointer/Key、节流Move、滚轮和Cancel统一排队，以generation丢弃旧会话请求；不改变Lua点击逻辑、层级或拖动阈值。
 
-回归入口为 `test/browser-session.test.mjs` 与上述浏览器用例，覆盖延迟Down、微移、取消、重启和真实输入链。原始时序证据见完整工作区 `probes/browser-pointer-order-20261024/{input-before,input-fixed-user}.json`，项目对照见 `workspace/woo/records/simulator/finale-eyes-input-20261024/verification/`。Windows / Node22.23.2 / Edge，`observed / simulator / not_required`；更早缺DOM坐标的点击不能归为相同原因或判为用户点错，本结论不扩大为真机事件时序。
+回归沿用上述输入用例，覆盖延迟Down、微移、取消、重启和真实输入链。原始时序证据见完整工作区 `probes/browser-pointer-order-20261024/{input-before,input-fixed-user}.json`。这是浏览器传输层结论，不扩大为真机事件时序；缺少DOM坐标的其他点击故障不能据此定因。
+
+## 手柄支持边界
+
+浏览器未接入实体手柄。工具 `key` 可注入并录制/回放已有 `Controller*Down/Up` 逻辑键，但不会改变 `game.GetDevice()`、写入摇杆值或触发导航；当前宿主没有摇杆输入入口。手柄图标预览仅改变视觉，完整焦点导航、导航滚动和手柄布局试玩未实现，见[控件支持矩阵](control-support.md)。

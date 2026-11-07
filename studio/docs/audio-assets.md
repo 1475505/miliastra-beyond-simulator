@@ -1,5 +1,7 @@
 # Lua 2D 音效预览与按需缓存
 
+上级：[Studio](../README.md#专题树)。
+
 ## Lua 接口
 
 接口依据为完整知识工作区本地 `knowledge/guide/Lua客户端UI脚本API.md`「关卡、音效与本地化」：
@@ -33,7 +35,7 @@ end
 https://oss.070077.xyz/audio/50888.mp3
 ```
 
-`studio/assets/audio-catalog.js` 固定这批白名单及毫秒时长。为减小随包数据，时长以 base36 字符串按 ID 顺序存储；解析后仍是秒数。已逐项比对当前远程清单的全部 ID/时长，无差异；没有下载全部音频。
+`studio/assets/audio-catalog.js` 固定该快照的白名单及毫秒时长；以 base36 字符串按 ID 顺序存储，解析后换算为秒。更新目录时需同时核对 ID 与时长，清单存在不等于所有音频均可下载。
 
 缓存与图片复用 `studio/host/asset-cache.js`：
 
@@ -52,7 +54,7 @@ https://oss.070077.xyz/audio/50888.mp3
 | macOS | `~/Library/Caches/beyond-simulator/audio` |
 | Linux | `$XDG_CACHE_HOME/beyond-simulator/audio`，未设置时 `~/.cache/beyond-simulator/audio` |
 
-启动前可设置 `QXQY_AUDIO_CACHE_DIR`。缓存位于运行 Node 服务的电脑/容器，不在 Lua 存档内。源文件覆盖更新后，可在退出宿主后清理音频缓存，再重新打开播放页并清理旧浏览器资源缓存；首版没有音频逐项刷新界面。缓存没有自动磁盘淘汰策略。
+启动前可设置 `QXQY_AUDIO_CACHE_DIR`。缓存位于运行 Node 服务的电脑/容器，不在 Lua 存档内。源文件覆盖更新后，可在退出宿主后清理音频缓存，再重新打开播放页并清理旧浏览器资源缓存；当前没有音频逐项刷新界面或自动磁盘淘汰策略。
 
 ## 播放与生命周期
 

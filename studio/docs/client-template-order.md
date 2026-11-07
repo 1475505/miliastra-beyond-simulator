@@ -1,10 +1,10 @@
-# Client-template GIA sibling direction (2026-10-12)
+# Client-template GIA order and index calibration
 
 Parent: [Studio](../README.md#专题树).
 
 Authoring lists real siblings foreground-first. Native GIA lists them background-first. Keep the independent template list in its original order; it is not a single paint stack.
 
-Device evidence comes from one nested WOO template (11 containers, 236 images): the user accepted background-first wire siblings with matching accessory DFS. Patch SHA256: `a3f11438b75f2018d62209cbf7fae90f952c9eaa79f629cb861040bfe9813173`; full-workspace evidence: `probes/client-template-order-guid-20261012/`. Acceptance is a user report, not a new screenshot or native reexport, and does not validate arbitrary GUID ranges, every widget type or full-game runtime.
+Device evidence is the user's acceptance of one nested WOO template with background-first wire siblings and matching accessory DFS. Full-workspace records: `probes/client-template-order-guid-20261012/`. This report has no new screenshot or native reexport and does not validate arbitrary GUID ranges, every widget type or full-game runtime.
 
 ## Codec behavior
 
@@ -22,9 +22,10 @@ Persistent `Info.index` identifies assets, not paint order or control GUIDs. `te
 
 `test/gia-client-order.test.mjs` constructs independent synthetic wire bytes with explicit nested sibling order. It checks known editor/wire order, template-list order, accessory DFS and no authoring mutation. A symmetric import/export roundtrip alone cannot prove the native direction.
 
-The directional regression passed locally on Windows / Node 22. These simulator checks are distinct from the prior single-template device acceptance. Restart existing Web/MCP/DSH hosts to load new builds.
+These checks verify simulator behavior, separately from the single-template device report.
 
-## Imported index calibration (2026-10-12 follow-up)
+<a id="imported-index-calibration-2026-10-12-follow-up"></a>
+## Imported index calibration
 
 The accepted full WOO package supplied five client GUIDs consistent with native preorder: root, recursively visit bottom-first wire children, then the next independent template. A constant offset across all nodes does not fit. This is provided device evidence for one unchanged import batch, not an official guarantee for partial imports, deduplicated assets or edited hierarchies; original identities remain in the probe record above.
 

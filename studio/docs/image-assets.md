@@ -6,8 +6,8 @@
 
 图片控件选择图片源并填入白名单 `imageId` 后，编辑器画布、Pixi 试玩和 Host PNG 截图均可显示对应素材。首次实际使用时按需下载，重启后直接读取磁盘缓存，已缓存素材可离线使用。未知来源/ID 不发网络请求，下载失败保留占位。
 
-- **静态引用 `StaticReference`**：素材源 `https://oss.070077.xyz/images/`。`studio/assets/catalog.js` 固定了 2026-10-02 核对的 `data.json` 非空条目；1,543 个目录 ID 中 1,522 个有路径，`100001–100006` 仍走图元代理，其余 1,516 个远程 ID 请求 `sprite/<id>.png` 与 `border/<id>.json`。
-- **元件 `Prefab`**：素材源 `https://oss.070077.xyz/prefabs/`。`studio/assets/prefab-catalog.js` 固定 2026-10-11 核对的 `data.json`（schemaVersion 2、dataVersion 7.1.0）。2,727 个条目中 2,720 个有图片，7 个空条目排除；仅请求 `sprite/<id>.png`，不请求 border JSON。`10003004` 与 `10008001` 为 128×128，其余为 256×256。目录明确 `rendering.imageSource=Prefab`、`idVariableType=PrefabId`；该信息属于素材提供方清单，不是新的真机证据。
+- **静态引用 `StaticReference`**：素材源 `https://oss.070077.xyz/images/`。`studio/assets/catalog.js` 固定 `data.json` 白名单（2026-10-02 快照）；`100001–100006` 走图元代理，远程 ID 请求 `sprite/<id>.png` 与 `border/<id>.json`。
+- **元件 `Prefab`**：素材源 `https://oss.070077.xyz/prefabs/`。`studio/assets/prefab-catalog.js` 固定目录和尺寸（2026-10-11、schemaVersion 2、dataVersion 7.1.0），排除空条目；只请求 `sprite/<id>.png`，不请求 border JSON。来源/类型和尺寸依据素材提供方清单，不是新增真机证据。
 - 不接受存档传入任意 URL，不在启动时下载远程清单，也不会全量下载白名单素材。更新白名单需重新核对目录并修改源文件。
 - 选中远程图片，在属性面板点击 **「↻ 重新下载此素材」** 可重新请求源文件并替换缓存。刷新失败保留之前的可用文件；刷新不会扩充 ID 白名单。
 - 同源编辑器与试玩页通过浏览器 storage 通知刷新；若浏览器禁用 storage，可重新打开试玩页。不同源的页面（例如另一端口或另一宿主）不会收到通知，可能继续使用其 HTTP 缓存至到期。
@@ -48,7 +48,7 @@ Web、MCP、DSH 使用同一套 `ImageAssetStore`，同一系统用户默认共�
 
 静态 PNG 按元数据的 `m_Rect` 还原逻辑宽高，用 `m_RD.textureRectOffset` 恢复左下方向的透明留白。独立 PNG 不再按图集中 `textureRect.x/y` 二次裁切；浮点裁切边界按最近整数像素取整。已是完整逻辑尺寸的 PNG 保留原画布。尺寸不匹配、超大图和非 `None` 的 packingRotation 明确失败，避免静默画错。元件 PNG 校验清单尺寸后保留原图透明边界，不套用静态图片的裁切规则。
 
-这是素材提供方数据驱动的**模拟器预览策略**。支持控件尺寸/旋转、原图 alpha、`imageColor` RGB 乘色/alpha，以及水平和垂直填充。基础／九切片拉伸见下节；矩形遮罩与软边见 [控件支持](control-support.md#基础矩形遮罩2026-10-11)。径向填充、材质及动效未在此处扩展，不据此推断真机视觉一致。
+这是素材提供方数据驱动的**模拟器预览策略**。支持控件尺寸/旋转、原图 alpha、`imageColor` RGB 乘色/alpha，以及水平和垂直填充。基础／九切片拉伸见下节；矩形遮罩与软边见 [控件支持](control-support.md#基础矩形遮罩)。径向填充、材质及动效未在此处扩展，不据此推断真机视觉一致。
 
 网络和解码在宿主/显示层，Lua Worker 与存档不携带图片字节。Pixi 异步加载完成后主动重绘，静态或暂停场景也能更新；删除/换来源/换 ID 后丢弃过期结果，纹理按来源+ID 共用并在不再使用时释放。只有来源变化也会触发增量场景更新。编辑器图片使用 Canvas2D 乘色。Host 截图先冻结当前快照，再有界等待资源准备，不调用 step；失败项通过截图元数据 `assetWarnings` 返回来源、ID 与错误，并使用占位。
 
@@ -60,11 +60,12 @@ Web、MCP、DSH 使用同一套 `ImageAssetStore`，同一系统用户默认共�
 - `studio/test/image-assets.test.mjs`：白名单、两 Store 并发文件锁、离线重启、失败退避/刷新保留、损坏缓存修复、独立几何像素预期、RGB/alpha/填充、共享纹理以及无浏览器 Host 截图。
 - `web/test/image-assets.test.mjs`：同源接口、ETag/HEAD/404、PNG 预览共用缓存；设置 `QXQY_BROWSER` 后验证真实浏览器 HTTP 命中、DOM 像素、WebGL 像素、静态异步完成、换 ID/删除竞态、GPU 释放和跨文档刷新。测试只使用合成图片和注入下载器，不访问 OSS。
 - `dsh-plugin/test/image-assets.test.mjs`：真实HTTP请求经DSH注册的素材路由及刷新API，并与无头截图共享缓存。
-- 远端素材只做代表性抽查，不等于所有素材均可下载或真机显示一致；元件目录身份与尺寸按固定清单校验。元件和切片的部分历史检查仅有验收结论，不作为现存长期测试承诺。
+- 远端素材只做代表性抽查，不等于所有素材均可下载或真机显示一致；元件目录身份与尺寸按固定清单校验。
 
-## 图片类型：基础／拉伸（2.1.0）
+<a id="图片类型基础拉伸210"></a>
+## 图片类型：基础／拉伸
 
-参考 `D:/Codes/Miliastra-image-editor-webui` 提交 `20659b3` 的 `frontend/src/imageStretch.ts`、`backend/app/image_stretch.py` 和 `docs/image-stretch.md`，按用户要求对齐：
+按用户采用的 `Miliastra-image-editor-webui` 提交 `20659b3` 切片规则实现以下模拟器策略；该外部参考仓库不随本项目分发：
 
 - **基础 `Basic`**：整张贴图随控件宽高缩放。
 - **拉伸 `Stretch`**：使用原始 `m_Border`（X 左、Y 下、Z 右、W 上）三切片／九切片。角保持本地 UI 尺寸，边单向伸长、中心双向伸长。边界不乘 2/3，也不除以 `m_PixelsToUnits`；父级缩放在切片之后应用。
@@ -93,7 +94,7 @@ PNG 截图和 DOM 编辑画布共用逐像素双线性九切片采样；单张�
 
 ### GIA 类型槽与证据
 
-参考仓库报告了 7.1.0 客户端模板 `基础&拉伸图片gia.gia`（SHA256 `10f04eba8af9d18a3ada66e88f328e15bbccacf0567c4cf1070e76707fcaaf6b`）：`Details.imageSlot(84).field504` 省略/0 为基础、1 为拉伸。模拟器按此读写；不混用旧素材组 `image_settings.field5`，也不改 `ImageConfig.field507=2`。该映射仅由参考代码及说明交叉核对，原始样本未独立复核，证据为 `provided_unverified`，真机回导为 `pending`。
+参考仓库报告的 7.1.0 客户端模板 `基础&拉伸图片gia.gia`（SHA-256 `10f04eba8af9d18a3ada66e88f328e15bbccacf0567c4cf1070e76707fcaaf6b`）映射为：`Details.imageSlot(84).field504` 省略/0 为基础、1 为拉伸。模拟器按此读写；不混用旧素材组 `image_settings.field5`，也不改 `ImageConfig.field507=2`。原始样本未独立复核，证据为 `provided_unverified`，真机回导为 `pending`。
 
 GIA 无“按素材自动”值：尚未明确选择类型时暂按基础导出并提示；需要拉伸可在属性面板明确选择，或在真机通过 Lua 设置。字段支持不改变元件图片来源仍未映射的边界。
 

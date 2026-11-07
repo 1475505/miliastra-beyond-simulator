@@ -58,13 +58,13 @@ Docker 使用相同的 tarball 流程，以非 root 用户运行并保留 `/data
 
 ## 仓库与许可证
 
-根包的 `repository` 已指向 `1475505/miliastra-beyond-simulator`。采用 [GPL-3.0-only](LICENSE)，三个分发包均附带完整许可证，并已通过 `dudukl` 发布到 npm。自动发布使用 [GitHub Actions](.github/workflows/publish-npm.yml)，从 Git tag 构建并验收三个 tarball，再通过 npm Trusted Publishing 暂存版本有变化的包，等待维护者审核后上线；不创建专用产物分支。
+源码仓库为 `1475505/miliastra-beyond-simulator`，采用 [GPL-3.0-only](LICENSE)，三个分发包均附带完整许可证。自动发布流程见下节，公开发布说明见 [GitHub Releases](https://github.com/1475505/miliastra-beyond-simulator/releases)。
 
-源码版本以各产品 `package.json` 为准，本地安装包以 `release/manifest.json` 为准；npm公开版本以registry为准，暂存工作流成功不表示已经公开上线。MCP现行包名为 `beyond-simulator-mcp`，不再使用 `qxqy-simulator-mcp`。旧版DSH缺少新版Agent预设模块时跳过注册项，保留目录复制入口。
+源码版本以各产品 `package.json` 为准，本地安装包以 `release/manifest.json` 为准，npm 公开版本以 registry 为准；暂存工作流成功不表示已经公开上线。
 
 ## 自动发布到 npm
 
-工作流文件是 `.github/workflows/publish-npm.yml`，推送 `npm-*` Git tag 时触发。它在 GitHub 托管的 Ubuntu runner 上运行冻结锁文件安装、回归测试、Git 源码安装验收、三个包的构建和仓库外安装验收。`scripts/publish-npm.mjs` 在发布前校验 tarball 哈希；同版本同内容会跳过，同版本不同内容会失败并要求增加版本号。首次推送该工作流前，先把本地源码改动提交并推送到仓库；标记的提交必须包含这份工作流和要发布的版本。
+工作流文件是 `.github/workflows/publish-npm.yml`，推送 `npm-*` Git tag 时触发。它在 GitHub 托管的 Ubuntu runner 上运行冻结锁文件安装、回归测试、Git 源码安装验收、三个包的构建和仓库外安装验收。`scripts/publish-npm.mjs` 在发布前校验 tarball 哈希；同版本同内容会跳过，同版本不同内容会失败并要求增加版本号。Tag 必须指向已提交并推送的目标源码与版本。
 
 Ubuntu CI 显式安装 Fontconfig、DejaVu 和 Noto CJK，不依赖 runner 镜像预装字体。字体只安装在验收环境，不进入源码或发布包；文字绘制由常规渲染回归验证，不另设重复的 CI 绘字检查。
 
@@ -72,7 +72,7 @@ Ubuntu CI 显式安装 Fontconfig、DejaVu 和 Noto CJK，不依赖 runner 镜�
 
 在 npm 的以下三个包页面分别进入 **Settings → Trusted publishing → GitHub Actions**，配置相同的发布者：[DSH 插件](https://www.npmjs.com/package/dsh-plugin-beyond-simulator)、[Web](https://www.npmjs.com/package/beyond-simulator-web)、[MCP](https://www.npmjs.com/package/beyond-simulator-mcp)。填写 **Organization or user** `1475505`、**Repository** `miliastra-beyond-simulator`、**Workflow filename** `publish-npm.yml`；**Environment name** 留空，**Allow npm publish** 保持不勾选，只允许 `npm stage publish`。不需要在 GitHub 配置 `NPM_TOKEN`。工作流使用 `id-token: write` 获取 npm 的短期 OIDC 凭据。
 
-以后发布时，先为发生变更的包更新 `package.json` 版本并提交推送，再在该提交创建并推送一个新 tag，例如 `npm-2026-09-24-1`。只改代码而不增加对应包的版本号会触发“同版本不同内容”保护，不会覆盖 npm 上已发布的内容；未变化的包会跳过。工作流成功后，在 npmjs.com 的 **Staged Packages** 页面逐个检查并点击 **Approve**，通过 2FA 后版本才会公开；也可以使用 `npm stage list <包名>` 查找 stage ID，再运行 `npm stage approve <stage-id>`。审批后到 npm registry 可查询可能有几分钟延迟。
+发布时，为发生变更的包更新 `package.json` 版本并提交推送，再在该提交创建并推送新 tag。未变化的包会跳过。工作流成功后，在 npmjs.com 的 **Staged Packages** 页面逐个检查并点击 **Approve**，通过 2FA 后版本才会公开；也可用 `npm stage list <包名>` 查找 stage ID，再运行 `npm stage approve <stage-id>`。审批后到 registry 可查询可能有几分钟延迟。
 
 按产品发布时使用以下 tag；仍执行完整构建/验收，最后仅校验和暂存所选产品的 tarball，不检查或发布其他产品的同版本产物：
 

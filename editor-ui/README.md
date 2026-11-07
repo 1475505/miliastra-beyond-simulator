@@ -12,7 +12,7 @@
 
 共用 `.qxsim-action` / `.qxsim-iconbtn` 在亮暗主题下区分默认、悬停、按下与禁用状态。主按钮保持深蓝底白字，不能被通用悬停背景覆盖；禁用使用可读的中性色，不靠整体透明度淡出。键盘 `focus-visible` 显示外侧焦点环，`aria-busy="true"` 提供等待光标与加载标记；减少动态效果偏好下停止旋转和过渡。快速上手使用更大的主次操作区，长按钮名可换行，下载期间锁定重复触发。验证见 `web/test/editor-buttons-browser.test.mjs`。
 
-Windows / Node22 / Edge，`observed / simulator / device_status=not_required`：主按钮默认、悬停及按下时文字对比度不低于 4.5:1，覆盖亮暗主题、禁用不响应鼠标状态、键盘焦点与 Enter、慢速示例下载及防重复触发。主题切换截图应等颜色过渡结束，不能把中间态当作最终配色；不涉及游戏真机控件皮肤。
+按钮回归检查亮暗主题下主按钮默认/悬停/按下文字对比度不低于4.5:1、禁用状态、键盘焦点/Enter、慢速下载与防重复触发。主题切换截图须等待颜色过渡结束；这些是编辑器交互要求，不涉及游戏真机控件皮肤。
 
 ## 专题与实现入口
 
@@ -21,10 +21,10 @@ Windows / Node22 / Edge，`observed / simulator / device_status=not_required`：
   - [语言、联系作者与更新](../studio/docs/interface.md)：`footer.js`、`studio/i18n.js`。
   - [本地字体](../studio/docs/local-fonts.md)：`font-settings.js`，独立于项目revision。
 - **画布**（能力契约由[Studio](../studio/README.md#专题树)维护）
-  - [按键提示](../studio/docs/control-support.md#按键提示图标2026-11-05)：`key-hint-preview.js`，共用键帽/手柄图标绘制与设备预览选择。
+  - [按键提示](../studio/docs/control-support.md#按键提示图标)：`key-hint-preview.js`，共用键帽/手柄图标绘制与设备预览选择。
   - [图片素材](../studio/docs/image-assets.md)：`image-preview.js`，使用`imageSource + imageId`身份、同源`/qxqy-assets/`及`image-refresh`。
   - [动效](../studio/docs/ui-vfx-playback.md)：`ui-vfx-preview.js`，搜索、静音预览、重播/重试与停止。
-  - [旋转](../studio/docs/control-support.md#xy-旋转投影2026-10-12)与[遮罩](../studio/docs/control-support.md#编辑画布遮罩与羽化2026-10-20)：`control-transform.js`、`mask-preview.js`；选框独立于效果层。
+  - [旋转](../studio/docs/control-support.md#xy-旋转投影)与[遮罩](../studio/docs/control-support.md#编辑画布遮罩与羽化)：`control-transform.js`、`mask-preview.js`；选框独立于效果层。
 - **导出与实机更新**
   - [部分导出](../studio/docs/partial-export.md)：属性栏单项GIA、顶栏组合勾选预览。
   - [Lua索引同步](../studio/docs/control-guid-sync.md)：索引修改、同时映射、备份和AI核对。
@@ -50,4 +50,4 @@ Windows / Node22 / Edge，`observed / simulator / device_status=not_required`：
 - `QXQY_ELECTRON`指定Electron，运行`node --test web/test/desktop-play.test.mjs`，使用真实插件bundle和隔离宿主夹具验证窗口拒绝、`dsh-app`转发、iframe和Worker停止。
 - `node --test web/test/quick-start.test.mjs` 验证下载失败与重试、独立会话、重复请求复用及保存；设置 `QXQY_BROWSER` 时覆盖真实鼠标操作、高亮目标避让、窗口缩放与滚动定位、脚本草稿提交、试玩提示、逐项路径设置、进度恢复及返回原工程。夹具为合成工程。
 
-2026-10-01 Windows / Node22.23.2 / Edge / Electron44.0.0验收为`observed / simulator / not_required`；完整签名Desktop、macOS和游戏真机不在该范围。
+既有观察范围为 Windows / Node22 / Edge，以及内嵌试玩的 Electron44 隔离夹具，属于 `observed / simulator / not_required`；不涵盖完整签名 Desktop、macOS或游戏真机。

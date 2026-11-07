@@ -18,10 +18,10 @@ dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.4.tgz
 
 ## 文档与功能入口
 
-- [版本公告](CHANGELOG.md)：面向使用者的发布变化。
+- [GitHub Releases](https://github.com/1475505/miliastra-beyond-simulator/releases)：公开发布说明与安装包。
 - [模拟器操作Skill](../skill/SKILL.md)：工具工作流；构建复制到包内`dsh-plugin/skill.md`，通过独立skills组件注册`qxqy-simulator`。
 - [游戏制作预设](../agent/wonderland-lua-builder/README.md)：源码、七步流程与行为评估。构建嵌入声明式预设，并携带旧宿主目录副本；已有用户副本不覆盖。
-- [升级后会话无法加载与历史恢复](docs/session-recovery.md)：0.2.2 预设入口迁移、应急修复、原始日志位置与导出。
+- [升级后会话无法加载与历史恢复](docs/session-recovery.md)：预设入口兼容、用户覆盖修正、原始日志位置与导出。
 - [共用编辑器](../editor-ui/README.md)：UI、Lua、服务端逻辑、主题、语言、字体与试玩窗口。
 - [Studio专题](../studio/README.md#专题树)：图片/音频/动效缓存、输入、部分导出、索引与脚本同步。
 
@@ -29,42 +29,30 @@ Host Tools为`qxqy_script_sync`、`qxqy_studio_get/patch/export/play/load`、`qx
 
 工作区绑定DSH会话原始工程根。存档发现复用Studio，支持大于8MiB的存档，选最近50项并返回`discovery`限制/诊断；指定工作区内路径不受列表筛选限制。加载成功记住相对路径，省略保存路径时写回；未绑定时返回`{ bound:false, archives:[] }`。
 
-## Desktop protobuf 导入失败
+<a id="harness-02-兼容性"></a>
+<a id="harness-021-兼容性"></a>
+## 宿主兼容契约
 
-2.1.2起把完整protobufjs编入Host/Worker，GIA解析不再依赖宿主共享CommonJS导出。遇到旧包`hu.parse is not a function`，更新后保存工作、从托盘完整退出Harness再启动；仅禁用/启用不能清除失败的ESM导入缓存。
+- 宿主准入与 npm peer 的预发布匹配规则不同；兼容范围以根 `package.json` 为准，不用忽略 peer 代替适配。依据：[插件兼容](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/boot/plugin-manager/README.md#version-compatibility-and-exemptions)。
+- 新版默认使用声明式预设；构建从主维护源生成注册项与旧目录副本，更新旧 `.agent-presets` 不一定生效。Persona 变量与用户副本处理见[预设说明](../agent/wonderland-lua-builder/README.md#persona-工作目录变量兼容性)，`list-agents` 入口及持久化接口见[会话恢复](docs/session-recovery.md)。
+- 嵌入预设的 `baseUrl` 可能来自合成 profile，Skill 须按安装包定位；旧目录预设才使用相邻 `skills/`。`test:harness` 验证正文及 `references/workflow.md` 可读，不能只检查菜单可见。
+- 模拟器绑定会话原始工程 cwd；Shell 切目录不切换编辑工程。工具定义、JSON 输出、附件、HTTP 路由、ModuleLoader 与 `conversation.view` 由适配层对接，共享 VM/存档不按宿主版本另建分支。子代理与 Agent Team 调度由官方插件处理，旧 `backgroundMode` 不构成新版同步等待承诺。
 
-原报告环境为Desktop0.2.1-rc.2，完整触发链与用户原窗口回验未确认。`test/protobuf-bundle.test.mjs`用独立进程验证缺失外部parse时仍可加载并往返GIA；这是依赖隔离证据，不等于原进程复现。Windows / Node22及Desktop自带Node24.21.0的隔离SDK宿主为`observed / simulator / not_required`。
+<a id="desktop-内嵌试玩208"></a>
+## Desktop 内嵌试玩
 
-## Desktop 内嵌试玩（2.0.8）
+Desktop 拒绝页面子窗口时，在保存成功后回退同源全屏 iframe。关闭、返回和 Escape 等待 stop 成功，失败可重试，编辑器保持挂载；完整生命周期见[共用编辑器](../editor-ui/README.md#试玩窗口与内嵌兜底)。
 
-DSH Desktop0.2拒绝页面子窗口；插件从2.0.8起在保存成功后回退同源全屏iframe。返回编辑、关闭或Escape等待stop成功，失败可重试；编辑器保持挂载。生命周期与浏览器/Electron验收边界见[共用编辑器](../editor-ui/README.md#试玩窗口与内嵌兜底)。
+## 故障定位
 
-## 路由重复注册（2.0.11）
+### Desktop protobuf 导入失败
 
-`webserver: duplicate prefix route "/qxqy-simulator/api"`本身不能证明重复安装。[WebServer.register](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/host/webserver/src/index.ts)返回普通注销函数；旧插件丢弃它，单组件重启或tools依赖重载即可残留路由。
+完整 protobufjs 编入 Host/Worker，使 GIA 解析独立于宿主共享 CommonJS 导出。旧包报 `hu.parse is not a function` 时，更新插件、保存工作并从托盘完整退出 Harness 后启动；禁用/启用无法清除失败的 ESM 导入缓存。`test/protobuf-bundle.test.mjs` 验证独立进程中的依赖隔离与 GIA 往返；原 Desktop0.2.1-rc.2 窗口的完整触发链和回验未确认。
 
-2.0.11起所有HTTP路由通过`ctx.effect`接管注销，部分注册失败回滚，卸载等待Worker退出并拒绝迟到请求。真实同时挂载冲突仍报错，不覆盖其他组件。更新并完整重启可清除旧残留；保留原版主组件insert。
+<a id="路由重复注册2011"></a>
+### 路由重复注册
 
-`test/lifecycle.test.mjs`覆盖重复重启、依赖重载、失败回滚、Worker等待和迟到请求，检查HTTP/工具共用Registry。2026-10-07 Windows / Node22.23.2 / Harness0.2.0-rc.2验证为`observed / simulator / not_required`；反馈者Desktop原始再激活事件与修复回验未覆盖。
-
-## Harness 0.2 兼容性
-
-- 宿主依据DSH peer范围准入；npm预发布匹配与宿主的`includePrerelease`不同。当前兼容范围以根package.json为准，不用忽略peer代替适配。依据：[插件兼容](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/boot/plugin-manager/README.md#version-compatibility-and-exemptions)。
-- 嵌入预设的`baseUrl`可能来自合成profile，Skill路径须按安装包定位；旧目录预设才使用相邻`skills/`。`test:harness`需读到正文及`references/workflow.md`，仅菜单可见不算通过。
-- 已用的defineTool、JSON输出、附件、会话cwd、HTTP路由、ModuleLoader与conversation.view沿用；VM与存档格式不因宿主版本另建分支。
-
-## Harness 0.2.1 兼容性
-
-依据2026-10-18核对的[官方0.2.1-rc.1说明](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.1)及[rc.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)，`documented / official_document`：
-
-| 接口变化 | 适配 |
-|---|---|
-| 移除cwd提示词变量 | persona已移除旧引用，保留model；见[预设迁移](../agent/wonderland-lua-builder/README.md#persona-工作目录变量兼容性)。 |
-| 默认声明式预设 | 更新插件内嵌注册项才更新默认预设；改旧`.agent-presets`副本不一定生效。 |
-| 优先engines.dsh，回退peer | 本插件使用peer，显式涵盖0.2.1 RC，避免npm ERESOLVE。 |
-| working_directory服务 | 模拟器仍绑定Session.header.cwd原始工程；Shell切目录不等于切编辑工程。 |
-| 子代理/Agent Team调整 | 由官方插件处理；旧backgroundMode配置不构成新版同步等待承诺。 |
-| 热重载和扩展位 | 路由走effect清理；完整宿主验证实际预设提示词渲染、Skill发现及模块加载。 |
+`webserver: duplicate prefix route "/qxqy-simulator/api"` 不足以证明重复安装。HTTP 路由的注销函数由 `ctx.effect` 管理，部分注册失败回滚；卸载等待 Worker 退出并拒绝迟到请求。更新并完整重启可清除旧残留；真实同时挂载冲突仍报错，不覆盖其他组件。`test/lifecycle.test.mjs` 覆盖重启、依赖重载、回滚及 HTTP/工具共用 Registry；反馈者原始 Desktop 再激活事件未复现。
 
 ## 验证入口与边界
 
@@ -72,4 +60,4 @@ DSH Desktop0.2拒绝页面子窗口；插件从2.0.8起在保存成功后回退�
 
 `test/plugin.test.mjs` 与 `test/lifecycle.test.mjs` 只维护宿主协议、注册工具、会话隔离和 Worker 生命周期；共享编辑、存档、GIA 与 PNG 的功能回归归 Studio，安装包与真实 Harness 检查继续验证交付边界。
 
-本轮安装与完整Web宿主证据范围为Windows / Node24.21.0 / Harness0.2.1-rc.2与0.2.2-rc.1，`observed / simulator / not_required`；恢复用例见[会话恢复](docs/session-recovery.md#依据与回归入口)。不涵盖真实模型/Agent Team、完整签名Desktop、Linux/macOS、SSH或子路径public-url部署。Windows隔离Git安装以`npm_config_package_import_method=copy`避免已加载Canvas DLL的unlink/EPERM冲突；该文件占用错误与构建审批拒绝不同。
+既有完整 Web 宿主观察范围为 Windows / Node24.21.0 / Harness0.2.1-rc.2 与0.2.2-rc.1，`observed / simulator / not_required`，不涵盖真实模型/Agent Team、完整签名 Desktop、Linux/macOS、SSH 或子路径 public-url 部署。Windows 隔离 Git 安装可用 `npm_config_package_import_method=copy` 避免已加载 Canvas DLL 的 unlink/EPERM 冲突；文件占用与构建审批拒绝应分别处理。

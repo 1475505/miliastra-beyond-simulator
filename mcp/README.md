@@ -3,7 +3,7 @@
 独立的 MCP stdio server，让 Codex 或其他 MCP client 直接驱动千星沙箱模拟器。它不依赖 DSH；编辑和试玩仍复用 `../studio`、`../client/lua-runtime` 与 `../server`。
 
 <a id="052-更新"></a>
-发布变化统一见 [版本公告](../dsh-plugin/CHANGELOG.md)，本页只维护当前接入与工具契约。更新或修改字体后重启 MCP 服务；配套 Web 使用兼容版本。
+公开发布说明见 [GitHub Releases](https://github.com/1475505/miliastra-beyond-simulator/releases)，本页维护当前接入与工具契约。更新或修改字体后重启 MCP 服务；配套 Web 使用兼容版本。
 
 ## 安装与自检
 
@@ -100,7 +100,7 @@ qxqy_studio_play({ handle: "project-1", action: "start", args: { clockMode: "rea
 - `device` 重建运行时并保留本局模式，也可显式指定模式；新的 `start` 未指定时恢复 MCP 默认 manual。
 - 运行快照和截图回执含 `clockMode` 和目标 `fps`。Web/DSH 的交互试玩默认仍为 realtime。
 
-这是用户确认的模拟器工具策略，不是游戏时钟契约，关联 [#5](https://github.com/1475505/miliastra-beyond-simulator/issues/5)。异步截图准备不推进 manual 时钟，非法模式在替换 Worker 前拒绝。回归入口为 `mcp/test/protocol.test.mjs`、`studio/test/host-clock.test.mjs`，覆盖真实 stdio → Controller → Worker → Lua；Windows / Node22.23.2，`observed / simulator / not_required`。
+这是模拟器工具策略。异步截图准备不推进 manual 时钟，非法模式在替换 Worker 前拒绝。回归入口：`mcp/test/protocol.test.mjs`、`studio/test/host-clock.test.mjs`，覆盖 stdio → Controller → Worker → Lua。
 
 ### 30 / 60 FPS
 
@@ -115,19 +115,16 @@ qxqy_studio_play({ handle: "project-1", action: "fps", args: { fps: 30 } })
 - Web 预览工具栏、Web/DSH 独立或内嵌试玩底栏均有 30 / 60 FPS 选择，浏览器场景轮询同步切换；选择记在当前浏览器本地，并在重新试玩、切设备时沿用。刷新预览接回已有 Worker 时以该 Worker 为准。
 - `fps` 是目标帧率，实际画面更新受 Lua、场景规模、网络和浏览器负载影响；视频动效仍受素材自身帧率限制。
 
-实现：`studio/play/frame-rate.js`、`studio/host/worker.js`、`studio/play/browser-session.js`。验证入口：`studio/test/host-clock.test.mjs`（Lua/Tween 时长、单帧、暂停、非法参数）、`studio/test/browser-session.test.mjs`（场景轮询）、`web/test/frame-rate-browser.test.mjs`（两个界面入口）。2026-11-06 / Windows / Node22.23.2 / Edge，`observed / simulator / not_required`；合成场景验证，不保证所有工程满帧，也不构成真机帧率契约。
+实现：`studio/play/frame-rate.js`、`studio/host/worker.js`、`studio/play/browser-session.js`。回归：`studio/test/host-clock.test.mjs`（Lua/Tween 时长、单帧、暂停、非法参数）、`studio/test/browser-session.test.mjs`（场景轮询）、`web/test/frame-rate-browser.test.mjs`（两个界面入口）。检查验证模拟器合成场景，不构成真机帧率契约。
 
-### 脚本重载与问题边界
+<a id="脚本重载与问题边界"></a>
+### 脚本重载与检查
 
-非空内联 `scripts[].source` 优先于磁盘 `path`。保存文件后，使用 `stop → load → start` 重新加载对应工程；只改磁盘或另一个进程的工程不会更新当前 handle。该路径可加载新源码，但报告者原始旧脚本问题未复现、原因未知，不将源码优先级直接认定为其根因。
+非空内联 `scripts[].source` 优先于磁盘 `path`。保存文件后，用 `stop → load → start` 重载对应工程；只改磁盘或另一个进程的工程不会更新当前 handle。原始旧脚本反馈尚未复现，不能直接将源码优先级认定为根因。
 
-| 问题 | 已核验与未解决范围 |
-|---|---|
-| [#4 光标事件](https://github.com/1475505/miliastra-beyond-simulator/issues/4) | 合成动态光标区可收到 pointer down/up 与按名 click；raycast/showCursor 关闭会阻止。按名 click 必须传名称，不能用它替代坐标命中；原工程仍缺存档和调用参数，不能凭合成通过关闭问题。 |
-| [#6 运行树与导入](https://github.com/1475505/miliastra-beyond-simulator/issues/6) | `get {inspect:true}` 可取得运行树；本工具打开完整 JSON，Studio/Web/DSH 支持 GIA 子集，不支持 GIL 整关卡导入。 |
-| [#7 GetChildren](https://github.com/1475505/miliastra-beyond-simulator/issues/7) | 元素是可操作的 Control 引用。历史本地 API rev223 未约定数组顺序；最上层在前是[模拟器策略](../client/lua-runtime/docs/observed-contract.md#默认动态实例层序2026-09-28)，不等于真机数组顺序已通过。逆序逐个调用 Last 后最终顺序可不变，不能据此认定 setter 无效。 |
-
-`client/lua-runtime/test/children-reference.test.mjs` 按名称识别引用，验证显隐和显式排序，不固定数组顺序。上述合成核验不替代未提供原工程的复现。
+- `get {inspect:true}` 可取得运行树；本工具打开完整 JSON，Studio/Web/DSH 支持 GIA 子集，不支持 GIL 整关卡导入。
+- 光标需满足 raycast/showCursor 门控；按名 click 必须传名称，不能替代坐标命中。[#4](https://github.com/1475505/miliastra-beyond-simulator/issues/4) 仍缺原工程及调用参数，合成通过不代表该故障已关闭。浏览器输入传输问题见[输入队列](../studio/docs/browser-input.md#输入队列与请求顺序)。
+- `GetChildren` 的引用与顺序见[Runtime 契约](../client/lua-runtime/docs/observed-contract.md#控件字段与调用校验)。逆序逐个调用 Last 可能保持最终顺序，不能据此判定 setter 无效。
 
 ### 截图、声音与 Web 预览
 
@@ -197,9 +194,9 @@ qxqy_studio_export({ handle: "project-1", action: "export", args: {
 
 ### 客户端控件索引校准
 
-真实编辑器导入 GIA 后若重新分配了客户端控件索引，可在 Web/DSH 编辑器修改选中客户端控件的「索引」，或使用当前资产的 `setControlGuid`。`id` 是存档内部控件 ID，`guid` 是用户回传的实际索引；新写入范围及旧值兼容见 [索引规则](../studio/docs/control-guid-sync.md#索引范围与旧数据232026-10-21)。操作保留内部 ID 和脚本挂载，拒绝服务端容器及工程中重复的控件/脚本索引。
+真实编辑器导入 GIA 后若重新分配了客户端控件索引，可在 Web/DSH 编辑器修改选中客户端控件的「索引」，或使用当前资产的 `setControlGuid`。`id` 是存档内部控件 ID，`guid` 是用户回传的实际索引；新写入范围及旧值兼容见 [索引规则](../studio/docs/control-guid-sync.md#索引范围与旧数据)。操作保留内部 ID 和脚本挂载，拒绝服务端容器及工程中重复的控件/脚本索引。
 
-同一批客户端模板导入且结构未改动时，可在客户端资产下附加 `autoFillClientGuids: true`：以指定控件为锚点，按 GIA 原生父先子后顺序填写全部模板及子控件。它不是全体旧 GUID 加固定偏移；服务端界面和脚本不参与，越界或与范围外控件/脚本冲突会整批拒绝。变更账本中的同一 `batchId` 代表同时映射，处理 Lua 引用时不可按数字逐条替换。Web/DSH 有对应的默认关闭复选框及区间预览。规则依据与适用边界见 [模板层序与索引校准](../studio/docs/client-template-order.md#imported-index-calibration-2026-10-12-follow-up)。
+同一批客户端模板导入且结构未改动时，可在客户端资产下附加 `autoFillClientGuids: true`：以指定控件为锚点，按 GIA 原生父先子后顺序填写全部模板及子控件。它不是全体旧 GUID 加固定偏移；服务端界面和脚本不参与，越界或与范围外控件/脚本冲突会整批拒绝。变更账本中的同一 `batchId` 代表同时映射，处理 Lua 引用时不可按数字逐条替换。Web/DSH 有对应的默认关闭复选框及区间预览。规则依据与适用边界见 [模板层序与索引校准](../studio/docs/client-template-order.md#imported-index-calibration)。
 
 先确认当前资产与目标控件一致；需要时调用 `selectAsset`，其 `assetType` 为 `server-control-template` 或 `client-control-template`，然后重新 `get` 读取控件及 revision。
 

@@ -37,7 +37,7 @@ export function createFooter(React) {
         version ? e('span', { className: 'qxsim-muted' }, `v${version}`) : null,
         e('span', { className: 'spacer' }),
         e('button', { onClick: check, disabled: busy }, busy ? t('正在检查更新…') : t('检查更新')),
-        e('a', { href: 'https://space.bilibili.com/23358791', target: '_blank', rel: 'noreferrer' }, t('作者B站')),
+        e('a', { href: 'https://space.bilibili.com/233587917', target: '_blank', rel: 'noreferrer' }, t('作者B站')),
         e('button', { onClick: () => setDialog('contact') }, t('联系作者')),
         onQuickStart ? e('button', { className: 'qxsim-quick-button', onClick: onQuickStart }, t('快速上手')) : null),
       dialog === 'contact' ? e(Dialog, { title: t('联系作者'), onClose: () => setDialog('') },

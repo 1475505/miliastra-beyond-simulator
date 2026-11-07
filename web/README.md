@@ -3,7 +3,7 @@
 单用户自托管 Web 编辑器和磁盘存档预览，无需 Harness。复用共享 Studio、Lua Runtime、固定步长试玩 Worker、Pixi 渲染器及 `editor-ui` 编辑界面。
 
 <a id="052-更新"></a>
-发布变化统一见 [版本公告](../dsh-plugin/CHANGELOG.md)，本页只维护当前使用与部署。更新或修改字体后，重启 Web 服务并刷新页面。
+公开发布说明见 [GitHub Releases](https://github.com/1475505/miliastra-beyond-simulator/releases)，本页维护当前使用与部署。更新或修改字体后，重启 Web 服务并刷新页面。
 
 ## 安装与启动
 
@@ -33,7 +33,7 @@ beyond-simulator-web --workspace /absolute/path/to/workspace --open
 
 构建后的入口是 `web/dist/server.js`，静态文件与 Worker 随包携带。安装者无需源码、pnpm 或 esbuild。
 
-更新时再次执行 `npm install -g beyond-simulator-web`，再重启服务。包名与启动命令已统一为 `beyond-simulator-web`；此前使用旧命令的启动脚本也需同步更新。
+更新时再次执行 `npm install -g beyond-simulator-web`，再重启服务并刷新页面。
 
 ## 编辑与保存
 
@@ -79,7 +79,7 @@ node web/server.js --workspace E:/qxqy-lua --port 4173
 
 实现：`lib/quick-start-source.js`、`lib/editor-sessions.js`、共用 `editor-ui/quick-start.js` 与 `dsh-plugin/lib/play.html`。Web/DSH 共用实操引导，Web 额外提供示例来源和独立会话。示例未内置于安装包；示例路径只用作填写提示，不限制操作当前工程，步骤推进不依赖玩法日志。宿主重启后的未保存工程恢复沿用上方[编辑与保存](#编辑与保存)边界，已保存教学存档可作为普通工程打开。
 
-验证：`web/test/editor.test.mjs`、`web/test/quick-start.test.mjs`。Windows / Node22 / Edge，`observed / simulator / device_status=not_required`：12 个未保存会话在 2 个热会话预算下逐一恢复、保存冲突及同步计划保持、并发请求与活跃 Worker 保护、超时 Worker 释放；1 个热会话预算下教学下载重试与副本复用。浏览器沿同一工程执行试玩、GIA 导出、选控件、修改索引、同步 Lua、保存目录、预览与显式复制，复制仅使用临时目标目录。另覆盖 1440/1366/1024 宽度下目标避让、透传及刷新恢复。游戏内的 GIA 导入不在该验证范围。
+回归：`web/test/editor.test.mjs`、`web/test/quick-start.test.mjs`，覆盖热会话预算下的未保存工程/同步计划恢复、并发与活跃 Worker 保护、闲置释放、教学下载重试和副本复用。浏览器用合成工程走试玩、导出、索引/Lua同步、目录设置和临时目录显式复制，并检查多窗口尺寸、目标避让、透传及刷新恢复。观察范围为 Windows / Node22 / Edge（`observed / simulator / not_required`），不涵盖游戏内 GIA 导入。
 
 ## 与 MCP 配合
 
@@ -87,7 +87,7 @@ node web/server.js --workspace E:/qxqy-lua --port 4173
 
 MCP 显式调用 `qxqy_project_save` 保存工作区 JSON 后，`/` 每 700ms 检查当前文件。还没有打开存档时，每 5 秒重新发现存档并自动打开最新的 `qxqy-simulator-save`；已经打开时，只在该文件变化后停止旧试玩、重新加载，并通过 SSE 刷新浏览器。不会自动改看另一个路径。顶部刷新按钮可立即扫描。该预览不写文件。`/editor` 不自动用磁盘内容覆盖正在编辑的草稿，需要手动“从工作区拉取存档”。
 
-MCP 0.3.0 起提供 `qxqy_preview_status()` 和 `qxqy_preview_open({ path: "game.save.json" })`：前者查询 Web 实际版本、工作区、当前存档和加载错误，后者直接让预览服务读取指定存档，无需重新保存。MCP 默认连接 `http://127.0.0.1:4173`，其他端口使用 MCP 的 `--web-url` 或 `QXQY_WEB_URL`；Web 启用口令时，在 MCP 环境中配置相同的 `QXQY_WEB_PASSWORD`。两边必须使用同一工作区，桥接会在读取和打开时校验。工具回执确认服务端已加载，浏览器通过 SSE 或定期状态同步刷新。
+MCP 提供 `qxqy_preview_status()` 和 `qxqy_preview_open({ path: "game.save.json" })`：前者查询 Web 实际版本、工作区、当前存档和加载错误，后者直接让预览服务读取指定存档，无需重新保存。MCP 默认连接 `http://127.0.0.1:4173`，其他端口使用 MCP 的 `--web-url` 或 `QXQY_WEB_URL`；Web 启用口令时，在 MCP 环境中配置相同的 `QXQY_WEB_PASSWORD`。两边必须使用同一工作区，桥接会在读取和打开时校验。工具回执确认服务端已加载，浏览器通过 SSE 或定期状态同步刷新。
 
 页面“预览连接”显示 Web 版本、工作区、加载错误与扫描警告。发现列表只读取 JSON 的前 4 KiB，不再排除超过 8 MiB 的合法存档；在扫描预算内按修改时间取最新 50 项。自动扫描跳过隐藏条目及依赖/生成目录，最多 8 层、10,000 条目和 1,000 目录；达到限制或读取失败会显示汇总警告。明确指定的 `--file` / 预览工具路径不受列表筛选限制，但仍受工作区边界保护。损坏 JSON 会显示加载错误并继续重试；初始文件缺失不会导致整个 Web 服务无法启动。
 

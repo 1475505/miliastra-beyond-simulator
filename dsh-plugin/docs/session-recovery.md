@@ -14,25 +14,26 @@ agent-preset/invalid
 
 历史会话记录预设 ID，恢复时仍须挂载该预设。预设加载失败会阻止恢复；界面上的“无法加载／可能已删除”不能单独证明日志丢失。DSH 的 JSONL 持久化服务没有删除日志的 API，但手动清理、使用不同的 `DSH_HOME`、文件损坏等仍需按实际文件检查。
 
-2.2.4 按宿主是否可解析旧子入口决定是否禁用该行：旧宿主继续使用独立 `list_agents`，新宿主由主入口注册一次。保持预设 ID 与旧配置行 ID，便于原会话重新绑定，也避免破坏已有按行 ID 的 patch。npm peer 范围显式增加 `0.2.2-rc.1`；宿主准入范围与 npm 的预发布解析规则不同。
+插件 2.2.4 起按宿主是否可解析旧子入口决定是否禁用该行：旧宿主使用独立 `list_agents`，新宿主由主入口注册一次。保持预设 ID 与旧配置行 ID，以便原会话重新绑定并兼容按行 ID 的用户 patch。
 
-另同步持久化接口：查看尚未激活 Agent 的历史会话时，优先通过新版 `sessionPersistence.stat().header` 绑定模拟器工作区，旧宿主回退 `inspect().meta`，避免原工作区被误显示为“未绑定”。
+查看尚未激活 Agent 的历史会话时，通过 `sessionPersistence.stat().header` 绑定模拟器工作区，旧宿主回退 `inspect().meta`。
 
 ## 用户恢复步骤
 
 1. **保存工作并完整退出 Harness。** 确认所用数据根：默认 Windows 为 `%USERPROFILE%\.dsh`，macOS/Linux 为 `~/.dsh`；设置了 `DSH_HOME` 时以它为准。复制该目录作备份，尤其保留 `sessions/`、`attachments/`、`storages/`、`profiles/`、`.agent-presets/`。这也保留了工作区分组、附件与用户配置。
-2. **安装含修复的插件到实际使用的 profile。** Desktop 使用 `desktop`，CLI Web 使用 `web`。Desktop 先通过应用菜单“管理 dsh 命令…”注册或修复内置命令，打开新终端核对 `dsh --version`，然后退出应用再执行安装；新版 Desktop profile 由其内置 CLI 管理，npm 全局安装的 CLI 不能修改它。本地修复包示例：
+2. **更新插件到实际使用的 profile。** Desktop 使用 `desktop`，CLI Web 使用 `web`。Desktop 先通过应用菜单“管理 dsh 命令…”注册或修复内置命令，打开新终端核对 `dsh --version`，然后退出应用再执行安装；新版 Desktop profile 由其内置 CLI 管理，npm 全局安装的 CLI 不能修改它：
 
    ```powershell
-   dsh plugin --profile desktop add "E:/path/to/dsh-plugin-beyond-simulator-2.2.4.tgz"
+   dsh plugin --profile desktop add dsh-plugin-beyond-simulator
    ```
 
-   对 CLI Web 换成 `--profile web` 并使用对应的 Web CLI。npm/GitHub 安装需确认远端已经包含修复；源码和本地包存在不表示公开版本已发布。DSH 0.2.2 需要 Node.js 24.9+，Desktop 内置命令使用应用自带运行时。
+   对 CLI Web 换成 `--profile web` 并使用对应 CLI；也可将包名换成本地 tarball 绝对路径。检查实际加载版本为2.2.4或后续兼容版。DSH 0.2.2 需要 Node.js 24.9+，Desktop 内置命令使用应用自带运行时。
 3. **重启后在设置 → Agent 预设检查“千星 2D+Lua 游戏制作”。** 在“查看配置”中确认旧 `tool-subagent-list-agents` 有兼容性 `disabled` 条件。然后从原工作区打开原会话；无需改会话 ID、重建对话或替换日志里的 `agentPreset`。
 4. **仍报同一入口错误时检查用户覆盖。** 新版默认读取声明式预设，通常是插件生成项加 `$DSH_HOME/profiles/<profile>/cordis.patch.yml` 覆盖。若用户保存过整个 `config.plugins`，旧列表可能遮住升级后的包；保留自定义配置并修正那一行。只修改旧 `.agent-presets` 目录不一定会影响新版。
 5. **恢复后导出一份可读记录。** DSH 0.2.2 会话标题更多菜单提供“复制会话为 Markdown”和“下载 Session 日志”；后者包含子会话与附件。Markdown 是便于阅读和交接的记录，原始日志备份用于完整恢复。
 
-### 无需等待发布的应急修复
+<a id="无需等待发布的应急修复"></a>
+### 旧用户覆盖的手动修正
 
 在确认运行 **DSH 0.2.2** 后，备份并修改实际加载的预设插件列表，将唯一的旧子入口行设为禁用，保留同级主入口：
 
@@ -45,7 +46,7 @@ agent-preset/invalid
   disabled: true
 ```
 
-将这段变化应用到“查看配置”所对应的来源，按原层级和缩进编辑；不要用这两项替换整份预设。由插件管理的包内 `dsh-plugin/cordis.patch.yml` 会被下次更新覆盖，适合作临时修复；用户 profile 覆盖需单独同步。保存后完整重启。旧 0.2.1 宿主仍有这个子入口，通用修复应采用 2.2.4 的条件判断而非永久禁用。
+将变化应用到“查看配置”对应的用户覆盖，保留原层级和其他自定义项，不用这两项替换整份预设。包内生成的 `dsh-plugin/cordis.patch.yml` 会被更新覆盖，应通过升级插件取得兼容条件。保存后完整重启；旧0.2.1宿主仍使用该子入口，跨版本配置应保留插件的条件判断。
 
 ## 原始历史在哪里
 
@@ -88,5 +89,5 @@ Get-ChildItem (Join-Path $dshHome 'sessions') -Recurse -File -Filter 'session*.j
   - [持久化布局与不删除日志的边界](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/session/session-persistence-jsonl/README.md)、[历史导出](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/session-query/session-log-export/README.zh.md)。
   - [Desktop 内置命令与插件管理](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/apps/desktop/README.zh.md#bundled-command-runtime)。
   - [0.2.2-rc.1 发布说明](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.1)：Node.js 24.9+、旧子代理描述修复、Markdown 导出与工具执行接口变化。
-- **本地复现**：Windows / Node 24.21.0 / 隔离 Harness 0.2.2-rc.1 Web / 插件 2.2.3，预期预设可挂载，实际 `broken: tool-subagent-list-agents … never started`；`observed / simulator / not_required`。
-- **回归**：Windows / Node 24.21.0 / 隔离 Harness 0.2.1-rc.2 与 0.2.2-rc.1 Web / 插件 2.2.4 均通过，`observed / simulator / not_required`。`scripts/smoke-harness-probe.mjs` 验证实际预设挂载、工具唯一性、持久化会话卸载后原 ID/消息恢复、冷历史工作区与新会话创建；`scripts/smoke-dsh-tools.mjs` 同时走旧单调用与 0.2.2 批处理执行接口。完整宿主用 `pnpm test:harness`；旧宿主可传 CLI 路径。该检查使用合成会话且不请求模型，不代表反馈者原始会话已逐一恢复，也不涵盖损坏日志的修复。
+- **回归入口**：`pnpm test:harness`（旧宿主可传 CLI 路径）。`scripts/smoke-harness-probe.mjs` 验证预设挂载、工具唯一性、卸载后原 ID/消息恢复、冷历史工作区与新会话；`scripts/smoke-dsh-tools.mjs` 覆盖旧单调用和0.2.2批处理接口。
+- **观察边界**：Windows / Node24.21.0 / 隔离 Harness0.2.1-rc.2、0.2.2-rc.1 Web 的合成会话，`observed / simulator / not_required`。未请求模型，不代表反馈者原始会话逐一恢复，也不涵盖损坏日志修复。

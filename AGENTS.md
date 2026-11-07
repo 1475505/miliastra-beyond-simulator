@@ -25,12 +25,12 @@ Lua VM 只放在 Runtime，Authoring/GIA 只放在 Studio，接入层复用共�
 
 - UI 层级：服务端“客户端控件容器” → 客户端“容器节点” → 子控件。三类存档资产为服务端 UI、客户端模板、Lua 脚本，没有“服务端 Lua”。
 - 层序：显式【层级】数值高的在上（Lua sibling 大的在上，First 置底、Last 置顶）；编辑器同级列表第一项在上。内部 children 保持列表顺序，Lua 数值在 scene.js 边界反向映射；不要把编辑器树/GIA wire/运行时索引混成一个方向。主证据见根 knowledge/fact.md“同级绘制与命中”。
-- 动态实例化：新实例根默认置顶，模板内静态子列表保持原序；默认顺序在模板脚本启动前就绪。规则来源、边界与回归见 [Runtime 契约](client/lua-runtime/docs/observed-contract.md#默认动态实例层序2026-09-28)。
+- 动态实例化：新实例根默认置顶，模板内静态子列表保持原序；默认顺序在模板脚本启动前就绪。规则来源、边界与回归见 [Runtime 契约](client/lua-runtime/docs/observed-contract.md#默认动态实例层序)。
 - 按键监听：2026-10-24官方公开指南声明按渲染顺序优先传递；`injectKey` 沿显示层序派发。同根消费与跨容器边界仍是模拟器策略，不能用旧版真机探针证明新版顺序；证据见根 `knowledge/fact.md` 的按键顺序条目。
 - `game` 为全局表，函数按官方签名用点号调用；Lua 桥接必须核对参数个数，避免冒号误用在模拟器中静默通过。真机已回传 `GetClientUIRoots()` 零参数报错，见根 [fact.md](../knowledge/fact.md#game-函数误用冒号会在真机多传一个参数)。
 - 仅客户端控件/模板允许挂脚本，以 `controlAsset` 区分两棵树同名 ID；模板脚本随实例化运行。11 类控件按 GIA 证据分级，N/U 字段只读，不伪造。
 - 图片由 `imageSource + imageId` 共同标识；静态来源 `100001–100006` 用基础图元代理，其他静态白名单还原透明留白，Prefab 白名单直接使用完整图标 PNG。宿主按来源隔离缓存；Lua 用 `SetImage`，编辑器来源可选。未知来源/ID 和加载失败显示缺失框。目录、GIA 边界及刷新见 [素材缓存](studio/docs/image-assets.md)，预览不代表真机素材渲染契约。
-- 图片类型 Basic 整图缩放、Stretch 按 m_Border 三/九切片。默认和小尺寸/零中心策略对齐图片编辑器 20659b3；Lua 白名单可写范围与真机条件支持严格区分，详见 [图片类型](studio/docs/image-assets.md#图片类型基础拉伸210)。
+- 图片类型 Basic 整图缩放、Stretch 按 m_Border 三/九切片。默认和小尺寸/零中心策略对齐图片编辑器 20659b3；Lua 白名单可写范围与真机条件支持严格区分，详见 [图片类型](studio/docs/image-assets.md#图片类型基础拉伸)。
 - Lua 2D 音效通过 Runtime 实例快照投影到浏览器 Web Audio；音频与图片复用 `studio/host/asset-cache.js` 持久缓存。目录、自动播放、时长与停止策略见 [音频缓存](studio/docs/audio-assets.md)。工具或自动化浏览器启动的试玩默认静音，用户可在试玩页打开；不得把浏览器音频时钟回灌 Lua。
 - 五档画布与 `GetUICanvasSize` 同源，尺寸见根 [fact.md](../knowledge/fact.md)“模拟器画布预设”。原点左下、锚点相对父矩形；手机 16:9（1280×720）完整可见，PC 等比放大/留边。
 - 布局只保存 GIA 四平台 `transformByPlatform`，五种画布从平台参数派生显示。读取入口自动迁移旧存档，运行时不恢复画布布局表或回退读取；保存统一为 version 4、资产 `layoutSchemaVersion: 2`。迁移规则见 [Studio README](studio/README.md#json-画布布局与-gia-平台槽)。
@@ -46,5 +46,6 @@ Lua VM 只放在 Runtime，Authoring/GIA 只放在 Studio，接入层复用共�
 
 - 文档按 [根 README 的文档树](README.md#文档树) → 模块 README → 专题组织。新增专题必须登记到所属模块；同一契约只维护一处，其他页面链接引用。
 - 专题保留当前用法、契约、实现入口、必要证据和未解决边界。调研完成后将有效结论并入专题，执行流水、旧测试总数和过期安装包哈希交给 Git 历史。
+- 发布公告维护在 [GitHub Releases](https://github.com/1475505/miliastra-beyond-simulator/releases)，仓库不再维护 CHANGELOG 或未发布更新列表；源码变更通过 Git 历史追溯。
 - 删除前检查仓库内引用及完整工作区的 `docs/`、`knowledge/`、`probes/` 引用。被外部使用的路径和锚点保留有效摘要，或同步迁移所有引用；不能仅靠增加链接把无用材料留在树上。
 - 长期测试优先验证可观察行为、独立预期、资源释放与宿主协议。删除重复覆盖、已完成的一次性扫描、文案/源码拼写和审校账本同步断言；有价值的断言并入现有用例。必要的构建导出与安装契约测试仍保留。

@@ -65,20 +65,17 @@ Host PNG（包括 MCP 截图和 `/` 的静态编辑预览）没有视频解码�
 
 ## 素材来源与更新
 
-素材来自`F:/UGC_UI_VFX`及贡献者@xiaomol444，参考实现为`F:/ugc-tool`提交`7bdf307`。名称/分类源：`https://oss.xiaomol444.xyz/ugc-tool-data/Public/UIVfx/data.json`与相邻`i18n/{zh-cn,en-us}.json`。原`data.hash.json`使用TextMap hash，不能直接配合`uiEffect.title.*`翻译；其SHA-256为`55dc9e18c7840dc173a2d469257de78ae35f6929f45543ac843a59cc6bf02e97`。
+素材由 @xiaomol444 提供，参考 `ugc-tool` 提交 `7bdf307`。名称/分类源为 `https://oss.xiaomol444.xyz/ugc-tool-data/Public/UIVfx/data.json` 与相邻 `i18n/{zh-cn,en-us}.json`；`data.hash.json` 使用 TextMap hash，不能直接配合 `uiEffect.title.*` 翻译。
 
-- 发布目录`uivfx/`包含196 WebM、196 PNG、47 MP3及3份目录/翻译JSON，共442文件、49,502,453字节；运行时内置清单仅引用439媒体。
-- 196视频均为VP9 Profile1、8-bit yuv444p、30fps，无音轨；编码宽度为素材宽度两倍，左右为C/T。时长0.566–10秒，85个循环素材均10秒。5个编码宽度超过4096，不能假定所有设备都能解码；颜色转换未证明与游戏一致。
-- 发布先上传媒体再更新目录；内容变更同步内置字节数/SHA-256及缓存版本。路径为前缀内相对路径，去掉开头`/`再拼接，避免丢失`uivfx/`。
-- 2026-10-30公开资源核对结论：媒体哈希/MIME及Range响应符合清单；JSON公开Cache-Control为43200秒，与上传指定的300秒不符，覆盖层未定位。更新目录需核对缓存或采用版本路径，浏览器同源缓存不依赖OSS CORS。
-
-发布清单SHA-256为`fcdd2087b0ce558f90489db6c1368211d8b110e8cc755baf1efd731814a53fd4`；资源/HTTP回执来源为本地临时目录`C:/Users/liul/AppData/Local/Temp/opencode/ui-vfx-research-20261028/`，不随仓库分发。证据为`observed / simulator / not_required`，不是游戏播放证明。
+- 媒体格式为 VP9 Profile1、8-bit yuv444p、30fps，无音轨；编码宽度为素材宽度两倍，左右为 C/T。声音使用独立 MP3。部分视频编码宽度超过4096，不能假定所有设备都能解码；颜色转换未证明与游戏一致。
+- 发布先上传媒体，再更新目录；内容变更须同步 `assets/ui-vfx-data.json` 的字节数/SHA-256及缓存版本。路径为前缀内相对路径，去掉开头 `/` 再拼接，避免丢失 `uivfx/`。
+- 更新后核对公开内容、MIME、Range 和实际 Cache-Control；源站/CDN 可能覆盖上传设置，必要时使用版本路径。宿主按固定清单验证，浏览器同源缓存不依赖 OSS CORS。
 
 ## 验证与来源
 
-- API：2026-10-24本地官网对齐稿（SHA-256 `25228400d124294f46ec364a224256e53f0e2e5a3f8dc9a8d1129ba6f9109192`）的[客户端控件API](https://act.mihoyo.com/ys/ugc/tutorial/detail/mhtakr07vej4)、[界面动效](https://act.mihoyo.com/ys/ugc/tutorial/detail/mh2iyk9fa4gy)、[全屏动效](https://act.mihoyo.com/ys/ugc/tutorial/detail/mhbn4i09l5ns)。字段、签名和全屏下层规则为`documented / official_document`；第三方工具把全屏放上层的做法未采用。
+- API：2026-10-24 本地官网对齐稿的[客户端控件API](https://act.mihoyo.com/ys/ugc/tutorial/detail/mhtakr07vej4)、[界面动效](https://act.mihoyo.com/ys/ugc/tutorial/detail/mh2iyk9fa4gy)、[全屏动效](https://act.mihoyo.com/ys/ugc/tutorial/detail/mhbn4i09l5ns)。字段、签名和全屏下层规则为 `documented / official_document`。
 - 回归：`studio/test/ui-vfx.test.mjs`（目录、Lua生命周期、JSON、非消费式快照、PNG边界）；`studio/test/audio-player.test.mjs`（声音代次、静音/解锁、暂停、失败/重试、冷加载取消）；`web/test/ui-vfx.test.mjs`（HTTP缓存及真实浏览器）。
 - 浏览器用例使用自包含的合成 VP9 Profile1 / yuv444p 视频，独立已知的 C/T/B 颜色断言，不依赖 OSS 或仓库外素材。覆盖彩色T、羽化、重叠实例顺序、Above/Below、全屏cover、手动定帧、循环、预算、损坏/缺失媒体、编辑器搜索/重试、页面切换与解码器清理。
 - 模拟器回归结果标为 `observed / simulator / not_required`；千星游戏时序、精确尺寸/色彩及未覆盖的浏览器/手机/操作系统仍保持 `device_status=pending`，不能把 Chromium 测试作为真机通过。
 
-浏览器观察范围为Windows / Edge，合成媒体及少量实际OSS样本可解码，manual视频遵循逻辑定帧；未做听感验收。上述本地目录的`integrated-verification/`保留该次记录，不代表全部素材、全部设备或后续安装包重新验收。
+浏览器观察范围为 Windows / Edge，合成媒体及少量实际 OSS 样本可解码，manual 视频遵循逻辑定帧；未做全素材可用性或听感验收。

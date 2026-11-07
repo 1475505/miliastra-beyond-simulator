@@ -161,7 +161,7 @@ pnpm test
   - [Web](web/README.md)：编辑器、磁盘预览与部署。
   - [MCP](mcp/README.md)：工程句柄、工具协议与时钟。
   - [Harness 插件](dsh-plugin/README.md)：安装、宿主兼容与排障。
-    - [版本公告](dsh-plugin/CHANGELOG.md)
+    - [版本公告（GitHub Releases）](https://github.com/1475505/miliastra-beyond-simulator/releases)
     - [模拟器操作 Skill](skill/SKILL.md)
   - [游戏制作预设](agent/wonderland-lua-builder/README.md)：七步流程、参考资料与行为评估。
 - **实现与维护**
