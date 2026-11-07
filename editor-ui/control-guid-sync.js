@@ -23,7 +23,7 @@ export function createControlGuidSyncPanel(React) {
       if (panelRef.current) panelRef.current.scrollTop = 0
     })
     if (!pending.length && !result) return null
-    if (collapsed) return e('div', { style: { flexShrink: 0, padding: '2px 10px' } },
+    if (collapsed) return e('div', { 'data-quick-start-target': 'guid-sync', style: { flexShrink: 0, padding: '2px 10px' } },
       e('button', { className: 'qxsim-action', onClick: () => setCollapsed(false) }, t`Lua 索引待同步（${pending.length} 项）· 展开`))
     return e('section', { ref: panelRef, className: 'qxsim-note', 'aria-label': t('Lua 索引同步'), style: { flexShrink: 0, maxHeight: 270, overflow: 'auto', overflowWrap: 'anywhere' } },
       e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 } },
@@ -34,7 +34,7 @@ export function createControlGuidSyncPanel(React) {
         e('button', { className: 'qxsim-action', disabled: busy, onClick: run(reloadArchive) }, t('AI 已处理，重新载入存档'))) : null,
       e('div', null, pending.length ? t('控件索引已修改，请选择一种方式同步脚本。') : t('请检查替换结果并保存存档，再到「Lua 脚本 → 实机脚本同步」更新游戏里的文件并重新试玩。')),
       pending.length ? e(React.Fragment, null,
-        e('div', { role: 'group', 'aria-label': t('索引同步方式'), style: { display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 5 } },
+        e('div', { role: 'group', 'aria-label': t('索引同步方式'), 'data-quick-start-target': 'guid-sync', style: { display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 5 } },
           e('div', { style: { flex: '1 1 280px' } },
           e('button', { className: 'qxsim-action', disabled: busy, onClick: run(async () => {
             await prepare()

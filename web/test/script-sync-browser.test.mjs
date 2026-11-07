@@ -65,6 +65,20 @@ test('browser buttons save configuration, preview without copying, and explicitl
     assert.equal(result, true, `click ${text}`)
   }
   const fill = (label, value) => evaluate(`(() => { const el = [...document.querySelectorAll('label')].find(e => e.textContent.includes(${JSON.stringify(label)})).querySelector('input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event('input', { bubbles: true })); })()`)
+  await send('Page.enable', {}, sessionId)
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: `
+    const originalFetch = window.fetch
+    window.syncTest = { hold: '', counts: {} }
+    window.fetch = async (url, options) => {
+      const action = String(url).split('/').pop(), body = JSON.parse(options?.body || '{}')
+      const key = action === 'script-sync' ? body.action : action
+      if (['save', 'preview', 'script-sync-apply'].includes(key)) {
+        syncTest.counts[key] = (syncTest.counts[key] || 0) + 1
+        if (syncTest.hold === key) await new Promise(resolve => { syncTest.release = resolve })
+      }
+      return originalFetch(url, options)
+    }
+  ` }, sessionId)
   await send('Page.navigate', { url: `${app.url}/editor` }, sessionId)
   await wait(`!!document.querySelector('.qxsim-editor-nav')`)
   await click('Lua 脚本')
@@ -74,17 +88,41 @@ test('browser buttons save configuration, preview without copying, and explicitl
   await fill('千星沙箱脚本文件夹', target)
   await fill('游戏里的项目子文件夹', 'game')
   assert.equal(await evaluate(`document.querySelector('[aria-label="复制路径示例"]').innerText.includes(${JSON.stringify(`${target.replaceAll('\\', '/')}/game/main.lua`)})`), true)
+  assert.equal(await evaluate(`document.querySelector('[data-quick-start-target="sync-actions"]').disabled`), true)
+  assert.equal(await evaluate(`document.getElementById(document.querySelector('[data-quick-start-target="sync-actions"]').getAttribute('aria-describedby')).textContent.includes('保存设置')`), true, 'unavailable action explains what to do first')
+  await evaluate(`syncTest.hold = 'save'`)
   await click('保存设置')
+  await wait(`document.querySelector('[data-quick-start-target="sync-settings"] [aria-busy=true]')?.textContent === '保存设置'`)
+  assert.equal(await evaluate(`document.querySelector('[data-quick-start-target="sync-settings"] [aria-busy=true]').disabled`), true)
+  assert.equal(await evaluate(`document.querySelector('[data-quick-start-target="sync-settings"] [aria-busy=true]').classList.contains('primary')`), true)
+  await evaluate(`document.querySelector('[data-quick-start-target="sync-settings"] [aria-busy=true]').click()`)
+  await wait(`syncTest.counts.save === 1 && typeof syncTest.release === 'function'`)
+  await evaluate(`syncTest.hold = ''; syncTest.release()`)
   await wait(`!![...document.querySelectorAll('button')].find(e => e.textContent === '保存存档并查看更新' && !e.disabled)`)
   assert.equal(JSON.parse(readFileSync(join(workspace, 'game.save.json'), 'utf8')).scriptSync.clientImportRoot, target)
+  assert.equal(await evaluate(`syncTest.counts.save`), 1, 'saving settings cannot be submitted twice while busy')
+  assert.equal(await evaluate(`document.querySelector('[data-quick-start-target="sync-actions"]').classList.contains('primary')`), true)
+  await evaluate(`syncTest.hold = 'preview'`)
   await click('保存存档并查看更新')
+  await wait(`typeof syncTest.release === 'function' && syncTest.counts.preview === 1`)
+  assert.equal(await evaluate(`document.querySelector('[data-quick-start-target="sync-actions"]').getAttribute('aria-busy')`), 'true')
+  assert.equal(readFileSync(join(target, 'game/main.lua'), 'utf8'), '-- browser old')
+  await evaluate(`document.querySelector('[data-quick-start-target="sync-actions"]').click(); syncTest.hold = ''; syncTest.release()`)
   await wait(`!!document.querySelector('[aria-label="脚本同步确认"]')`)
+  assert.equal(await evaluate(`syncTest.counts.preview`), 1)
+  assert.equal(await evaluate(`document.querySelector('[data-quick-start-target="sync-confirm"] .primary').textContent`), '确认复制 1 个脚本')
+  assert.equal(await evaluate(`document.querySelector('[data-quick-start-target="sync-actions"]').classList.contains('primary')`), false, 'the explicit copy confirmation becomes the main action')
   assert.equal(readFileSync(join(target, 'game/main.lua'), 'utf8'), '-- browser old')
   await click('暂不复制')
   assert.equal(readFileSync(join(target, 'game/main.lua'), 'utf8'), '-- browser old')
   await click('保存存档并查看更新')
   await wait(`!![...document.querySelectorAll('button')].find(e => e.textContent === '确认复制 1 个脚本' && !e.disabled)`)
+  await evaluate(`syncTest.hold = 'script-sync-apply'`)
   await click('确认复制 1 个脚本')
+  await wait(`syncTest.counts['script-sync-apply'] === 1`)
+  assert.equal(await evaluate(`!!document.querySelector('.qxsim-sync-message[aria-busy=true]')`), true, 'copying retains visible progress after the confirmation list closes')
+  assert.equal(readFileSync(join(target, 'game/main.lua'), 'utf8'), '-- browser old')
+  await evaluate(`syncTest.hold = ''; syncTest.release()`)
   await wait(`document.body.innerText.includes('脚本已复制到千星沙箱')`)
   assert.equal(await evaluate(`document.body.innerText.includes('回到千星沙箱，保存关卡并重新试玩')`), true)
   assert.equal(readFileSync(join(target, 'game/main.lua'), 'utf8'), '-- browser new')

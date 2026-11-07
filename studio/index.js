@@ -223,7 +223,11 @@ export function createStudio(seed, options = {}) {
   let controlGuidChanges = readControlGuidChanges(seed?.controlGuidChanges)
   let scriptSync = normalizeScriptSync(seed?.scriptSync)
   const seededProject = isSave ? null : createProject(seed, { warnings: migrationWarnings })
-  const projects = {
+  // In-process Web hibernation restores our own archive verbatim. Import
+  // normalization can change empty fields (null -> ''), invalidating a saved
+  // fingerprint even though no edit occurred. Never use this for file imports.
+  const restoring = Boolean(isSave && options.restoreSession)
+  const projects = restoring ? structuredClone({ server: seed.assets.server, client: seed.assets.client }) : {
     server: isSave && seed.assets.server ? createProject(seed.assets.server, { warnings: migrationWarnings }) : defaultProject(SERVER_ASSET),
     client: isSave && seed.assets.client ? createProject(seed.assets.client, { warnings: migrationWarnings }) : defaultProject(CLIENT_ASSET),
   }

@@ -11,12 +11,19 @@ export function createScriptSyncPanel(React) {
     const [result, setResult] = React.useState(null)
     const [notice, setNotice] = React.useState('')
     const [error, setError] = React.useState('')
-    const [busy, setBusy] = React.useState(false)
+    const [busyAction, setBusyAction] = React.useState('')
+    const busyRef = React.useRef(false)
+    const busy = Boolean(busyAction)
     const fieldId = React.useId()
     React.useEffect(() => { setConfig(snap.scriptSync || empty); setPlan(null) }, [JSON.stringify(snap.scriptSync), snap.storage?.path])
     React.useEffect(() => { setPlan(null) }, [snap.version, snap.asset?.type])
     React.useEffect(() => { if (snap.storage?.path) setArchivePath(snap.storage.path) }, [snap.storage?.path])
-    const run = async task => { setBusy(true); setError(''); setNotice(''); try { await task() } catch (reason) { setError(reason.message || String(reason)) } finally { setBusy(false) } }
+    const run = async (task, action) => {
+      if (busyRef.current) return
+      busyRef.current = true; setBusyAction(action); setError(''); setNotice('')
+      try { await task() } catch (reason) { setError(reason.message || String(reason)) }
+      finally { busyRef.current = false; setBusyAction('') }
+    }
     const sync = (action, args = {}) => request('script-sync', { action, args })
     async function preview() {
       setPlan(null); setResult(null)
@@ -28,7 +35,7 @@ export function createScriptSyncPanel(React) {
       setSelected(next.rows.filter(row => !row.error && row.status !== '未变化').map(row => row.id))
     }
     const configDirty = JSON.stringify(config) !== JSON.stringify(snap.scriptSync || empty)
-    const field = (key, label, placeholder, help) => e('label', { className: 'qxsim-field', key },
+    const field = (key, label, placeholder, help) => e('label', { className: 'qxsim-field', key, 'data-quick-start-target': `sync-${key}` },
       e('span', null, label),
       e('input', { type: 'text', value: config[key], placeholder, 'aria-label': label, 'aria-describedby': `${fieldId}-${key}`, disabled: busy, onChange: event => { setConfig({ ...config, [key]: event.target.value }); setPlan(null); setNotice('') } }),
       e('small', { id: `${fieldId}-${key}` }, help))
@@ -39,31 +46,38 @@ export function createScriptSyncPanel(React) {
     const exampleTarget = [config.clientImportRoot.trim().replaceAll('\\', '/').replace(/\/+$/, '') || t('【千星沙箱脚本文件夹】'), relativeFolder(config.clientSubdir), exampleScript.slice(prefix.length)].filter(Boolean).join('/')
     const statusLabel = { 新增: t('新增文件'), 覆盖: t('更新已有文件'), 未变化: t('内容相同，无需更新'), 错误: t('无法复制') }
     const sourceLabel = { 存档源码: t('存档里编辑的代码'), 工作区文件: t('项目中的 .lua 文件') }
-    const button = (text, task, disabled = false) => e('button', { type: 'button', className: 'qxsim-action', disabled: busy || disabled, onClick: () => void run(task) }, text)
-    return e('details', { className: 'qxsim-section', style: { flexShrink: 0, maxHeight: '55%', overflow: 'auto', margin: '5px 10px' } },
+    const previewHelp = !snap.scriptSync ? t('请先填写千星沙箱脚本文件夹，并点击「保存设置」。') : configDirty ? t('脚本位置已改动，请先点击「保存设置」。') : !archivePath.trim() ? t('请先填写模拟器存档文件名。') : ''
+    const button = (text, task, disabled = false, target, options = {}) => {
+      const action = options.id || target || text
+      return e('button', { type: 'button', className: `qxsim-action${options.primary ? ' primary' : ''}`, 'data-quick-start-target': target,
+        disabled: busy || disabled, 'aria-busy': busyAction === action || undefined, 'aria-describedby': options.describedBy,
+        onClick: () => void run(task, action) }, text)
+    }
+    return e('details', { className: 'qxsim-section qxsim-script-sync', 'data-quick-start-target': 'sync-panel', style: { flexShrink: 0, maxHeight: '55%', overflow: 'auto', margin: '5px 10px' } },
       e('summary', null, t`实机脚本同步 · ${snap.scriptSync ? t('已设置文件夹') : t('先设置文件夹')}`),
       e('div', { className: 'qxsim-section-body' },
         e('p', null, t('把当前存档里的 Lua 脚本复制到千星沙箱，用于游戏内测试。操作顺序：填写脚本位置 → 保存设置 → 保存存档并查看更新 → 确认复制。')),
+        e('div', { 'data-quick-start-target': 'sync-paths' },
         field('workspaceDir', t('项目脚本文件夹'), t('例如 workspace/my-game；也可以留空'), t('填写在工作区里的位置，例如 workspace/my-game；留空表示使用工作区本身。')),
         field('clientImportRoot', t('千星沙箱脚本文件夹'), t('粘贴以 default_import_file 结尾的完整路径'), t('关卡存放外部 Lua 脚本的文件夹，可点击「发现本机目录」查找。请填写运行模拟器那台电脑上的完整路径。')),
         field('clientSubdir', t('游戏里的项目子文件夹'), t('例如 workspace/my-game；也可以留空'),
           e(React.Fragment, null, t('一般和“项目脚本文件夹”填一样的内容，保留原来的文件位置。留空则直接放进千星沙箱脚本文件夹。'),
             e('span', { 'aria-label': t('复制路径示例'), style: { display: 'block', overflowWrap: 'anywhere' } }, t('复制示例：'), e('code', null, exampleScript), ' → ', e('code', null, exampleTarget)))),
         identity ? e('p', null, t`游戏账号 UID：${identity[1]} · 关卡目录编号：${identity[2]}`) : null,
-        e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+        e('div', { className: 'qxsim-sync-actions', 'data-quick-start-target': 'sync-settings' },
           button(t('发现本机目录'), async () => { const found = await sync('discover'); setCandidates(found.candidates); if (!found.candidates.length) setError(t('没有找到游戏脚本文件夹。可以手动粘贴 default_import_file 文件夹的完整路径；如果还没导入脚本，请先在千星沙箱完成导入。')); else setNotice(t`找到 ${found.candidates.length} 个游戏脚本文件夹，请选择要更新的账号和关卡。`) }),
-          button(t('保存设置'), async () => { await prepare(); const current = await patch({ op: 'setScriptSync', config }); await request('save', { path: archivePath, expectedRevision: current.version }); await refresh(); setPlan(null); setResult(null); setNotice(t('脚本位置已保存。下一步点击「保存存档并查看更新」。')) }, !config.clientImportRoot.trim() || !archivePath.trim()),
+          button(t('保存设置'), async () => { await prepare(); const current = await patch({ op: 'setScriptSync', config }); await request('save', { path: archivePath, expectedRevision: current.version }); await refresh(); setPlan(null); setResult(null); setNotice(t('脚本位置已保存。下一步点击「保存存档并查看更新」。')) }, !config.clientImportRoot.trim() || !archivePath.trim(), undefined, { id: 'save-settings', primary: !snap.scriptSync || configDirty || busyAction === 'save-settings' }),
           button(t('清除设置'), async () => { await prepare(); const current = await patch({ op: 'setScriptSync', config: null }); await request('save', { path: archivePath, expectedRevision: current.version }); await refresh(); setPlan(null); setResult(null); setNotice(t('已清除脚本位置设置。游戏里的脚本文件仍然保留。')) }, !snap.scriptSync || !archivePath.trim())),
         candidates.length ? e('label', { className: 'qxsim-field' }, t('选择要更新的账号和关卡'), e('select', { value: '', disabled: busy, onChange: event => { setConfig({ ...config, clientImportRoot: event.target.value }); setPlan(null); setNotice('') } }, e('option', { value: '' }, t('请选择游戏账号和关卡文件夹…')), candidates.map(row => e('option', { key: row.path, value: row.path }, t`账号 ${row.uid} / 关卡目录 ${row.editorId} · ${row.path}`)))) : null,
-        e('label', { className: 'qxsim-field', style: { marginTop: 8 } },
+        e('label', { className: 'qxsim-field', style: { marginTop: 8 }, 'data-quick-start-target': 'sync-archive' },
           e('span', null, t('模拟器存档文件')),
           e('input', { type: 'text', value: archivePath, placeholder: t('例如 my-game.save.json'), 'aria-label': t('模拟器存档文件'), 'aria-describedby': `${fieldId}-archive`, disabled: busy, onChange: event => { setArchivePath(event.target.value); setPlan(null); setNotice('') } }),
-          e('small', { id: `${fieldId}-archive` }, t('填写工作区里的存档文件名或路径。保存设置时会一起保存项目，下次打开存档即可复用。'))),
-        button(t('保存存档并查看更新'), preview, !snap.scriptSync || configDirty || !archivePath.trim()),
-        !snap.scriptSync ? e('p', null, t('请先填写千星沙箱脚本文件夹，并点击「保存设置」。')) : configDirty ? e('p', null, t('脚本位置已改动，请先点击「保存设置」。')) : !archivePath.trim() ? e('p', null, t('请先填写模拟器存档文件名。')) : null,
-        busy ? e('p', { role: 'status' }, t('正在处理，请稍候…')) : notice ? e('p', { role: 'status' }, notice) : null,
-        error ? e('p', { role: 'alert', style: { color: 'var(--danger)' } }, t(error)) : null,
-        plan ? e('section', { 'aria-label': t('脚本同步确认') },
+          e('small', { id: `${fieldId}-archive` }, t('填写工作区里的存档文件名或路径。保存设置时会一起保存项目，下次打开存档即可复用。')))),
+        button(t('保存存档并查看更新'), preview, Boolean(previewHelp), 'sync-actions', { primary: !plan, describedBy: previewHelp ? `${fieldId}-preview-help` : undefined }),
+        previewHelp ? e('p', { id: `${fieldId}-preview-help`, className: 'qxsim-sync-help' }, previewHelp) : null,
+        busy ? e('p', { className: 'qxsim-sync-message', role: 'status', 'aria-busy': true }, t('正在处理，请稍候…')) : notice ? e('p', { className: 'qxsim-sync-message success', role: 'status' }, notice) : null,
+        error ? e('p', { className: 'qxsim-sync-message error', role: 'alert' }, t(error)) : null,
+        plan ? e('section', { className: 'qxsim-sync-confirmation', 'aria-label': t('脚本同步确认') },
           e('p', { style: { overflowWrap: 'anywhere' } }, t`本次更新到：${plan.root}`),
           !plan.rows.length ? e('p', null, t('这个存档还没有 Lua 脚本。请先在下方添加脚本，再查看更新。')) : plan.rows.every(row => row.status === '未变化') ? e('p', { role: 'status' }, t('所有脚本都与游戏文件夹里的内容相同，无需复制。')) : null,
           plan.pendingGuidChanges ? e('p', { role: 'alert' }, t('有控件索引尚未同步到 Lua。请先在上方「全量替换脚本索引」，或「复制提示词给 AI」；处理完成后再查看游戏脚本更新。')) : null,
@@ -80,14 +94,14 @@ export function createScriptSyncPanel(React) {
                 e('div', { style: { minWidth: 0 } }, t('本次要复制的代码'), e('pre', { style: { maxHeight: 240, overflow: 'auto' } }, row.source)))) : null)),
           plan.rows.some(row => row.status === '新增') ? e('p', null, t('新增脚本复制后，还需要在千星沙箱里关联对应的脚本文件；需要直接运行的脚本还要挂到控件上。')) : null,
           selected.length ? e('p', null, t`已选 ${selected.length} 个脚本，其中 ${plan.rows.filter(row => selected.includes(row.id) && row.status === '覆盖').length} 个会替换游戏里的旧文件。替换前会自动备份旧文件，游戏里的其他文件会保留。`) : null,
-          e('div', { style: { display: 'flex', gap: 6 } }, button(t('暂不复制'), async () => setPlan(null)),
+          e('div', { className: 'qxsim-sync-actions', 'data-quick-start-target': 'sync-confirm' }, button(t('暂不复制'), async () => setPlan(null)),
             button(t`确认复制 ${selected.length} 个脚本`, async () => {
               const pending = plan
               setPlan(null)
               await prepare()
               setResult(await request('script-sync-apply', { planId: pending.id, scriptIds: selected, confirmed: true }))
-            }, !selected.length || Boolean(plan.pendingGuidChanges)))) : null,
-        result ? e('div', { role: 'status' }, e('strong', null, result.completed ? t('脚本已复制到千星沙箱') : t('有些脚本未复制成功')),
+            }, !selected.length || Boolean(plan.pendingGuidChanges), undefined, { primary: true }))) : null,
+        result ? e('div', { className: `qxsim-sync-message ${result.completed ? 'success' : 'error'}`, role: 'status' }, e('strong', null, result.completed ? t('脚本已复制到千星沙箱') : t('有些脚本未复制成功')),
           e('p', null, result.completed ? t('下一步：回到千星沙箱，保存关卡并重新试玩，让游戏加载更新后的脚本。') : t('请按下方提示处理失败的文件，再重新查看更新并复制。')),
           e('p', { style: { overflowWrap: 'anywhere' } }, t`复制时间：${new Date(result.at).toLocaleString()} · 旧文件备份保存在：${result.backupRoot}`),
           e('ul', { style: { overflowWrap: 'anywhere' } }, result.results.map(row => e('li', { key: row.id }, `${row.target}：${row.status === '成功' ? t('已复制') : t('未复制')}${row.error ? ` · ${row.error}` : ''}`)))) : null))
