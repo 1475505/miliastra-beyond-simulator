@@ -31,6 +31,14 @@ Authoring JSON、GIA、四平台布局、试玩编排、日志、回放与断言
 
 在仓库根运行 `pnpm --filter qxqy-studio test`；全仓及浏览器检查见 [验证规则](../AGENTS.md#验证)。一次性无头任务可用 `node studio/cli.mjs --in job.json --out out.json`。
 
+## 存档保存与导入
+
+`host/controller.js` 统一维护存档路径、磁盘哈希和已保存内容。编辑器 `save` 与 `script-sync/save` 共用 `saveArchiveChecked(path, expectedRevision)`：校验编辑版本；已有目标须为本会话关联文件且哈希匹配。成功保存/另存更新关联，省略路径沿用最近成功加载或保存的文件；新工程必须指定路径。
+
+`importData()` 在副本完成验证后提交，成功时解除文件关联、清除脚本复制计划/回执与索引同步计划；`loadArchive()` 成功后再关联加载文件。失败导入保留工程及关联。Web 休眠恢复同一份 Controller 保存状态，见 [Web 会话](../web/README.md#编辑与保存)。底层 `saveArchive()` 仍是直接写盘接口，MCP `qxqy_project_save` 使用该接口，其覆盖行为不等同于带 revision 的编辑器保存。
+
+回归：`test/controller-archive.test.mjs` 验证混合入口、另存、冲突和导入关联；`test/script-sync.test.mjs` 验证计划失效，`web/test/editor.test.mjs` 验证 HTTP 与休眠恢复。
+
 ## JSON 画布布局与 GIA 平台槽
 
 只保存四平台 `transformByPlatform`，五种画布从平台参数派生视口。完整存档为 version 4，资产为 `layoutSchemaVersion: 2`；编辑 revision 独立。读取支持 version 1–4，未知未来版本和缺损的新版平台数据拒绝。
@@ -60,6 +68,19 @@ Runtime 保留 Lua `EnumItem` 身份，`play/session.js` 在 scene/paint 边界�
 回归：`test/image-fill.test.mjs`，覆盖固定象限像素、Pixi mask bounds、父旋转与子控件。
 
 ## 浏览器图形缓存
+
+<a id="试玩轮询与增量更新2026-11-07"></a>
+### 试玩轮询与增量更新
+
+`play/browser-session.js` 只保留一个在途场景请求，将请求、渲染和快照回调耗时计入本帧预算，再按剩余时间安排下一次观察。超时帧完成后尽快继续，不补排历史帧；输入触发的刷新共用调度、合并为一次后续观察。停止取消后续调度，旧 generation 的结果不能覆盖新会话。Lua 的固定步长时钟仍由 Worker 管理，界面选择60 FPS不保证浏览器每秒实际显示60帧。
+
+`play/session.js` 的 `tree-v1` revision 只随场景实际变化推进；每个查看端传自己的 `sceneRev`，静止场景返回同版本空增量。缓存只存当前节点及有界变更 ID 历史（最多120次变更、累计10,000个ID），跨版本合并为当前 `changed` / `removed`。首次、过旧/未来版本或切换玩家返回完整 `reset`。浏览器同时传 `sceneSessionId`（快照中的 `audio.sessionId` 标识整局试玩），Worker 重建后标识不匹配即重置，避免跨局同号；只传 revision 的调用者须在新局主动读取完整场景。响应与缓存隔离，多个查看端互不消耗增量。
+
+`compact` 先截取客户端日志、操作历史和服务端信号/日志尾部各100条，再复制输出；普通快照及历史接口仍可读取完整记录。它限制观察成本，不删除存储历史。服务端提供 `snapshot({ historyLimit })`，默认完整、0返回空历史。
+
+`play/pixi-renderer.js` 的视窗裁剪按变动节点及其裁剪依赖更新，不逐帧扫描整棵美术树；父尺寸变化、换父、删除、取消裁剪和扁平回退同步维护依赖。Web预览仅在画布尺寸或容器尺寸变化时重新计算CSS视口，避免每帧读取布局。
+
+回归：`test/play-snapshot.test.mjs` 验证多查看端、历史预算和截取前不复制；调度见 `test/browser-session.test.mjs`，裁剪复用见 `test/pixi-cache.test.mjs`，浏览器视口见 `web/test/key-input-browser.test.mjs`。性能对照保存在完整工作区 `probes/browser-play-performance-20261107/`：观察的是画面提交率，受传输链路和图形后端影响，不等于显示器呈现帧率；初始化和大组恢复仍可能有尖峰。
 
 <a id="2026-10-18-高频文字更新与缓存残留16"></a>
 ### 文字更新与资源释放

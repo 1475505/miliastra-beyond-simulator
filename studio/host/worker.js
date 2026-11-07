@@ -27,6 +27,7 @@ function observeOptions(args = {}) {
     ...(args.paint ? { paint: true } : {}),
     ...(args.compact ? { compact: true } : {}),
     ...(args.sceneRev !== undefined && args.sceneRev !== null ? { sceneRev: args.sceneRev } : {}),
+    ...(args.sceneSessionId ? { sceneSessionId: args.sceneSessionId } : {}),
   }
 }
 

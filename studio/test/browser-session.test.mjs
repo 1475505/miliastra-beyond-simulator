@@ -47,7 +47,8 @@ test('reloading a browser attaches to the existing paused game without a start o
 })
 
 test('browser doubles scene polling at 60 FPS and preserves the choice across restarts and device changes', async t => {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] })
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'] })
+  t.mock.method(performance, 'now', () => Date.now())
   const calls = []
   let fps = 30
   const play = createPlaySession({ renderer: { async applyScene() {} }, async api(action, args = {}) {
@@ -80,6 +81,81 @@ test('browser doubles scene polling at 60 FPS and preserves the choice across re
   assert.ok(restored >= 29 && restored <= 32, `restored 30 FPS requests: ${restored}`)
 })
 
+test('slow observations use the remaining frame budget without overlapping or dropping queued refreshes', async t => {
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'] })
+  t.mock.method(performance, 'now', () => Date.now())
+  const calls = [], revisions = []
+  let active = 0, peak = 0, revision = 0
+  const play = createPlaySession({
+    renderer: { async applyScene() { await wait(3) } },
+    async api(action, args) {
+      if (action !== 'get') return { running: action !== 'stop', fps: 60 }
+      calls.push(Date.now()); revisions.push(args.sceneRev)
+      peak = Math.max(peak, ++active)
+      await wait(17)
+      active--
+      return { running: true, fps: 60, scene: { format: 'tree-v1', revision: ++revision } }
+    },
+  })
+  t.after(() => play.destroy())
+  const advance = async ms => {
+    for (let i = 0; i < ms; i++) {
+      t.mock.timers.tick(1)
+      await new Promise(resolve => setImmediate(resolve))
+    }
+  }
+  await play.start()
+  await advance(220)
+  assert.ok(calls.length >= 10, `17 ms transport + 3 ms render must not become 32 ms polling: ${calls.length}`)
+  assert.ok(calls.slice(1).every((at, i) => at - calls[i] >= 20 && at - calls[i] <= 21))
+  assert.deepEqual(revisions, revisions.map((_, i) => i), 'each request uses the scene revision after rendering')
+  assert.equal(peak, 1)
+  play.stopPolling()
+  await advance(50)
+  const stopped = calls.length
+  await advance(100)
+  assert.equal(calls.length, stopped, 'a completed in-flight poll must not rearm stopped polling')
+
+  play.pollSoon(0)
+  await advance(1)
+  play.pollSoon(0); play.pollSoon(0)
+  await advance(60)
+  assert.equal(calls.length, stopped + 2, 'refreshes during an in-flight poll coalesce into one follow-up')
+  assert.equal(peak, 1)
+})
+
+test('late observations cannot revive stopped sessions or overwrite a replacement scene', async t => {
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'] })
+  t.mock.method(performance, 'now', () => Date.now())
+  const rendered = [], statuses = []
+  let finish, gets = 0
+  const play = createPlaySession({ renderer: { async applyScene(scene) { rendered.push(scene.revision) } },
+    onSnapshot: next => statuses.push(next),
+    async api(action) {
+      if (action === 'get') { gets++; return new Promise(resolve => { finish = resolve }) }
+      return { running: action !== 'stop', fps: 60, scene: { format: 'tree-v1', reset: true, revision: 10 } }
+    },
+  })
+  t.after(() => play.destroy())
+  await play.start()
+  const pending = play.poll()
+  await play.start()
+  finish({ running: true, fps: 30, scene: { format: 'tree-v1', revision: 99 } })
+  await pending
+  assert.equal(play.sceneRev, 10)
+  assert.equal(play.fps, 60)
+  assert.deepEqual(rendered, [10, 10])
+  const last = play.poll()
+  await play.stop()
+  finish({ running: true, fps: 30, scene: { format: 'tree-v1', revision: 100 } })
+  await last
+  t.mock.timers.tick(100)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(play.running, false)
+  assert.equal(gets, 2)
+  assert.equal(statuses.length, 2)
+})
+
 test('shared play loop polls compact scene views and sends light input', async () => {
   const calls = []
   const scenes = []
@@ -104,6 +180,7 @@ test('shared play loop polls compact scene views and sends light input', async (
           time: 0.1,
           canvasWidth: 1600,
           canvasHeight: 900,
+          audio: { sessionId: 'play-1' },
           scene: { format: 'tree-v1', revision: 2, reset: action === 'start', nodes: [] },
         }
       }
@@ -136,6 +213,7 @@ test('shared play loop polls compact scene views and sends light input', async (
   assert.equal(get.args.view, true)
   assert.equal(get.args.compact, true)
   assert.equal(get.args.sceneRev, 2)
+  assert.equal(get.args.sceneSessionId, 'play-1')
   assert.equal(sceneRevSeen, 2)
 
   play.destroy()
@@ -315,7 +393,7 @@ test('slow key delivery cannot reorder Down/Up or replay queued keys into a rest
 const CURSOR_EVENTS = ['CursorDown', 'CursorUp', 'CursorClick', 'CursorBeginDrag', 'CursorDrag', 'CursorEndDrag']
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function bindStudioPlay(t, { beforePointer } = {}) {
+async function bindStudioPlay(t, { beforePointer, playerCount = 1 } = {}) {
   const studio = createStudio()
   studio.patch({ op: 'addScript', controlId: 'n1', controlAsset: 'server-control-template', path: 'main', source: `
 function OnStart()
@@ -325,13 +403,17 @@ function OnStart()
     button:AddCursorEventListener(Enum.CursorEventType[name], function() print(name) end)
   end
 end` })
-  const pointers = []
+  const pointers = [], actions = []
+  let active = true
   const play = createPlaySession({
     renderer: { async applyScene() {}, async render() {} },
+    isActive: () => active,
     async api(action, args = {}) {
+      actions.push(action)
       if (action === 'start') return studio.playStart(args)
       if (action === 'get') return studio.playGet(args)
       if (action === 'stop') return studio.playStop()
+      if (action === 'view') return studio.playSetView(args.playerIndex, args)
       if (action === 'pointer') {
         await beforePointer?.(args)
         pointers.push(args)
@@ -341,17 +423,23 @@ end` })
     },
   })
   t.after(() => { play.destroy(); studio.playStop() })
-  await play.start()
+  await play.start({ playerCount })
+  play.stopPolling()
   const { canvasWidth: width, canvasHeight: height } = play.snapshot
-  const handlers = {}
-  play.bindInput({
-    addEventListener(type, fn) { handlers[type] = fn },
-    removeEventListener(type) { delete handlers[type] },
+  const target = () => ({ handlers: {}, addEventListener(type, fn) { this.handlers[type] = fn }, removeEventListener(type) { delete this.handlers[type] } })
+  const win = target(), doc = { ...target(), defaultView: win, hidden: false }
+  const captured = new Set()
+  const surface = { ...target(), ownerDocument: doc,
+    setPointerCapture(id) { captured.add(id) },
+    hasPointerCapture(id) { return captured.has(id) },
+    releasePointerCapture(id) { captured.delete(id); this.handlers.lostpointercapture?.({ pointerId: id }) },
     getBoundingClientRect: () => ({ left: 0, width, bottom: height, height }),
-  }, { keysOn: { addEventListener() {}, removeEventListener() {} } })
-  const fire = (type, x, y) => handlers[type]({ pointerId: 1, clientX: x, clientY: height - y })
+  }
+  const bind = () => play.bindInput(surface, { keysOn: win })
+  const dispose = bind()
+  const fire = (type, x, y, extra = {}) => surface.handlers[type]?.({ pointerId: 1, clientX: x, clientY: height - y, ...extra })
   const cursorLogs = () => studio.playGet().logs.map((row) => row.text).filter((text) => CURSOR_EVENTS.includes(text))
-  return { play, pointers, fire, cursorLogs }
+  return { play, pointers, actions, fire, cursorLogs, win, doc, captured, dispose, bind, setActive(value) { active = value } }
 }
 
 test('a quick browser drag reaches Lua as down, move, up instead of a click', async t => {
@@ -402,12 +490,13 @@ test('a delayed pointer request cannot deliver release before press or lose a re
 
 test('queued pointer cancellation follows press and old input cannot enter a restarted Worker', async t => {
   let finishDown
-  const { play, fire, pointers, cursorLogs } = await bindStudioPlay(t, { beforePointer: async args => {
+  const { play, fire, pointers, cursorLogs, win } = await bindStudioPlay(t, { beforePointer: async args => {
     if (args.type === 'down') await new Promise(resolve => { finishDown = resolve })
   } })
   t.after(() => finishDown?.())
   fire('pointerdown', 800, 450)
-  fire('pointercancel', 800, 450)
+  fire('pointermove', 810, 450)
+  win.handlers.blur()
   fire('pointerup', 800, 450)
   await wait(0)
   assert.deepEqual(pointers, [])
@@ -417,20 +506,44 @@ test('queued pointer cancellation follows press and old input cannot enter a res
   assert.deepEqual(cursorLogs(), ['CursorDown', 'CursorUp'])
   pointers.length = 0
   fire('pointerdown', 800, 450)
-  fire('pointerup', 800, 450)
+  fire('pointermove', 810, 450)
+  win.handlers.blur()
   await wait(0)
   play.reset()
   finishDown()
-  await wait(0)
+  await wait(PLAY_MOVE_THROTTLE_MS + 20)
   assert.deepEqual(pointers.map(p => p.type), ['down'], 'queued release belongs to the old generation')
 })
 
-test('pending browser moves are dropped when the play session resets', async t => {
-  const { play, pointers, fire } = await bindStudioPlay(t)
-  fire('pointermove', 810, 450)
-  play.reset()
-  await wait(PLAY_MOVE_THROTTLE_MS + 20)
-  assert.deepEqual(pointers, [])
+test('blur, hidden pages, inactive views, player switches and unbinding cancel drag once and accept a new pointer', async t => {
+  for (const reason of ['blur', 'hidden', 'inactive', 'player', 'unbind']) {
+    const { play, fire, pointers, actions, cursorLogs, win, doc, captured, dispose, bind, setActive } = await bindStudioPlay(t, { playerCount: 2 })
+    fire('pointerdown', 790, 450)
+    fire('pointermove', 810, 450)
+    await wait(PLAY_MOVE_THROTTLE_MS + 20)
+    assert.deepEqual(cursorLogs(), ['CursorDown', 'CursorBeginDrag', 'CursorDrag'], reason)
+    fire('pointermove', 820, 450) // this throttled move must not survive cancellation
+    if (reason === 'blur') win.handlers.blur()
+    if (reason === 'hidden') { doc.hidden = true; doc.handlers.visibilitychange(); doc.hidden = false }
+    if (reason === 'inactive') { setActive(false); await play.releaseInputs(); setActive(true) }
+    if (reason === 'player') {
+      await play.view({ playerIndex: 2 })
+      assert.deepEqual(actions.slice(-2), ['pointer', 'view'])
+      await play.view({ playerIndex: 1 })
+    }
+    if (reason === 'unbind') { dispose(); bind() }
+    fire('lostpointercapture', 820, 450)
+    fire('pointerup', 820, 450)
+    await wait(PLAY_MOVE_THROTTLE_MS + 20)
+    assert.deepEqual(pointers.map(p => p.type), ['down', 'move', 'cancel'], reason)
+    assert.deepEqual(cursorLogs(), ['CursorDown', 'CursorBeginDrag', 'CursorDrag', 'CursorUp', 'CursorEndDrag'], reason)
+    assert.equal(captured.size, 0, reason)
+    fire('pointerdown', 800, 450, { pointerId: 2 })
+    fire('pointerup', 800, 450, { pointerId: 2 })
+    await wait(0)
+    assert.equal(cursorLogs().at(-1), 'CursorClick', reason)
+    play.destroy()
+  }
 })
 
 test('wheel pixels/lines/pages scale into canvas units and cancellation ignores a second touch', async t => {

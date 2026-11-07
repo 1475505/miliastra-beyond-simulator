@@ -7,7 +7,7 @@ import { createWebServer } from '../server.js'
 import { createStudio } from '../../studio/index.js'
 import { startTestBrowser } from './browser-helper.mjs'
 
-test('preview and shared DSH/Web play pages deliver official keys and honor the input toggle', {
+test('preview and shared play pages deliver keys, honor toggles and release pointer transactions on focus/view changes', {
   skip: !process.env.QXQY_BROWSER, timeout: 90_000,
 }, async t => {
   const directory = mkdtempSync(join(tmpdir(), 'qxqy-key-input-'))
@@ -23,7 +23,10 @@ function OnStart()
       script.object:AddKeyEventListener(Enum.KeyEventType[name], function() print(name) end)
     end
   end
-  script.object:FindChild('预设按钮'):AddCursorEventListener(Enum.CursorEventType.CursorClick, function() print('cursor-click') end)
+  local button = script.object:FindChild('预设按钮')
+  for _, phase in ipairs({'Down', 'Up', 'Click', 'BeginDrag', 'EndDrag'}) do
+    button:AddCursorEventListener(Enum.CursorEventType['Cursor' .. phase], function() print('cursor-' .. phase) end)
+  end
 end` })
   writeFileSync(join(directory, 'keys.save.json'), JSON.stringify(studio.archiveData()))
   const app = await createWebServer({ workspace: directory, initialPath: 'keys.save.json', port: 0 })
@@ -56,6 +59,21 @@ end` })
       await wait(`document.querySelector('#archive-select').value`)
       await evaluate(`document.querySelector('#mode-play').click(); document.querySelector('#play-start').click()`)
       await wait(`!document.querySelector('#play-stop').disabled`)
+      const stage = await evaluate(`(async () => {
+        const viewport = document.querySelector('#stage-play');
+        let writes = 0;
+        const observer = new MutationObserver(rows => { writes += rows.length });
+        observer.observe(viewport, { attributes: true, attributeFilter: ['style'] });
+        const first = document.querySelector('#play-readout').textContent;
+        await new Promise(resolve => setTimeout(resolve, 250));
+        observer.disconnect();
+        return { writes, first, last: document.querySelector('#play-readout').textContent,
+          width: viewport.getBoundingClientRect().width };
+      })()`)
+      assert.notEqual(stage.first, stage.last, 'live frames must continue while the viewport stays fixed')
+      assert.equal(stage.writes, 0, 'animation frames must not rewrite stage layout')
+      await browser.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }, browser.sessionId)
+      await wait(`document.querySelector('#stage-play').getBoundingClientRect().width < ${stage.width}`)
     }
     const focus = () => evaluate(`document.querySelector('${surface}').tabIndex=0; document.querySelector('${surface}').focus()`)
     const logs = async () => (await api('get')).logs.map(row => row.text)
@@ -81,7 +99,7 @@ end` })
     for (const type of ['mousePressed', 'mouseReleased']) {
       await browser.send('Input.dispatchMouseEvent', { type, ...rect, button: 'left', clickCount: 1 }, browser.sessionId)
     }
-    await until(rows => rows.includes('cursor-click'))
+    await until(rows => rows.includes('cursor-Click'))
     assert.equal((await logs()).filter(row => row.startsWith('Keyboard')).length, before)
     await evaluate(`document.querySelector('${button}').click()`)
     await focus()
@@ -89,6 +107,26 @@ end` })
       await browser.send('Input.dispatchMouseEvent', { type, ...rect, button: 'right', clickCount: 1 }, browser.sessionId)
     }
     await until(rows => rows.includes('KeyboardSprintKeyUp'))
+    const cursorLogs = rows => rows.filter(row => row.startsWith('cursor-'))
+    const mouse = (type, x = rect.x) => browser.send('Input.dispatchMouseEvent', { type, x, y: rect.y,
+      button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 }, browser.sessionId)
+    for (const reason of ['focus', 'view']) {
+      await focus()
+      const start = cursorLogs(await logs()).length
+      await mouse('mousePressed')
+      await mouse('mouseMoved', rect.x + 15)
+      await until(rows => cursorLogs(rows).slice(start).includes('cursor-BeginDrag'))
+      if (reason === 'focus') await evaluate(`document.querySelector('${button}').focus()`)
+      else await evaluate(`document.querySelector('${editor ? '[data-view="log"]' : '#mode-editor'}').click()`)
+      await until(rows => cursorLogs(rows).slice(start).includes('cursor-EndDrag'))
+      await mouse('mouseReleased', rect.x + 15) // late native capture/up cannot click after cancel
+      assert.deepEqual(cursorLogs(await logs()).slice(start), ['cursor-Down', 'cursor-BeginDrag', 'cursor-Up', 'cursor-EndDrag'])
+      if (reason === 'view') await evaluate(`document.querySelector('${editor ? '[data-view="play"]' : '#mode-play'}').click()`)
+      await focus()
+      await mouse('mousePressed'); await mouse('mouseReleased')
+      await until(rows => cursorLogs(rows).slice(start).includes('cursor-Click'))
+      assert.equal(cursorLogs(await logs()).slice(start).filter(row => row === 'cursor-Up').length, 2)
+    }
     if (editor) {
       await evaluate(`document.querySelector('[data-view="log"]').click(); document.querySelector('#caseAsserts').focus()`)
       const count = (await logs()).length

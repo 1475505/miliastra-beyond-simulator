@@ -60,24 +60,33 @@ test('hard rectangle mask clips descendants but not siblings, independent of ima
   assert.equal(await alphaPixel(png, 120, 108), 0, 'transparent mask image does not paint its own pixels')
 })
 
-test('pixel feather fades inward on the selected axis and width zero stays hard', async (t) => {
+test('Lua feather changes reach scene deltas and independent pixels; width zero stays hard', async (t) => {
   const f = fixture(t)
-  f.mask.enableSoftEdge = true
-  f.mask.softEdgeMode = 'Pixel'
-  f.mask.softEdgeWidthX = 20
-  f.mask.softEdgeWidthY = 0
+  const script = f.runtime.mountScript({ path: 'mask', control: f.root, source: `
+function SetMask(x, y)
+  local mask = script.object:GetChild('Mask')
+  mask.enableSoftEdge = true
+  mask.softEdgeMode = Enum.ImageMaskSoftEdgeMode.Pixel
+  mask:SetSoftEdgeWidth(x, y)
+end` })
+  const before = f.scene()
+  f.runtime.invokeOn(script.env, 'SetMask', [20, 0])
+  const patch = playSnapshot(f.session, { view: true, sceneRev: before.revision }).scene
+  assert.equal(patch.reset, false)
+  assert.equal(patch.changed.find(n => n.name === 'Mask').softEdgeWidthX, 20)
   const png = renderScenePng(f.scene(), 240, 160, { background: 'transparent' })
   // Hand-calculated distances 9.5/19.5/50.5 from the left edge, divided by 20.
   for (const [x, alpha] of [[79, 121], [89, 249], [120, 255]]) assert.equal(await alphaPixel(png, x, 68), alpha)
   assert.equal(await alphaPixel(png, 120, 58), 255, 'zero vertical feather does not fade the top edge')
-  f.mask.softEdgeWidthX = 0
+  f.runtime.invokeOn(script.env, 'SetMask', [0, 0])
   const hard = renderScenePng(f.scene(), 240, 160, { background: 'transparent' })
   assert.equal(await alphaPixel(hard, 71, 68), 255)
   assert.equal(await alphaPixel(hard, 68, 68), 0)
-  f.mask.softEdgeWidthY = 20
+  f.runtime.invokeOn(script.env, 'SetMask', [0, 20])
   const vertical = renderScenePng(f.scene(), 240, 160, { background: 'transparent' })
   assert.equal(await alphaPixel(vertical, 120, 58), 108, '8.5 units inside a 20-unit top feather')
   assert.equal(await alphaPixel(vertical, 71, 80), 255, 'X=0 keeps the left edge hard')
+  assert.equal(f.runtime.logs.some(n => n.level === 'lua-error'), false)
 })
 
 test('soft masks composite groups once, multiply nested groups, and retain empty coverage', async () => {
@@ -92,23 +101,6 @@ test('soft masks composite groups once, multiply nested groups, and retain empty
       if (pixel[3]) assert.deepEqual(pixel.slice(0, 3), [255, 0, 0], `${name}: no mask/viewport white leaks`)
     })
   }
-})
-
-test('Lua mask-only changes invalidate the scene', t => {
-  const f = fixture(t)
-  const script = f.runtime.mountScript({ path: 'mask', control: f.root, source: `
-function SetMask(width)
-  local mask = script.object:GetChild('Mask')
-  mask.enableSoftEdge = true
-  mask.softEdgeMode = Enum.ImageMaskSoftEdgeMode.Pixel
-  mask:SetSoftEdgeWidth(width, 0)
-end` })
-  const before = f.scene()
-  f.runtime.invokeOn(script.env, 'SetMask', [40])
-  const patch = playSnapshot(f.session, { view: true, sceneRev: before.revision }).scene
-  assert.equal(patch.reset, false)
-  assert.equal(patch.changed.find(n => n.name === 'Mask').softEdgeWidthX, 40)
-  assert.equal(f.runtime.logs.some(n => n.level === 'lua-error'), false)
 })
 
 test('cropped mask layers keep backing-pixel offsets at high DPI and when partly outside the canvas', async () => {

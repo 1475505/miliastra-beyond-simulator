@@ -72,6 +72,19 @@ export class SimulatorController {
     return this.studio.exportData(format, assetType, options)
   }
 
+  importData(format, data, filename) {
+    // Partial-asset imports can fail after replacing a tree. Commit the prepared
+    // Studio only when all validation succeeds, keeping both data and storage.
+    const next = createStudio(this.studio.archiveData(), { workspacePath: this.activeWorkspacePath(), restoreSession: true })
+    const result = next.importData(format, data, filename)
+    this.studio = next
+    this.archivePath = ''; this.archiveStamp = ''; this.savedArchive = ''
+    this.scriptSync.plan = null
+    this.scriptSync.lastResult = null
+    this.controlGuidSync.plan = null
+    return { ...result, snapshot: this.get() }
+  }
+
   exportAction(action, args = {}) {
     if (action === 'list') return this.studio.exportChoices()
     if (action === 'preview') return this.studio.exportPreview(args)
@@ -98,10 +111,7 @@ export class SimulatorController {
       return this.patch({ op: 'setScriptSync', config: args.config, expectedRevision: args.expectedRevision })
     }
     if (action === 'save') {
-      if (!Number.isInteger(args.expectedRevision)) throw new Error('expectedRevision is required')
-      const path = args.path ?? this.archivePath
-      if (typeof path !== 'string' || !path.trim()) throw new Error('script sync save requires a workspace-relative path for a new archive')
-      return this.saveForScriptSync(path, args.expectedRevision)
+      return this.saveArchiveChecked(args.path, args.expectedRevision)
     }
     if (action === 'preview') return this.scriptSync.preview()
     if (action === 'apply') return this.scriptSync.apply(args)
@@ -114,7 +124,9 @@ export class SimulatorController {
     if (contentHash(readFileSync(path)) !== this.archiveStamp) throw new Error('存档文件已变化，请重新加载并检查')
   }
 
-  saveForScriptSync(path, expectedRevision) {
+  saveArchiveChecked(path = this.archivePath, expectedRevision) {
+    if (!Number.isInteger(expectedRevision)) throw new Error('expectedRevision is required')
+    if (typeof path !== 'string' || !path.trim()) throw new Error('save requires a workspace-relative path for a new archive')
     if (expectedRevision !== this.get().version) throw new Error('revision conflict: reload before saving')
     const absolute = resolveWorkspaceOutput(this.activeWorkspacePath(), path)
     if (existsSync(absolute)) {
@@ -140,11 +152,11 @@ export class SimulatorController {
     if (!workspacePath) throw new Error('workspace is not bound')
     const absolute = resolveWorkspaceFile(workspacePath, path)
     const bytes = readFileSync(absolute)
-    const result = this.studio.importData('json', bytes.toString('base64'), basename(absolute))
+    const result = this.importData('json', bytes.toString('base64'), basename(absolute))
     this.archivePath = String(path).trim().replaceAll('\\', '/')
     this.archiveStamp = contentHash(bytes)
     this.savedArchive = JSON.stringify(this.studio.archiveData())
-    return result
+    return { ...result, snapshot: this.get() }
   }
 
   saveArchive(path = this.archivePath || 'qxqy-simulator.save.json') {

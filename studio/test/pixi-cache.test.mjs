@@ -120,3 +120,51 @@ test('HUD text, style and scroll-offset updates reuse owned visuals; geometry ch
   renderer.clearVisual(root)
   assert.equal(windowText.destroyed, true)
 })
+
+test('incremental clipping follows parent resize and reparenting without scanning unrelated artwork', async t => {
+  const renderer = Object.create(PixiPlayRenderer.prototype)
+  Object.assign(renderer, { ready: Promise.resolve(), nodes: new Map(), scratch: new Matrix(), canvasWidth: 240, canvasHeight: 160,
+    app: { stage: new Container(), render() {}, renderer: { resize() {} } } })
+  t.after(() => renderer.clearNodes())
+  const node = (id, extra = {}) => ({ id, kind: 'container', sourceWidth: 80, sourceHeight: 60,
+    matrix: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }, ...extra })
+  const parent = node('parent'), other = node('other', { sourceWidth: 40 })
+  let child = node('child', { parent: 'parent', clipToParent: true })
+  // Children may arrive before parents in a snapshot.
+  await renderer.applyScene({ format: 'tree-v1', reset: true, nodes: [child, parent, other, node('static')] }, 240, 160)
+  const root = renderer.nodes.get('child')
+  assert.equal(root.mask.getLocalBounds().width, 80)
+  const initial = root.mask
+  const untouched = renderer.nodes.get('static')
+  const staticItem = untouched.__sceneItem
+  Object.defineProperty(untouched, '__sceneItem', { configurable: true,
+    get() { assert.fail('a small delta must not inspect unrelated static nodes') } })
+  const delta = (changed = [], removed = []) => renderer.applyScene({ format: 'tree-v1', changed, removed }, 240, 160)
+  await delta([{ ...parent, sourceWidth: 100 }])
+  assert.equal(initial.destroyed, true)
+  assert.equal(root.mask.getLocalBounds().width, 100, 'a parent-only resize updates the child mask')
+  child = { ...child, parent: 'other', matrix: { ...child.matrix, tx: 10 } }
+  await delta([child])
+  assert.equal(root.parent, renderer.nodes.get('other'))
+  assert.equal(root.mask.getLocalBounds().width, 40)
+  assert.equal(root.mask.getLocalBounds().x, -30)
+  const moved = root.mask
+  await delta([{ ...parent, sourceWidth: 120 }])
+  assert.equal(root.mask, moved, 'the old parent no longer owns this viewport clip')
+  await delta([], ['other'])
+  assert.equal(root.mask, undefined)
+  assert.equal(moved.destroyed, true)
+  await delta([{ ...other, sourceWidth: 30 }, child])
+  assert.equal(root.mask.getLocalBounds().width, 30)
+  await delta([{ ...child, clipToParent: false }])
+  assert.equal(root.mask, undefined)
+  assert.equal(root.visible, true)
+  await delta([child])
+  const finalClip = root.mask
+  await delta([], ['child'])
+  assert.equal(finalClip.destroyed, true)
+  assert.equal(renderer.clipChildren.size, 0, 'removed and unclipped children leave no retained dependencies')
+  Object.defineProperty(untouched, '__sceneItem', { value: staticItem, configurable: true, writable: true })
+  renderer.clearNodes()
+  assert.equal(renderer.nodes.size, 0)
+})

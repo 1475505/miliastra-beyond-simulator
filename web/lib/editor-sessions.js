@@ -1,13 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { deflateSync, inflateSync } from 'node:zlib'
 import { createStudio } from 'qxqy-studio'
 import { SimulatorController } from 'qxqy-studio/host/controller'
-import { resolveWorkspaceFile, resolveWorkspaceOutput } from 'qxqy-studio/host/workspace'
 import { createQuickStartSource } from './quick-start-source.js'
 
 const ACTIONS = new Set(['get', 'patch', 'import', 'export', 'export-list', 'export-preview', 'archives', 'load-archive', 'save', 'play', 'script-sync', 'script-sync-apply', 'image-refresh'])
-const stamp = path => createHash('sha256').update(readFileSync(path)).digest('hex')
 
 // One trusted operator, with independent editor tabs and their play windows.
 // These identifiers are not tenant authorization; network access is authenticated.
@@ -33,7 +30,7 @@ export class EditorSessions {
     if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(id)) throw new Error('Invalid editor sessionId')
     if (!this.sessions.has(id)) {
       const controller = new SimulatorController(this.workspace, { imageAssets: this.imageAssets })
-      const row = { controller, path: '', fileStamp: '', inFlight: 0 }
+      const row = { controller, inFlight: 0 }
       if (this.initialPath) this.load(row, this.initialPath)
       this.sessions.set(id, row)
     }
@@ -86,15 +83,12 @@ export class EditorSessions {
   }
 
   snapshot(row) {
-    return { ...row.controller.get(), ...(row.migrationWarnings ? { migrationWarnings: row.migrationWarnings } : {}), storage: { path: row.path }, ...(row.quickStart ? { quickStart: row.quickStart } : {}) }
+    return { ...row.controller.get(), ...(row.migrationWarnings ? { migrationWarnings: row.migrationWarnings } : {}), ...(row.quickStart ? { quickStart: row.quickStart } : {}) }
   }
 
   load(row, path) {
-    const absolute = resolveWorkspaceFile(this.workspace, path)
     const result = row.controller.loadArchive(path)
     row.migrationWarnings = null
-    row.path = String(path).replaceAll('\\', '/')
-    row.fileStamp = stamp(absolute)
     row.quickStart = null
     return { ...result, snapshot: this.snapshot(row) }
   }
@@ -117,7 +111,7 @@ export class EditorSessions {
       if (action === 'archives') return controller.listArchives()
       if (action === 'patch') {
         if (!Number.isInteger(body.op?.expectedRevision)) throw new Error('expectedRevision is required')
-        return { ...controller.patch(body.op), storage: { path: row.path }, ...(row.quickStart ? { quickStart: row.quickStart } : {}) }
+        return { ...controller.patch(body.op), ...(row.quickStart ? { quickStart: row.quickStart } : {}) }
       }
       if (action === 'export-list') return controller.exportAction('list')
       if (action === 'export-preview') return controller.exportAction('preview', body)
@@ -126,26 +120,12 @@ export class EditorSessions {
       if (action === 'load-archive' || action === 'import') {
         await controller.play('stop')
         if (action === 'load-archive') return this.load(row, body.path)
-        const result = controller.studio.importData(body.format, body.data, body.filename)
+        const result = controller.importData(body.format, body.data, body.filename)
         row.migrationWarnings = null
-        row.path = ''
-        row.fileStamp = ''
         row.quickStart = null
         return { ...result, snapshot: this.snapshot(row) }
       }
-      if (action === 'save') {
-        if (body.expectedRevision !== controller.get().version) throw new Error('revision conflict: reload before saving')
-        const absolute = resolveWorkspaceOutput(this.workspace, body.path)
-        if (existsSync(absolute)) {
-          const original = row.path ? resolveWorkspaceOutput(this.workspace, row.path) : ''
-          if (absolute !== original) throw new Error('保存失败：目标文件已存在，但当前会话未关联此文件。请改用一个未使用的存档文件名保存；如需使用已有文件，请先导出「资产包 JSON（三类合一）」备份当前修改，再从顶部「⤓ 工作区存档」选择该文件。')
-          if (stamp(absolute) !== row.fileStamp) throw new Error('保存失败：磁盘上的存档已被外部修改，当前版本无法直接覆盖。请改用一个未使用的存档文件名保存；如需使用磁盘上的最新版本，请先导出「资产包 JSON（三类合一）」备份当前修改，再从顶部「⤓ 工作区存档」重新选择该文件。')
-        }
-        const result = controller.saveArchive(body.path)
-        row.path = result.path
-        row.fileStamp = stamp(absolute)
-        return result
-      }
+      if (action === 'save') return controller.saveArchiveChecked(body.path, body.expectedRevision)
     }) } finally {
       row.inFlight--
       row.touched = this.now()
@@ -166,8 +146,8 @@ export class EditorSessions {
       if (this.sessions.has(id)) throw new Error('教学会话已用于其他工程，请先保存并重新打开编辑页')
       const controller = new SimulatorController(this.workspace, { imageAssets: this.imageAssets })
       try {
-        controller.studio.importData('json', data, 'flappy-fish.save.json')
-        const row = { controller, path: '', fileStamp: '', inFlight: 0, used: ++this.sequence, touched: this.now(), quickStart: {
+        controller.importData('json', data, 'flappy-fish.save.json')
+        const row = { controller, inFlight: 0, used: ++this.sequence, touched: this.now(), quickStart: {
           ...this.quickStart.info, originalId,
           savePath: `tutorials/flappy-fish-${id.slice(-8)}.save.json`,
         } }

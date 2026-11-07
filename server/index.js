@@ -635,7 +635,9 @@ export function createServer(options = {}) {
       }
     },
 
-    snapshot() {
+    snapshot({ historyLimit = Infinity } = {}) {
+      if (historyLimit !== Infinity && (!Number.isSafeInteger(historyLimit) || historyLimit < 0)) throw new Error('historyLimit must be a non-negative integer')
+      const recent = rows => historyLimit === Infinity ? rows : rows.slice(Math.max(0, rows.length - historyLimit))
       const viewPlayer = playerEntity(viewPlayerIndex)
       const viewAvatar = avatarEntity(viewPlayerIndex)
       const vars = {
@@ -671,7 +673,7 @@ export function createServer(options = {}) {
         viewPlayerIndex,
         logic: api.getLogic(),
         vars,
-        inbound: inbound.map((row) => ({
+        inbound: recent(inbound).map((row) => ({
           id: row.id,
           name: row.name,
           params: cloneJson(row.params),
@@ -680,7 +682,7 @@ export function createServer(options = {}) {
           playerIndex: row.playerIndex,
           from: row.from,
         })),
-        outbound: outbound.map((row) => ({
+        outbound: recent(outbound).map((row) => ({
           id: row.id,
           name: row.name,
           params: cloneJson(row.params),
@@ -691,7 +693,7 @@ export function createServer(options = {}) {
           deliverAt: row.deliverAt,
           delivered: !!row.delivered,
         })),
-        logs: logs.map((row) => ({
+        logs: recent(logs).map((row) => ({
           source: 'server',
           level: row.level,
           text: row.text,

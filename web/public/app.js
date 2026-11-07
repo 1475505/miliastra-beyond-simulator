@@ -319,12 +319,15 @@ function updatePlayChrome() {
 
 function syncPlayPolling() {
   if (mode === 'play' && play.running) play.startPolling()
-  else { void play.releaseKeys(); play.stopPolling() }
+  else { void play.releaseInputs(); play.stopPolling() }
 }
 
 async function onPlaySnapshot(next) {
+  const width = model?.play?.width, height = model?.play?.height
   applyPlayStatus(next)
-  resizePlayStage()
+  // CSS viewport resizing is independent of animation frames. Reading layout
+  // here every poll forced a reflow after the previous frame's HUD writes.
+  if (width !== model?.play?.width || height !== model?.play?.height) resizePlayStage()
   updatePlayChrome()
 }
 

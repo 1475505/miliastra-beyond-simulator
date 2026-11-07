@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createWebServer } from '../server.js'
@@ -31,12 +31,17 @@ test('editor isolates tabs, preserves sessions on reload, and protects disk save
   const b = (await call('b', 'load-archive', { path: saved.value.path })).value.snapshot
   assert.equal(b.save.name, 'Editor A')
   a = (await call('a', 'patch', { op: { op: 'renameSave', name: 'Editor A2', expectedRevision: a.version } })).value
-  assert.equal((await call('a', 'save', { path: saved.value.path, expectedRevision: a.version })).status, 200)
+  assert.equal((await call('a', 'script-sync', { action: 'save', args: { expectedRevision: a.version } })).status, 200)
+  assert.equal((await call('a', 'save', { expectedRevision: a.version })).status, 200)
   assert.match((await call('b', 'save', { path: saved.value.path, expectedRevision: b.version })).error, /存档已被外部修改/)
   assert.match((await call('a', 'save', { path: '../outside.json', expectedRevision: a.version })).error, /workspace/)
-  assert.match((await call('a', 'save', { path: 'other.json', expectedRevision: -1 })).error, /revision conflict/)
-  writeFileSync(path, readFileSync(path, 'utf8') + ' ')
-  assert.match((await call('a', 'save', { path: saved.value.path, expectedRevision: a.version })).error, /存档已被外部修改/)
+  const latest = readFileSync(path, 'utf8')
+  const imported = await call('a', 'import', { format: 'json', data: Buffer.from(before).toString('base64') })
+  assert.equal(imported.value.snapshot.storage.path, '')
+  await call('b', 'get') // park and restore the imported project's detached storage
+  assert.equal((await call('a', 'get')).value.storage.path, '')
+  assert.match((await call('a', 'script-sync', { action: 'save', args: { expectedRevision: imported.value.snapshot.version } })).error, /path/)
+  assert.equal(readFileSync(path, 'utf8'), latest)
   const started = await call('a', 'play', { action: 'start', args: { view: true } })
   assert.equal(started.value.scene.format, 'tree-v1')
   assert.equal((await call('a', 'play', { action: 'pause' })).value.paused, true)

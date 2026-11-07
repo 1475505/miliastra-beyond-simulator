@@ -34,13 +34,16 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   let snapshot = null
   let running = false
   let polling = false
+  let pollingEnabled = false
   let timer = null
+  let nextPollAt = Infinity
   let fps = preferredFps()
-  let pollSoonTimer = null
   let sceneRev = 0
   let moveTimer = null
   let lastMove = null
   let activePointer = null
+  let pointerSurface = null
+  let pointerPoint = null
   let switchingView = false
   const inputDisposers = []
   const keyReleasers = new Set()
@@ -63,6 +66,24 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     return Promise.all([...keyReleasers].map(release => release(send))).then(() => inputQueue)
   }
 
+  function releasePointer(send = true) {
+    clearMove()
+    const id = activePointer, surface = pointerSurface, position = pointerPoint
+    activePointer = null
+    pointerSurface = null
+    pointerPoint = null
+    // Clear ownership before releasing capture: lostpointercapture can reenter.
+    if (surface?.hasPointerCapture?.(id)) surface.releasePointerCapture(id)
+    return send && id !== null && running
+      ? sendInput('pointer', { type: 'cancel', ...position }, { allowInactive: true }) : inputQueue
+  }
+
+  function releaseInputs(send = true) {
+    const keys = releaseKeys(send)
+    const pointer = releasePointer(send)
+    return Promise.all([keys, pointer]).then(() => inputQueue)
+  }
+
   function setKeyInputEnabled(enabled) {
     keyInputEnabled = Boolean(enabled)
     if (!keyInputEnabled) void releaseKeys()
@@ -77,7 +98,10 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     const next = validatePlayFps(value)
     if (fps === next) return
     fps = next
-    if (timer) { stopPolling(); startPolling() }
+    if (pollingEnabled) {
+      nextPollAt = performance.now() + Math.floor(1000 / fps)
+      armPoll()
+    }
     try { globalThis.localStorage?.setItem(fpsStorageKey, String(fps)) } catch { /* Session-only if storage is blocked. */ }
   }
 
@@ -96,6 +120,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     if (next?.scene && next.scene.format === 'tree-v1') {
       if (next.scene.reset) sceneRev = 0
       await renderer.applyScene(next.scene, next.canvasWidth, next.canvasHeight)
+      if (current !== generation) return
       sceneRev = next.scene.revision || sceneRev
     } else if (Array.isArray(next?.paint)) {
       await renderer.render(next.paint, next.canvasWidth, next.canvasHeight)
@@ -107,11 +132,16 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
 
   async function poll() {
     if (!running || polling) return
-    if (isActive && !isActive()) { audio?.reset(); renderer.resetEffects?.(); return }
+    if (timer !== null) clearTimeout(timer)
+    timer = null
+    nextPollAt = Infinity
+    const startedAt = performance.now()
     polling = true
     const current = generation
     try {
-      const next = await api('get', { view: true, sceneRev, compact: true })
+      if (isActive && !isActive()) { audio?.reset(); renderer.resetEffects?.(); return }
+      const next = await api('get', { view: true, sceneRev, compact: true,
+        ...(snapshot?.audio?.sessionId ? { sceneSessionId: snapshot.audio.sessionId } : {}) })
       if (current !== generation) return
       await applyScene(next)
     } catch (error) {
@@ -123,28 +153,40 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       emitError(error)
     } finally {
       polling = false
+      // Count request, drawing and UI work against this frame's budget. A slow
+      // request starts the next observation as soon as it finishes, rather than
+      // missing an interval tick and falling from 60 Hz straight to 30 Hz.
+      // Never overlap observations or accumulate catch-up requests.
+      if (pollingEnabled && running) nextPollAt = Math.min(nextPollAt, startedAt + Math.floor(1000 / fps))
+      armPoll()
     }
   }
 
+  function armPoll() {
+    if (timer !== null) clearTimeout(timer)
+    timer = null
+    if (polling || !running || !Number.isFinite(nextPollAt)) return
+    timer = setTimeout(() => { timer = null; void poll() }, Math.max(0, nextPollAt - performance.now()))
+  }
+
   function startPolling() {
-    if (timer) return
-    timer = setInterval(() => { void poll() }, Math.floor(1000 / fps))
+    if (pollingEnabled) return
+    pollingEnabled = true
+    pollSoon()
   }
 
   function stopPolling() {
-    if (timer) clearInterval(timer)
+    pollingEnabled = false
+    if (timer !== null) clearTimeout(timer)
     timer = null
-    if (pollSoonTimer) clearTimeout(pollSoonTimer)
-    pollSoonTimer = null
+    nextPollAt = Infinity
     if (isActive && !isActive()) { audio?.reset(); renderer.resetEffects?.() }
   }
 
   function pollSoon(delay = Math.floor(1000 / fps)) {
-    if (pollSoonTimer) return
-    pollSoonTimer = setTimeout(() => {
-      pollSoonTimer = null
-      void poll()
-    }, delay)
+    if (!running) return
+    nextPollAt = Math.min(nextPollAt, performance.now() + Math.max(0, delay))
+    armPoll()
   }
 
   function clearMove() {
@@ -162,12 +204,10 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   function reset() {
     // These transitions replace or terminate the Worker; never carry held
     // browser keys into the next session. Blur/toggle/view release live keys.
-    void releaseKeys(false)
+    void releaseInputs(false)
     generation++
     audio?.reset()
     renderer.resetEffects?.()
-    clearMove()
-    activePointer = null
     switchingView = false
     running = false
     sceneRev = 0
@@ -217,7 +257,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   async function attach() {
     // Reconnect a reloaded browser to the existing worker without restarting
     // the game, changing its player, or resuming a paused session.
-    await releaseKeys()
+    await releaseInputs()
     reset()
     const current = generation
     sceneRev = 0
@@ -249,7 +289,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     switchingView = true
     let current = generation
     try {
-      await releaseKeys()
+      await releaseInputs()
       if (current !== generation) return null
       current = ++generation
       audio?.reset()
@@ -309,21 +349,24 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       if (!canInput()) return
       if (activePointer !== null || (event.button != null && event.button !== 0)) return
       activePointer = event.pointerId
+      pointerSurface = surface
+      pointerPoint = point(event, surface)
       surface.setPointerCapture?.(event.pointerId)
       flushMove()
-      void sendPointer({ type: 'down', ...point(event, surface) })
+      void sendPointer({ type: 'down', ...pointerPoint })
     }
     const onPointerUp = (event) => {
-      if (!canInput()) return
       if (activePointer !== event.pointerId) return
+      if (!canInput()) { void releasePointer(); return }
       flushMove()
       void sendPointer({ type: 'up', ...point(event, surface) })
-      activePointer = null
+      void releasePointer(false)
     }
     const onPointerMove = (event) => {
       if (!canInput()) return
       if (activePointer !== null && activePointer !== event.pointerId) return
       lastMove = point(event, surface)
+      if (activePointer !== null) pointerPoint = lastMove
       if (moveTimer) return
       moveTimer = setTimeout(() => {
         moveTimer = null
@@ -338,9 +381,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     const onPointerCancel = (event) => {
       if (event.pointerType === 'mouse') { void release('mouse:0'); void release('mouse:2') }
       if (activePointer !== event.pointerId) return
-      clearMove()
-      activePointer = null
-      if (snapshot && running) void sendPointer({ type: 'cancel', ...point(event, surface) })
+      void releasePointer()
     }
     const onWheel = (event) => {
       if (!canInput()) return
@@ -376,7 +417,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       press(`mouse:${event.button}`, mouseKeyEventName(event.button, 'Down'))
     }
     const onMouseUp = event => { void release(`mouse:${event.button}`) }
-    const onBlur = () => { void releaseHeld() }
+    const onBlur = () => { void releaseInputs() }
     const onVisibility = () => { if (document?.hidden) onBlur() }
     const onContextMenu = event => { if (canKey()) event.preventDefault() }
     surface.addEventListener('pointerdown', onPointerDown)
@@ -396,6 +437,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     document?.addEventListener('visibilitychange', onVisibility)
     const dispose = () => {
       void releaseHeld()
+      if (pointerSurface === surface) void releasePointer()
       keyReleasers.delete(releaseHeld)
       surface.removeEventListener('pointerdown', onPointerDown)
       surface.removeEventListener('pointerup', onPointerUp)
@@ -435,6 +477,7 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     get keyInputEnabled() { return keyInputEnabled },
     setKeyInputEnabled,
     releaseKeys,
+    releaseInputs,
     applyScene,
     poll,
     pollSoon,
