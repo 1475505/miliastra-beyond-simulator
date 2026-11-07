@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { createServer } from 'node:http'
 import { createWebServer } from '../server.js'
 import { createStudio } from '../../studio/index.js'
-import { createQuickStartSource } from '../lib/quick-start-source.js'
+import { createQuickStartSource } from '../../studio/host/quick-start-source.js'
 import { startTestBrowser } from './browser-helper.mjs'
 
 function example() {

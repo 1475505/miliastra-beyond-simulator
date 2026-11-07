@@ -18,6 +18,7 @@
     "./host/local-font": "./host/local-font.js",
     "./host/updates": "./host/updates.js",
     "./host/system-language": "./host/system-language.js",
+    "./host/quick-start-source": "./host/quick-start-source.js",
     "./play/renderer": "./play/pixi-renderer.js",
     "./play/audio-policy": "./play/audio-policy.js"
   },

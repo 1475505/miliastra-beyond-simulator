@@ -9,7 +9,7 @@
 ```powershell
 dsh plugin --profile web add dsh-plugin-beyond-simulator
 dsh plugin --profile web add github:1475505/miliastra-beyond-simulator
-dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.4.tgz
+dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.3.1.tgz
 ```
 
 更新也用`add`，之后重启Harness；`dsh --profile web --dump-config`检查加载，`dsh web`启动。tarball文件名以当次`release/manifest.json`为准，在其他目录安装时使用绝对路径。
@@ -28,6 +28,14 @@ dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.2.4.tgz
 Host Tools为`qxqy_script_sync`、`qxqy_studio_get/patch/export/play/load`、`qxqy_studio_ui_screenshot/play_screenshot`。截图使用Host PNG，无需可见标签页；动效视频帧的省略提示见[动效边界](../studio/docs/ui-vfx-playback.md#截图与-gia-边界)。
 
 工作区绑定DSH会话原始工程根。存档发现复用Studio，支持大于8MiB的存档，选最近50项并返回`discovery`限制/诊断；指定工作区内路径不受列表筛选限制。加载成功记住相对路径，省略保存路径时写回；未绑定时返回`{ bound:false, archives:[] }`。
+
+## 快速上手
+
+右下角「快速上手」提供「下载示例，开始实操」及「用当前存档继续」。下载校验、示例来源配置与五阶段流程见 [Web 快速上手](../web/README.md#快速上手)，DSH 同样支持 `QXQY_QUICK_START_URL`，下载失败保留当前工程并可重试；显式空地址禁用下载。
+
+每个真实 DSH 对话保留原工程和独立教学副本。打开示例不写盘、不覆盖原存档，清除发布者的脚本同步路径；首次保存使用独立的 `tutorials/` 建议路径。切换前停止旧试玩，HTTP、AI 工具及新试玩共同操作当前副本；「返回原工程」恢复原编辑与保存关联，再次打开示例复用已有修改。刷新或重开模拟器页恢复宿主内当前副本及各自浏览器引导进度，不创建虚假的 Harness 对话。宿主重启会丢失未保存副本，重启前须保存。
+
+若欢迎页只有「用当前存档继续」，先确认实际加载的 DSH 插件版本：2.3.0 漏接下载入口，2.3.1 补齐。安装更新后完整重启宿主并刷新页面；只更新 Web 包或刷新旧后台不能补齐 DSH 接口。回归 `test/quick-start.test.mjs` 通过实际 ModuleLoader bundle、HTTP 和注册 AI 工具验证下载、重试、原工程保护、刷新恢复与返回。
 
 <a id="harness-02-兼容性"></a>
 <a id="harness-021-兼容性"></a>

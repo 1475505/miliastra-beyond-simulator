@@ -6,10 +6,12 @@ import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execFileSync, spawn } from 'node:child_process'
 import { once } from 'node:events'
+import { createServer } from 'node:http'
 import { setTimeout as delay } from 'node:timers/promises'
 import { root, cleanGenerated } from './paths.mjs'
 import { npm } from './npm.mjs'
 import { systemLanguage } from '../studio/host/system-language.js'
+import { createStudio } from '../studio/index.js'
 
 const temporary = await mkdtemp(join(tmpdir(), 'qxqy-harness-smoke-'))
 const home = join(temporary, 'home')
@@ -17,8 +19,16 @@ const profile = join(home, 'profiles/web')
 const env = { ...process.env, DSH_HOME: home, DSH_AGENTS_HOME: join(temporary, 'agents') }
 delete env.DSH_BUNDLED_SKILL_DIR
 let child
+let source
 let output = ''
 try {
+  const example = createStudio()
+  example.patch({ op: 'renameSave', name: 'Harness practice example' })
+  example.patch({ op: 'addScript', controlId: 'n1', path: 'lesson.lua', source: 'function OnStart() print("lesson-ready") end' })
+  const exampleBytes = JSON.stringify(example.archiveData())
+  source = createServer((_request, response) => response.end(exampleBytes))
+  await new Promise(resolve => source.listen(0, '127.0.0.1', resolve))
+  env.QXQY_QUICK_START_URL = `http://127.0.0.1:${source.address().port}/example.save.json`
   await writeFile(join(temporary, 'package.json'), JSON.stringify({ private: true, type: 'module' }))
   let cli = process.argv[2] && resolve(process.argv[2])
   if (!cli) {
@@ -80,5 +90,6 @@ try {
     child.kill()
     await exited
   }
+  if (source) await new Promise(resolve => { source.close(resolve); source.closeAllConnections() })
   await cleanGenerated(temporary, tmpdir())
 }

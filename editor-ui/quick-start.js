@@ -281,7 +281,7 @@ export function createQuickStart(React) {
     return {
       guide: active && !showWelcome && !progress.collapsed && !suspended ? e(Coach, { key: progress.step, step, index: progress.step, page, selection: snap?.selectedId, error, busy, collapse,
         goTo: index => void run(() => goTo(index)), locate: () => void run(() => locate(step)),
-        back: snap?.quickStart && info?.back ? () => void run(async () => { await prepare(); info.back(snap.quickStart.originalId) }) : null,
+        back: snap?.quickStart && info?.back ? () => void run(async () => { await prepare(); await info.back(snap.quickStart.originalId) }) : null,
         example: !snap?.quickStart && info?.open ? () => setWelcome(true) : null }) : null,
       active: active && !progress.collapsed,
       open: () => active ? void run(() => goTo(progress.step)) : setWelcome(true),

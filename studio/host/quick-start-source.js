@@ -1,6 +1,7 @@
 const MAX_BYTES = 6 * 1024 * 1024
 const DEFAULT_URL = 'https://ppt.070077.xyz/beyond-ai/flappy-fish.save.json'
 
+// Web and DSH share the configured source and download validation.
 // Source URLs are deployment configuration, shared by all tutorial sessions.
 // The browser only requests the configured example through the same-origin host.
 export function createQuickStartSource(options = {}) {

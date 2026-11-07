@@ -77,7 +77,7 @@ node web/server.js --workspace E:/qxqy-lua --port 4173
 
 步骤与收起状态按导览版本 `simulator-guide-v7` 和会话保存在浏览器本地，与示例版本独立；旧版章节进度不套用到新版步骤。刷新恢复进度及对应面板，已打开教学副本时不再弹出欢迎页；新窗口与内嵌试玩提供通用调试提示。完成导览仅表示浏览完成，千星沙箱的导入与操作由用户执行。
 
-实现：`lib/quick-start-source.js`、`lib/editor-sessions.js`、共用 `editor-ui/quick-start.js` 与 `dsh-plugin/lib/play.html`。Web/DSH 共用实操引导，Web 额外提供示例来源和独立会话。示例未内置于安装包；示例路径只用作填写提示，不限制操作当前工程，步骤推进不依赖玩法日志。宿主重启后的未保存工程恢复沿用上方[编辑与保存](#编辑与保存)边界，已保存教学存档可作为普通工程打开。
+实现：共享 `studio/host/quick-start-source.js`、Web `lib/editor-sessions.js`、共用 `editor-ui/quick-start.js` 与 `dsh-plugin/lib/play.html`。Web/DSH 共用下载校验和实操引导，各自保留独立教学副本；[DSH 会话切换](../dsh-plugin/README.md#快速上手)仍使用真实对话身份。示例未内置于安装包；示例路径只用作填写提示，不限制操作当前工程，步骤推进不依赖玩法日志。宿主重启后的未保存工程恢复沿用上方[编辑与保存](#编辑与保存)边界，已保存教学存档可作为普通工程打开。
 
 回归：`web/test/editor.test.mjs`、`web/test/quick-start.test.mjs`，覆盖热会话预算下的未保存工程/同步计划恢复、并发与活跃 Worker 保护、闲置释放、教学下载重试和副本复用。浏览器用合成工程走试玩、导出、索引/Lua同步、目录设置和临时目录显式复制，并检查多窗口尺寸、目标避让、透传及刷新恢复。观察范围为 Windows / Node22 / Edge（`observed / simulator / not_required`），不涵盖游戏内 GIA 导入。
 

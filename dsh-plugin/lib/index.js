@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { basename, relative } from 'node:path'
 import { SimulatorController as SharedSimulatorController } from 'qxqy-studio/host/controller'
 import { agentPlayArgs } from 'qxqy-studio/play/audio-policy'
@@ -10,6 +11,7 @@ import { serveUIVfxAsset } from 'qxqy-studio/host/ui-vfx-assets'
 import { localFont, serveLocalFont } from 'qxqy-studio/host/local-font'
 import { createUpdateChecker } from 'qxqy-studio/host/updates'
 import { systemLanguage, localLanguageRequest } from 'qxqy-studio/host/system-language'
+import { createQuickStartSource } from 'qxqy-studio/host/quick-start-source'
 import manifest from '../../package.json' with { type: 'json' }
 
 export const name = 'qxqy-simulator'
@@ -31,6 +33,7 @@ export class SimulatorController extends SharedSimulatorController {
   constructor(workspacePath = '') {
     super(workspacePath)
     this.touchedAt = Date.now()
+    this.quickStart = null
   }
 
   touch() {
@@ -39,13 +42,13 @@ export class SimulatorController extends SharedSimulatorController {
 
   get() {
     this.touch()
-    return super.get()
+    return { ...super.get(), ...(this.quickStart ? { quickStart: this.quickStart } : {}) }
   }
 
   patch(op) {
     this.touch()
     // 宿主可能以 JSON 字符串递参；在控制器入口统一收敛，工具层与 HTTP 层共用。
-    return super.patch(jsonParam(op))
+    return { ...super.patch(jsonParam(op)), ...(this.quickStart ? { quickStart: this.quickStart } : {}) }
   }
 
   exportData(format, assetType, options = {}) {
@@ -55,7 +58,9 @@ export class SimulatorController extends SharedSimulatorController {
 
   importData(format, data, filename) {
     this.touch()
-    return super.importData(format, data, filename)
+    const result = super.importData(format, data, filename)
+    this.quickStart = null
+    return { ...result, snapshot: this.get() }
   }
 
   listArchives() {
@@ -153,35 +158,85 @@ export async function lookupSessionWorkspace(sessionId, services = {}) {
 
 function createRegistry() {
   const sessions = new Map()
+  const source = createQuickStartSource()
+  const pending = new Map()
+  const shutdown = new AbortController()
   let disposed = false
+  const controllersOf = row => [row.original, row.lesson].filter(Boolean)
   function prune() {
     if (sessions.size < MAX_SESSIONS) return
-    const oldest = [...sessions.entries()].sort((a, b) => a[1].touchedAt - b[1].touchedAt)[0]
+    const oldest = [...sessions.entries()].filter(([id, row]) => !pending.has(id) && !controllersOf(row).some(c => c.worker || c.pending.size))
+      .sort((a, b) => a[1].touchedAt - b[1].touchedAt)[0]
     if (oldest) {
       sessions.delete(oldest[0])
-      void oldest[1].dispose()
+      void Promise.all(controllersOf(oldest[1]).map(c => c.dispose()))
     }
+  }
+  function getRow(sessionId, workspacePath = '') {
+    if (disposed) throw new Error('simulator plugin has been disposed')
+    const id = sessionIdOf(sessionId)
+    let row = sessions.get(id)
+    if (!row) {
+      prune()
+      row = { original: new SimulatorController(workspacePath), lesson: null, active: 'original' }
+      sessions.set(id, row)
+    } else if (workspacePath) {
+      for (const controller of controllersOf(row)) controller.studio.setWorkspace(workspacePath)
+    }
+    row.touchedAt = Date.now()
+    return row
   }
   return {
     get(sessionId, workspacePath = '') {
-      if (disposed) throw new Error('simulator plugin has been disposed')
-      const id = sessionIdOf(sessionId)
-      let controller = sessions.get(id)
-      if (!controller) {
-        prune()
-        controller = new SimulatorController(workspacePath)
-        sessions.set(id, controller)
-      } else if (workspacePath) {
-        // 编辑页可能先于任何工具调用创建会话（此时只知道宿主 cwd），
-        // 首个工具调用到达时补齐真正的会话工作区。
-        controller.studio.setWorkspace(workspacePath)
-      }
+      const row = getRow(sessionId, workspacePath)
+      const controller = row[row.active]
       controller.touch()
       return controller
     },
+    quickStartInfo: source.info,
+    async openQuickStart(sessionId, workspacePath, signal) {
+      const id = sessionIdOf(sessionId), row = getRow(id, workspacePath)
+      if (row.active === 'lesson' && row.lesson.quickStart) return row.lesson.get()
+      if (pending.has(id)) return pending.get(id)
+      const task = (async () => {
+        let lesson = row.lesson
+        if (lesson && !lesson.quickStart) throw new Error('教学副本已用于其他工程，请先保存并重新启动宿主')
+        if (!lesson) {
+          const data = await source.load(AbortSignal.any([shutdown.signal, ...(signal ? [signal] : [])]))
+          if (disposed) throw new Error('simulator plugin has been disposed')
+          lesson = new SimulatorController(row.original.activeWorkspacePath())
+          try {
+            lesson.importData('json', data, 'flappy-fish.save.json')
+            lesson.quickStart = { ...source.info, originalId: id,
+              savePath: `tutorials/flappy-fish-${createHash('sha256').update(id).digest('hex').slice(0, 8)}.save.json` }
+          } catch (error) { await lesson.dispose(); throw error }
+        }
+        try {
+          await row[row.active].play('stop')
+          if (disposed || signal?.aborted) throw new Error('示例打开已取消')
+        } catch (error) { if (lesson !== row.lesson) await lesson.dispose(); throw error }
+        row.lesson = lesson
+        row.active = 'lesson'
+        row.touchedAt = Date.now()
+        return lesson.get()
+      })().finally(() => pending.delete(id))
+      pending.set(id, task)
+      return task
+    },
+    async backQuickStart(sessionId, workspacePath) {
+      const id = sessionIdOf(sessionId), row = getRow(id, workspacePath)
+      await pending.get(id)
+      await row[row.active].play('stop')
+      if (disposed) throw new Error('simulator plugin has been disposed')
+      row.active = 'original'
+      row.touchedAt = Date.now()
+      return row.original.get()
+    },
     async dispose() {
       disposed = true
-      const controllers = [...sessions.values()]
+      shutdown.abort()
+      await Promise.allSettled(pending.values())
+      const controllers = [...sessions.values()].flatMap(controllersOf)
       sessions.clear()
       await Promise.all(controllers.map((controller) => controller.dispose()))
     },
@@ -523,6 +578,13 @@ function registerApi(ctx, registry, checkUpdates) {
           sessions: ctx.get?.('sessions'),
           sessionPersistence: ctx.get?.('sessionPersistence'),
         })
+        if (action === 'quick-start-info' || action === 'quick-start-open' || action === 'quick-start-back') {
+          const value = action === 'quick-start-info' ? registry.quickStartInfo
+            : action === 'quick-start-open' ? await registry.openQuickStart(body.sessionId, workspacePath, abort.signal)
+              : await registry.backQuickStart(body.sessionId, workspacePath)
+          sendJson(response, 200, { ok: true, value, error: null })
+          return
+        }
         const controller = registry.get(body.sessionId, workspacePath)
         let value
         if (action === 'updates') value = await checkUpdates()

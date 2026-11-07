@@ -68,6 +68,21 @@ export async function smokeHarnessLanguage(url, directory, hostLanguage) {
     // retain manual English even after reading the native language again.
     await browser.evaluate(`(()=>{const input=document.querySelector('.qxsim-script-page textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,${JSON.stringify(original)});input.dispatchEvent(new Event('input',{bubbles:true}));const select=document.querySelector('.qxsim-editor-nav .qxsim-language');select.value='en';select.dispatchEvent(new Event('change',{bubbles:true}));})()`)
     await browser.wait(`document.querySelector('.qxsim')?.lang === 'en'`)
+    const button = text => browser.evaluate(`[...document.querySelectorAll('.qxsim button')].find(el => el.textContent === ${JSON.stringify(text)}).click()`)
+    await button('Quick Start')
+    await browser.wait(`document.querySelector('.qxsim-quick-welcome')?.open`)
+    await button('Download example & start')
+    await browser.wait(`document.querySelector('.qxsim-brand')?.textContent.includes('Harness practice example') && !!document.querySelector('[data-quick-step]')`)
+    await button('Back to original project')
+    await browser.wait(`document.querySelector('.qxsim')?.dataset.qxsimSessionId === ${JSON.stringify(sessionId)} && !document.querySelector('.qxsim-quick-guide')`)
+    const content = encoded => {
+      const archive = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'))
+      // Preparing a switch commits the reverted script draft and advances the
+      // edit revision even though its bytes match the original source again.
+      for (const asset of [archive.assets.server, archive.assets.client]) delete asset.version
+      return archive
+    }
+    assert.deepEqual(content(await exported()), content(before), 'real Harness download and return preserve original content')
     await browser.navigate(new URL('/qxqy-simulator/play#' + sessionId, url).href)
     await browser.wait(`document.getElementById('state')?.textContent.includes('Playtest running')`)
     await browser.evaluate('window.releaseSimulatorLanguage()')

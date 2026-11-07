@@ -9,16 +9,54 @@ window.__ModuleLoader__.load({
   factory: require => {
     const exports = {}
     const React = require('react')
-    const editor = createEditor(React, {
+    async function api(sessionId, action, body) {
+      const response = await fetch('/qxqy-simulator/api/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, ...(body || {}) }), ...(action === 'play' ? { signal: AbortSignal.timeout(15_000) } : {}) })
+      const envelope = await response.json()
+      if (!response.ok || !envelope.ok) throw new Error(envelope.error || 'Request failed')
+      return envelope.value
+    }
+    const options = {
       version: manifest.version,
-      async api(sessionId, action, body) {
-        const response = await fetch('/qxqy-simulator/api/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, ...(body || {}) }), ...(action === 'play' ? { signal: AbortSignal.timeout(15_000) } : {}) })
-        const envelope = await response.json()
-        if (!response.ok || !envelope.ok) throw new Error(envelope.error || 'Request failed')
-        return envelope.value
-      },
+      api,
       playUrl: sessionId => '/qxqy-simulator/play#' + encodeURIComponent(sessionId),
-    })
+    }
+    const editor = createEditor(React, options)
+    function SimulatorSession({ sessionId }) {
+      const [state, setState] = React.useState(null)
+      const [error, setError] = React.useState(''), [attempt, setAttempt] = React.useState(0)
+      React.useEffect(() => {
+        let active = true
+        setError('')
+        Promise.all([api(sessionId, 'get'), api(sessionId, 'quick-start-info')]).then(([snapshot, info]) => {
+          if (active) setState({ sessionId, info, lesson: Boolean(snapshot.quickStart) })
+        }, reason => { if (active) setError(reason?.message || String(reason)) })
+        return () => { active = false }
+      }, [sessionId, attempt])
+      const info = state?.sessionId === sessionId ? state.info : null
+      const scoped = React.useMemo(() => createEditor(React, {
+        ...options,
+        // The conversation identity stays real. Only the local progress key
+        // distinguishes the lesson; HTTP, AI tools and play share its active copy.
+        api: (_id, action, body) => api(sessionId, action, body),
+        playUrl: () => options.playUrl(sessionId),
+        quickStart: info?.enabled ? {
+          ...info,
+          async open() {
+            await api(sessionId, 'quick-start-open')
+            setState(previous => previous?.sessionId === sessionId ? { ...previous, lesson: true } : previous)
+          },
+          async back() {
+            await api(sessionId, 'quick-start-back')
+            setState(previous => previous?.sessionId === sessionId ? { ...previous, lesson: false } : previous)
+          },
+        } : null,
+      }), [sessionId, info])
+      if (!info) return React.createElement('div', { className: 'qxsim' }, error
+        ? React.createElement('button', { onClick: () => setAttempt(n => n + 1) }, error + ' · ' + t('重试'))
+        : t('正在载入千星沙箱…'))
+      const id = sessionId + (state.lesson ? ':quick-start' : '')
+      return React.createElement(scoped.SimulatorView, { key: id, sessionId: id })
+    }
     exports.inject = ['slots']
     exports.apply = ctx => {
       editor.ensureStyle()
@@ -45,7 +83,7 @@ window.__ModuleLoader__.load({
           return () => { unsubscribe(); title = () => t('模拟器'); removeDictionary?.() }
         }, 'qxqy-simulator: tab language')
       })
-      ctx.slots.inject('conversation.view', () => ctx.slots.register({ name: 'conversation.view', id: 'qxqy-simulator', order: 20, label: () => title() }, editor.SimulatorView))
+      ctx.slots.inject('conversation.view', () => ctx.slots.register({ name: 'conversation.view', id: 'qxqy-simulator', order: 20, label: () => title() }, SimulatorSession))
     }
     return exports
   },

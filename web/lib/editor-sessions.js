@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { deflateSync, inflateSync } from 'node:zlib'
 import { createStudio } from 'qxqy-studio'
 import { SimulatorController } from 'qxqy-studio/host/controller'
-import { createQuickStartSource } from './quick-start-source.js'
+import { createQuickStartSource } from 'qxqy-studio/host/quick-start-source'
 
 const ACTIONS = new Set(['get', 'patch', 'import', 'export', 'export-list', 'export-preview', 'archives', 'load-archive', 'save', 'play', 'script-sync', 'script-sync-apply', 'image-refresh'])
 

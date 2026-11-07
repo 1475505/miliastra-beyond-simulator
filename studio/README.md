@@ -24,6 +24,7 @@ Authoring JSON、GIA、四平台布局、试玩编排、日志、回放与断言
 |---|---|
 | `ui/`、`gia/` | 存档、属性、布局、校验和编解码 |
 | `host/` | Controller、工作区边界、持久 Worker、资源缓存 |
+| `host/quick-start-source.js` | Web/DSH 共用教学示例下载、格式校验及路径清理；流程见 [快速上手](../web/README.md#快速上手) |
 | `play/session.js`、`play/compile.js` | Authoring → Runtime、输入及运行快照 |
 | `play/pixi-renderer.js`、`play/browser-session.js` | Web/DSH 共用增量渲染与浏览器循环 |
 | `host-png.js` | 无浏览器的编辑器/试玩 PNG |

@@ -116,6 +116,20 @@ export function apply(ctx, config) {
       })).json()
       assert.equal(snapshot.ok, true)
       assert.equal(snapshot.value.workspace.path, config.workspace)
+      const editorCall = async action => {
+        const response = await fetch(`${url}/qxqy-simulator/api/${action}`, { method: 'POST',
+          headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId }), signal: AbortSignal.timeout(10_000) })
+        const result = await response.json()
+        assert.equal(result.ok, true, JSON.stringify(result))
+        return result.value
+      }
+      assert.equal((await editorCall('quick-start-info')).enabled, true)
+      const lesson = await editorCall('quick-start-open')
+      assert.equal(lesson.save.name, 'Harness practice example')
+      assert.equal(lesson.quickStart.originalId, sessionId)
+      assert.deepEqual((await call('qxqy_studio_get')).value, lesson, 'real AI tools follow the lesson opened from HTTP')
+      assert.deepEqual(await editorCall('quick-start-back'), snapshot.value, 'return restores the original project')
+      assert.deepEqual((await call('qxqy_studio_get')).value, snapshot.value)
       const runtime = ctx.registry.get(simulator)
       assert.ok(runtime, 'The installed simulator must be loaded by Harness')
       const owners = [...runtime.fibers]
