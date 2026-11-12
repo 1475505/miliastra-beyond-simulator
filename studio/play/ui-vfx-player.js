@@ -37,7 +37,7 @@ export class BrowserUIVfxPlayer {
     for (const entry of this.entries.values()) {
       if (!entry.row.masks?.some(mask => imageAssetKey(mask.imageId, mask.imageSource) === key)) continue
       entry.maskKey = ''
-      try { this.position(entry); this.draw(entry) } catch (error) { this.fail(entry, error) }
+      try { this.position(entry, false); this.draw(entry) } catch (error) { this.fail(entry, error) }
     }
   }
 
@@ -147,7 +147,7 @@ export class BrowserUIVfxPlayer {
     return entry
   }
 
-  position(entry) {
+  position(entry, reorder = true) {
     const { asset, row, planes } = entry
     const cw = this.snapshot.canvasWidth, ch = this.snapshot.canvasHeight
     let m = row.matrix
@@ -162,8 +162,9 @@ export class BrowserUIVfxPlayer {
       transform: `matrix(${m.a},${-m.b},${-m.c},${m.d},0,0)`,
       zIndex: row.kind === 'fullscreen' || row.layer === 'BelowAllControls' ? '-1' : '1',
     })
-    // Reorder existing planes without remounting/rewinding their decoder.
-    this.host.append(...planes)
+    // Only snapshot painter order may reorder planes. Async mask completion
+    // repaints in place, even when Map insertion order differs from the scene.
+    if (reorder) this.host.append(...planes)
     const maskKey = JSON.stringify([row.masks, m])
     if (maskKey === entry.maskKey) return
     entry.maskKey = maskKey

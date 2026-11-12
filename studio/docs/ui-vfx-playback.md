@@ -31,9 +31,9 @@ C: plus-lighter
 out.rgb = C + background.rgb * T
 ```
 
-编辑器和试玩都使用 **DOM 双平面**，紧邻现有透明 Pixi Canvas／普通 DOM 控件。舞台 `isolation:isolate`、平面宿主 `display:contents`；不把 T/C 包进新的 transform/opacity/mask 隔离组，也不要求把 CSS 背景迁进 Pixi。每对平面始终按 `T1,C1,T2,C2` 排列，同一全局层内遵循场景绘制顺序，重新排序不重启解码器。
+编辑器和试玩都使用 **DOM 双平面**，紧邻现有透明 Pixi Canvas／普通 DOM 控件。舞台 `isolation:isolate`、平面宿主 `display:contents`；不把 T/C 包进新的 transform/opacity/mask 隔离组，也不要求把 CSS 背景迁进 Pixi。每对平面始终按 `T1,C1,T2,C2` 排列，同一全局层内遵循场景绘制顺序，重新排序不重启解码器。只有场景同步调整平面顺序；蒙版素材异步加载／刷新在原位重绘，不把受影响的后层动效移到最前。
 
-普通动效采用素材原生宽高乘世界变换，控件矩形不直接拉伸视频；全屏采用居中等比 cover 并在舞台边界裁切。祖先矩形/羽化遮罩和网格视口以世界坐标投影到两个平面的覆盖率；嵌套覆盖率相乘，得到 `m*C + B*(1-m+m*T)`。这些布局/羽化细节是模拟器预览策略。
+普通动效采用素材原生宽高乘世界变换，控件矩形不直接拉伸视频；全屏采用居中等比 cover 并在舞台边界裁切。祖先[图片遮罩与羽化](control-support.md#图片遮罩与羽化)和网格视口以世界坐标投影到两个平面的覆盖率；嵌套覆盖率相乘，得到 `m*C + B*(1-m+m*T)`。这些布局/羽化细节是模拟器预览策略。
 
 并发预算：最多12个实例、24 Mi packed像素；每个输出平面最长边1536像素、约1 Mi像素。超限实例单独跳过并提示；前面实例停止后可重新获得预算。帧更新目标30fps，复杂遮罩或大量视频的实际帧率取决于浏览器和设备。
 
@@ -75,7 +75,7 @@ Host PNG（包括 MCP 截图和 `/` 的静态编辑预览）没有视频解码�
 
 - API：2026-10-24 本地官网对齐稿的[客户端控件API](https://act.mihoyo.com/ys/ugc/tutorial/detail/mhtakr07vej4)、[界面动效](https://act.mihoyo.com/ys/ugc/tutorial/detail/mh2iyk9fa4gy)、[全屏动效](https://act.mihoyo.com/ys/ugc/tutorial/detail/mhbn4i09l5ns)。字段、签名和全屏下层规则为 `documented / official_document`。
 - 回归：`studio/test/ui-vfx.test.mjs`（目录、Lua生命周期、JSON、非消费式快照、PNG边界）；`studio/test/audio-player.test.mjs`（声音代次、静音/解锁、暂停、失败/重试、冷加载取消）；`web/test/ui-vfx.test.mjs`（HTTP缓存及真实浏览器）。
-- 浏览器用例使用自包含的合成 VP9 Profile1 / yuv444p 视频，独立已知的 C/T/B 颜色断言，不依赖 OSS 或仓库外素材。覆盖彩色T、羽化、重叠实例顺序、Above/Below、全屏cover、手动定帧、循环、预算、损坏/缺失媒体、编辑器搜索/重试、页面切换与解码器清理。
+- 浏览器用例使用自包含的合成 VP9 Profile1 / yuv444p 视频，独立已知的 C/T/B 颜色断言，不依赖 OSS 或仓库外素材。覆盖彩色T、羽化、重叠实例顺序及后层蒙版异步完成、Above/Below、全屏cover、手动定帧、循环、预算、损坏/缺失媒体、编辑器搜索/重试、页面切换与解码器清理。
 - 模拟器回归结果标为 `observed / simulator / not_required`；千星游戏时序、精确尺寸/色彩及未覆盖的浏览器/手机/操作系统仍保持 `device_status=pending`，不能把 Chromium 测试作为真机通过。
 
 浏览器观察范围为 Windows / Edge，合成媒体及少量实际 OSS 样本可解码，manual 视频遵循逻辑定帧；未做全素材可用性或听感验收。

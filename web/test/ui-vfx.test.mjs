@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { createWebServer } from '../server.js'
 import { UIVfxAssetStore } from '../../studio/host/ui-vfx-assets.js'
+import { ImageAssetStore } from '../../studio/host/image-assets.js'
 import { uiVfxMedia, uiVfxUrl } from '../../studio/assets/ui-vfx-catalog.js'
 import { ctVideo, ctFullscreenVideo } from '../../studio/test/fixtures/ct-video.js'
 import { createStudio } from '../../studio/index.js'
@@ -19,7 +20,7 @@ const fixtureMedia = path => path === 'video/10001004.webm' ? { bytes: bad.lengt
   : path === 'video/10002001.webm' ? { bytes: ctFullscreenVideo.length, sha256: hash(ctFullscreenVideo) }
   : path.startsWith('video/') && uiVfxMedia(path) ? { bytes: ctVideo.length, sha256: hash(ctVideo) } : uiVfxMedia(path)
 
-async function setup(t) {
+async function setup(t, { imageReady } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'qxqy-vfx-'))
   const requests = []
   const fetcher = async url => {
@@ -46,7 +47,16 @@ function OnStart()
  script.object:AddKeyEventListener(Enum.KeyEventType.KeyboardCraftspersonKey5Down, function() a.animationId = 10001001 end)
 end` })
   await writeFile(join(directory, 'vfx.save.json'), JSON.stringify(studio.archiveData()))
-  const app = await createWebServer({ workspace: directory, initialPath: 'vfx.save.json', port: 0, uiVfxAssets: store })
+  const imageAssets = imageReady && new ImageAssetStore({ cacheDir: join(directory, 'images'), fetch: async url => {
+    if (String(url).endsWith('.json')) return Response.json({ m_Rect: { width: 8, height: 8 }, m_Border: {},
+      m_RD: { textureRectOffset: { X: 0, Y: 0 }, textureRect: { width: 8, height: 8 }, settingsRaw: { packingRotation: 'None' } } })
+    await imageReady
+    const image = createCanvas(8, 8), ctx = image.getContext('2d')
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, 8, 8)
+    return new Response(image.toBuffer('image/png'))
+  } })
+  const app = await createWebServer({ workspace: directory, initialPath: 'vfx.save.json', port: 0, uiVfxAssets: store,
+    ...(imageAssets ? { imageAssets } : {}) })
   const env = { directory, store, requests, app, id }
   t.after(async () => { await env.browser?.close(); await app.close(); await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) })
   return env
@@ -94,7 +104,10 @@ test('VFX HTTP failures, corruption and timeouts stay local; cache and byte rang
 test('browser plays packed effects, preserves manual frames and composition, and survives missing/invalid video', {
   skip: !process.env.QXQY_BROWSER, timeout: 90_000,
 }, async t => {
-  const env = await setup(t), { app, directory } = env
+  let releaseImage
+  const imageReady = new Promise(resolve => { releaseImage = resolve })
+  t.after(() => releaseImage())
+  const env = await setup(t, { imageReady }), { app, directory } = env
   const browser = env.browser = await startTestBrowser(directory)
   await browser.send('Page.addScriptToEvaluateOnNewDocument', { source: `
     window.vfxErrors=[]; window.addEventListener('error', e=>vfxErrors.push(e.message));
@@ -174,6 +187,18 @@ test('browser plays packed effects, preserves manual frames and composition, and
   for (const [i, expected] of [59, 58, 131].entries()) assert.ok(Math.abs(reversed[i] - expected) <= 6, `reverse channel ${i}: ${reversed}`)
   assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('#test-stage [data-ui-vfx]')].map(c=>c.dataset.uiVfx)`),
     ['2:multiply', '2:plus-lighter', '1:multiply', '1:plus-lighter'])
+  // Only the back effect waits for a remote mask. Its asynchronous repaint must
+  // preserve the current order, which differs from Map insertion order.
+  await browser.evaluate(`two.effects[0].masks=[{id:9,primitive:'sprite',imageId:101001,imageType:'Basic',
+    matrix:{a:1,b:0,c:0,d:1,tx:160,ty:120},width:300,height:300,featherX:0,featherY:0}];
+    vfxRenderer.syncEffects(two);window.backVideo=vfxRenderer.effects.entries.get('2').video`)
+  releaseImage()
+  await browser.wait(`!!vfxRenderer.effects.maskAssets.get('StaticReference:101001')?.asset`)
+  assert.deepEqual(await browser.evaluate(`[...document.querySelectorAll('#test-stage [data-ui-vfx]')].map(c=>c.dataset.uiVfx)`),
+    ['2:multiply', '2:plus-lighter', '1:multiply', '1:plus-lighter'], 'mask completion must not move the back effect to the front')
+  assert.equal(await browser.evaluate(`vfxRenderer.effects.entries.get('2').video === backVideo`), true)
+  const loadedMask = await pixel()
+  for (const [i, expected] of reversed.entries()) assert.ok(Math.abs(loadedMask[i] - expected) <= 2, 'loaded mask preserves the composition')
   // A normal opaque control covers below effects; above effects blend with it.
   await browser.evaluate(`vfxRenderer.syncEffects(frame(0.1,{layer:'BelowAllControls'}));
     const cover=document.createElement('div');cover.id='vfx-cover';Object.assign(cover.style,{position:'absolute',inset:'0',background:'rgb(20,40,60)'});document.getElementById('test-stage').append(cover)`)
