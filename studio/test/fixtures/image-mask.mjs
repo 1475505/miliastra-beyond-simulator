@@ -40,6 +40,23 @@ export const maskAlphas = {
   zeroWidth: [0, 0, 0, 0, 0], zeroHeight: [0, 0, 0, 0, 0], grid: [0, 0, 255, 255, 0],
 }
 
+// Independent probes: outside the rectangle, rectangle corner, center, ring
+// band, triangle base corner, star's top point and the ring's inner boundary.
+export const contourSamples = [[60, 80], [76, 36], [120, 80], [165, 80], [80, 120], [120, 36], [158, 80]]
+export const contourAlphas = {
+  rect: [0, 255, 255, 255, 255, 255, 255],
+  circle: [0, 0, 255, 255, 0, 255, 255],
+  triangle: [0, 0, 255, 0, 255, 255, 0],
+  fourstar: [0, 0, 255, 255, 0, 255, 255],
+  fivestar: [0, 0, 255, 0, 0, 255, 0],
+  ring: [0, 0, 0, 255, 0, 255, 0],
+}
+export function contourScene(primitive, extra = {}) {
+  const imageId = 100001 + ['rect', 'circle', 'triangle', 'fourstar', 'fivestar', 'ring'].indexOf(primitive)
+  return scene([root(), mask('mask', 'root', { primitive, imageId, sourceWidth: 100, sourceHeight: 100, enableSoftEdge: false, ...extra }),
+    image('red', 'mask', { sourceHeight: 140 })])
+}
+
 export function editorMaskProject({ nested = false } = {}) {
   const project = createDefaultProject()
   const image = (id, width, height, extra = {}) => createNode('image', {

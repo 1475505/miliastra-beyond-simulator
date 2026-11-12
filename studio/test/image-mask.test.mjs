@@ -7,7 +7,10 @@ import { createStudio } from '../index.js'
 import { paintList, playSnapshot } from '../play/session.js'
 import { renderEditorPng, renderPaintPng, renderScenePng, flattenScenePaint } from '../host-png.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
-import { editorMaskProject, maskScenes, maskSamples, maskAlphas } from './fixtures/image-mask.mjs'
+import { editorMaskProject, maskScenes, maskSamples, maskAlphas, contourScene, contourSamples, contourAlphas } from './fixtures/image-mask.mjs'
+import { imageMaskSpec, createMaskSampler } from '../play/image-mask.js'
+import { featherMaskAlpha } from '../play/image-mask-raster.js'
+import { imageAssetKey } from '../assets/catalog.js'
 
 function control(name, kind, x, y, w, h, extra = {}) {
   return {
@@ -130,6 +133,11 @@ test('Pixi image and viewport masks update independently and release their resou
   assert.equal(root.mask, viewport, 'width change must not overwrite viewport clip')
   assert.equal(root.__imageMask.texture, texture, 'width animation reuses the texture')
   assert.equal(root.__imageContent.mask, root.__imageMask)
+  await update({ primitive: 'ring', imageId: 100006, reverseMaskArea: true })
+  assert.equal(root.__imageMask.texture, texture, 'shape and inverse changes repaint the owned texture')
+  assert.equal(root.__imageContent._maskOptions.inverse, true)
+  const pixels = texture.source.resource.getContext('2d')
+  assert.equal(pixels.getImageData(100, 60, 1, 1).data[3], 0, 'ring hole remains positive-coverage zero before GPU inversion')
   await update({ sourceWidth: 0 })
   assert.equal(root.__imageContent.visible, false)
   assert.equal(root.mask, viewport)
@@ -201,4 +209,91 @@ test('editor boxes preserve mask ancestry; editor PNG composites groups and keep
   pixel = await draw(nestedSnapshot)
   const fadedTwice = [255, 0, 0].map((value, i) => Math.round(value * 70 / 255 + bg[1][i] * 185 / 255))
   pixel(760, 450).slice(0, 3).forEach((value, i) => assert.ok(Math.abs(value - fadedTwice[i]) <= 1))
+})
+
+test('six contour masks and their complements preserve outside children, holes and rotated geometry', async () => {
+  for (const [primitive, expected] of Object.entries(contourAlphas)) for (const reverseMaskArea of [false, true]) {
+    const scene = contourScene(primitive, { reverseMaskArea })
+    const png = renderScenePng(scene, 240, 160, { background: 'transparent' })
+    assert.deepEqual(png.data, renderPaintPng(flattenScenePaint(scene), 240, 160, { background: 'transparent' }).data)
+    for (const [i, [x, y]] of contourSamples.entries()) {
+      const want = reverseMaskArea ? 255 - expected[i] : expected[i]
+      assert.equal(await alphaPixel(png, x, y), want, `${primitive} reverse=${reverseMaskArea} at ${x},${y}`)
+    }
+  }
+  const scene = contourScene('triangle')
+  scene.nodes.find(n => n.id === 'mask').matrix = { a: 0, b: 1, c: -1, d: 0, tx: 0, ty: 0 }
+  const png = renderScenePng(scene, 240, 160, { background: 'transparent' })
+  assert.equal(await alphaPixel(png, 160, 120), 255, 'rotated base')
+  assert.equal(await alphaPixel(png, 80, 120), 0, 'rotated tip excludes corner')
+  const empty = renderScenePng(contourScene('rect', { sourceWidth: 0, reverseMaskArea: true }), 240, 160, { background: 'transparent' })
+  assert.equal(await alphaPixel(empty, 60, 80), 255, 'complement of empty coverage keeps descendants')
+})
+
+test('percentage ranges, contour feather and inversion follow independently calculated alpha', () => {
+  const alpha = new Uint8ClampedArray([0, 0, 0, 0, 0, 0, 255, 255, 255, 0, 0, 255, 0, 255, 0, 0, 255, 128, 255, 0, 0, 0, 0, 0, 0])
+  assert.deepEqual(featherMaskAlpha(alpha, 5, 5, 0, 0), alpha)
+  const x = featherMaskAlpha(alpha, 5, 5, 2, 0), y = featherMaskAlpha(alpha, 5, 5, 0, 2)
+  assert.equal(x[11], 64); assert.equal(x[7], 191); assert.equal(x[17], 128)
+  assert.equal(y[11], 191); assert.equal(y[7], 64); assert.equal(y[12], 0)
+  const matrix = { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }
+  const item = { kind: 'image', imageId: 100001, enableMask: true, width: 200, height: 100,
+    enableSoftEdge: true, softEdgeMode: 'Percentage', horizontalSoftRange: 80, verticalSoftRange: 60,
+    softEdgeWidthX: 999, softEdgeWidthY: 888 }
+  const mask = imageMaskSpec(item, matrix), sample = createMaskSampler(mask, createCanvas)
+  assert.ok(Math.abs(mask.featherX - 20) < 1e-10); assert.equal(mask.featherY, 20)
+  assert.ok(Math.abs(sample(90, 0) - .5) < 1e-10)
+  assert.equal(sample(0, 40), .5)
+  const inverted = createMaskSampler({ ...mask, reverseMaskArea: true }, createCanvas)
+  assert.equal(inverted(110, 0), 1)
+  assert.ok(Math.abs(inverted(95, 0) - .75) < 1e-10)
+  const ring = createMaskSampler({ ...mask, primitive: 'ring', width: 100, height: 100, featherX: 10, featherY: 0 }, createCanvas)
+  assert.equal(ring(0, 0), 0)
+  assert.ok(ring(45, 0) > .4 && ring(45, 0) < .6, 'both outer edge and hole feather inward')
+  assert.equal(item.softEdgeWidthX, 999)
+})
+
+test('texture alpha and slice borders determine masks independently of image tint', async () => {
+  const image = createCanvas(10, 10), ctx = image.getContext('2d')
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 10, 10); ctx.clearRect(2, 2, 6, 6)
+  ctx.clearRect(0, 0, 2, 10); ctx.fillStyle = '#ffffff80'; ctx.fillRect(0, 0, 2, 10)
+  const key = imageAssetKey(101001)
+  const options = { background: 'transparent', images: new Map([[key, image]]),
+    imageMetadata: new Map([[key, { width: 10, height: 10, border: { left: 2, right: 2, top: 2, bottom: 2 } }]]) }
+  const scene = contourScene('sprite', { imageId: 101001, imageType: 'Basic' })
+  let png = renderScenePng(scene, 240, 160, options)
+  assert.equal(await alphaPixel(png, 80, 80), 128, 'semi-transparent texture edge survives transparent tint')
+  assert.equal(await alphaPixel(png, 120, 80), 0, 'texture hole')
+  const mask = scene.nodes.find(n => n.id === 'mask')
+  mask.imageType = 'Stretch'
+  png = renderScenePng(scene, 240, 160, options)
+  assert.equal(await alphaPixel(png, 85, 80), 0, 'two-unit border is not stretched to twenty')
+  assert.equal(await alphaPixel(png, 169, 80), 255, 'right border remains two units wide')
+  mask.reverseMaskArea = true
+  png = renderScenePng(scene, 240, 160, options)
+  assert.equal(await alphaPixel(png, 120, 80), 255)
+  assert.equal(await alphaPixel(png, 60, 80), 255, 'inverse includes outside rectangle')
+  assert.equal(await alphaPixel(png, 169, 80), 0)
+})
+
+test('Lua image, reverse and percentage changes reach both scene and flat rendering', async t => {
+  const f = fixture(t)
+  const script = f.runtime.mountScript({ path: 'mask-controls', control: f.root, source: `
+function UpdateMask()
+  local mask = script.object:GetChild('Mask')
+  mask:SetImage(Enum.ImageSource.StaticReference, 100002)
+  mask.reverseMaskArea = true
+  mask.enableSoftEdge = true
+  mask.softEdgeMode = Enum.ImageMaskSoftEdgeMode.Percentage
+  mask.horizontalSoftRange = 80
+  mask.verticalSoftRange = 60
+end` })
+  const before = f.scene()
+  f.runtime.invokeOn(script.env, 'UpdateMask', [])
+  const delta = playSnapshot(f.session, { view: true, sceneRev: before.revision }).scene
+  const mask = delta.changed.find(n => n.name === 'Mask')
+  assert.equal(mask.primitive, 'circle'); assert.equal(mask.reverseMaskArea, true)
+  assert.equal(mask.horizontalSoftRange, 80); assert.equal(mask.verticalSoftRange, 60)
+  assert.deepEqual(renderScenePng(f.scene(), 240, 160).data, renderPaintPng(paintList(f.session), 240, 160).data)
+  assert.equal(f.runtime.logs.some(n => n.level === 'lua-error'), false)
 })

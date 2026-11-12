@@ -48,9 +48,9 @@ const pixels = new WeakMap()
 
 // Pixel-center bilinear sampling, matching the GPU UV grid. A zero source span
 // repeats its seam sample instead of dropping the target strip/center.
-export function rasterizeSlices(image, meta, width, height, createCanvas) {
+export function rasterizeSlices(image, meta, width, height, createCanvas, maxSize = 4096, resolution = 1) {
   const logicalW = Math.max(0, width), logicalH = Math.max(0, height)
-  const scale = Math.min(1, 4096 / Math.max(1, logicalW), 4096 / Math.max(1, logicalH))
+  const scale = Math.min(resolution, maxSize / Math.max(1, logicalW), maxSize / Math.max(1, logicalH))
   const w = Math.max(1, Math.round(logicalW * scale)), h = Math.max(1, Math.round(logicalH * scale))
   const canvas = createCanvas(w, h), ctx = canvas.getContext('2d')
   if (!logicalW || !logicalH) return canvas

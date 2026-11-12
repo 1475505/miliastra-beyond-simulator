@@ -1,17 +1,19 @@
 /**
- * Rectangle image masks for play rendering.
+ * Shared image masks for editor, PNG and play rendering.
  *
  * Device evidence (MASK v1, PC, 2026-10-11, scale 1, asset 100001): enableMask
  * clips descendants, not siblings; imageColor alpha does not disable the mask
  * or hide children; pixel feather fades inward from both edges of that axis and
  * does not reveal content outside the rectangle. Width 0 stays a hard edge.
  *
- * Simulator policy, not additional device proof: the falloff is linear; percentage
- * mode uses width as a percent of that side and ignores the range fields; the
- * mask shape is the control rectangle, not the texture contour; reverseMaskArea
- * is not applied. Nested masks multiply coverage.
+ * Preview policy aligned with Miliastra-image-editor-webui 103025f: primitive /
+ * texture alpha contours, inward scanline feather, percentage opaque spans and
+ * complement AFTER feathering. Nested masks multiply coverage. Not device proof.
  */
 import { applyMatrix, invertMatrix } from '../ui/layout.js'
+import { imagePrimitive } from '../constants.js'
+import { imageSourceName } from '../assets/catalog.js'
+import { rasterizeMask, sampleMaskRaster } from './image-mask-raster.js'
 
 const nonnegative = value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0
 
@@ -20,16 +22,22 @@ export function imageMaskSpec(item, matrix) {
   const width = nonnegative(item.sourceWidth ?? item.width)
   const height = nonnegative(item.sourceHeight ?? item.height)
   const soft = item.enableSoftEdge === true
-  const percent = item.softEdgeMode !== 'Pixel'
+  const percent = (item.softEdgeMode?.Name ?? item.softEdgeMode) !== 'Pixel'
   const rawX = soft ? nonnegative(item.softEdgeWidthX) : 0
   const rawY = soft ? nonnegative(item.softEdgeWidthY) : 0
+  const edge = (size, range) => size * (1 - Math.max(0, Math.min(100, Number(range ?? 85))) / 100) / 2
   return {
     id: item.id,
     matrix,
     width,
     height,
-    featherX: percent ? width * rawX / 100 : rawX,
-    featherY: percent ? height * rawY / 100 : rawY,
+    primitive: item.primitive ?? (item.imageId == null ? 'rect' : imagePrimitive(item.imageId, item.imageSource)),
+    imageId: item.imageId,
+    imageSource: imageSourceName(item.imageSource),
+    imageType: item.imageType?.Name ?? item.imageType ?? null,
+    reverseMaskArea: item.reverseMaskArea === true,
+    featherX: soft && percent ? edge(width, item.horizontalSoftRange) : rawX,
+    featherY: soft && percent ? edge(height, item.verticalSoftRange) : rawY,
   }
 }
 
@@ -38,18 +46,25 @@ export function centerMaskMatrix(matrix, centerX, centerY) {
   return { a: matrix.a, b: matrix.b, c: matrix.c, d: matrix.d, tx: center.x, ty: center.y }
 }
 
-export function imageMaskCoverage(localX, localY, mask) {
+export function imageMaskCoverage(localX, localY, mask, raster) {
   const fade = (distance, feather) => {
     if (distance <= 0) return 0
     if (!(feather > 0) || distance >= feather) return 1
     return distance / feather
   }
-  return Math.min(
+  const inside = mask.width > 0 && mask.height > 0 && Math.abs(localX) < mask.width / 2 && Math.abs(localY) < mask.height / 2
+  const coverage = !inside ? 0 : mask.primitive && mask.primitive !== 'rect' ? sampleMaskRaster(localX, localY, mask, raster) : Math.min(
     fade(localX + mask.width / 2, mask.featherX),
     fade(mask.width / 2 - localX, mask.featherX),
     fade(localY + mask.height / 2, mask.featherY),
     fade(mask.height / 2 - localY, mask.featherY),
   )
+  return mask.reverseMaskArea ? 1 - coverage : coverage
+}
+
+export function createMaskSampler(mask, createCanvas, asset) {
+  const raster = mask.primitive && mask.primitive !== 'rect' ? rasterizeMask(mask, createCanvas, asset) : null
+  return (x, y) => imageMaskCoverage(x, y, mask, raster)
 }
 
 // A flattened paint list retains mask identity. Consecutive items under the same
@@ -61,7 +76,7 @@ export function groupMaskedPaint(items) {
   for (const item of items || []) {
     if (!item || item.id == null) continue
     const masks = item.masks || []
-    const nextKeys = masks.map(mask => JSON.stringify([mask.id, mask.matrix, mask.width, mask.height, mask.featherX, mask.featherY]))
+    const nextKeys = masks.map(mask => JSON.stringify(mask))
     let common = 0
     while (common < keys.length && common < nextKeys.length && keys[common] === nextKeys[common]) common++
     stack.length = common + 1
@@ -98,7 +113,8 @@ export function maskedPaintScene(items) {
       const z = entries.length - 1 - index
       if (entry.mask) {
         const mask = entry.mask
-        nodes.push({ id, parent, z, group: false, kind: 'image', primitive: 'rect', imageColor: 0,
+        nodes.push({ id, parent, z, group: false, kind: 'image', primitive: mask.primitive || 'rect', imageColor: 0,
+          imageId: mask.imageId, imageSource: mask.imageSource, imageType: mask.imageType, reverseMaskArea: mask.reverseMaskArea,
           sourceWidth: mask.width, sourceHeight: mask.height, matrix: relativeMatrix(parentWorld, mask.matrix),
           enableMask: true, enableSoftEdge: true, softEdgeMode: 'Pixel',
           softEdgeWidthX: mask.featherX, softEdgeWidthY: mask.featherY })
@@ -121,17 +137,24 @@ export function maskedPaintScene(items) {
   return { format: 'tree-v1', reset: true, nodes }
 }
 
-export function paintMaskCanvas(canvas, mask) {
+// Paint positive coverage. Each backend complements the entire affected group,
+// including content OUTSIDE the mask rectangle, rather than just these texels.
+export function paintMaskCanvas(canvas, mask, asset, createCanvas = (w, h) => {
+  const result = canvas.ownerDocument.createElement('canvas')
+  result.width = w; result.height = h
+  return result
+}) {
   const width = Math.max(1, canvas.width)
   const height = Math.max(1, canvas.height)
   const ctx = canvas.getContext('2d')
   const image = ctx.createImageData(width, height)
   const data = image.data
+  const coverage = createMaskSampler({ ...mask, reverseMaskArea: false }, createCanvas, asset)
   for (let y = 0; y < height; y += 1) {
     const localY = mask.height / 2 - (y + 0.5) * mask.height / height
     for (let x = 0; x < width; x += 1) {
       const localX = -mask.width / 2 + (x + 0.5) * mask.width / width
-      const alpha = Math.round(255 * imageMaskCoverage(localX, localY, mask))
+      const alpha = Math.round(255 * coverage(localX, localY))
       const i = (y * width + x) * 4
       data[i] = 255
       data[i + 1] = 255

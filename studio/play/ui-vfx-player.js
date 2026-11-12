@@ -1,6 +1,8 @@
 import { uiVfxAsset, uiVfxTime, uiVfxUrl } from '../assets/ui-vfx-catalog.js'
 import { applyMatrix, invertMatrix } from '../ui/layout.js'
-import { imageMaskCoverage } from './image-mask.js'
+import { createMaskSampler } from './image-mask.js'
+import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.js'
+import { imageAssetKey } from '../assets/catalog.js'
 import { t } from '../i18n.js'
 
 // Each pair participates directly in the stage's isolated CSS blending context.
@@ -24,6 +26,35 @@ export class BrowserUIVfxPlayer {
       color: '#ffc18b', background: '#1a233ddd', padding: '2px 5px', font: '11px sans-serif', pointerEvents: 'none', display: 'none' })
     host.append(this.badge)
     this.errors = new Map()
+    this.maskAssets = new Map()
+    this.unsubscribeImages = subscribeImageRefresh(key => {
+      this.maskAssets.delete(key)
+      this.refreshMasks(key)
+    })
+  }
+
+  refreshMasks(key) {
+    for (const entry of this.entries.values()) {
+      if (!entry.row.masks?.some(mask => imageAssetKey(mask.imageId, mask.imageSource) === key)) continue
+      entry.maskKey = ''
+      try { this.position(entry); this.draw(entry) } catch (error) { this.fail(entry, error) }
+    }
+  }
+
+  maskAsset(spec) {
+    if (spec.primitive !== 'sprite') return null
+    const key = imageAssetKey(spec.imageId, spec.imageSource)
+    let entry = this.maskAssets.get(key)
+    if (!entry) {
+      entry = {}
+      this.maskAssets.set(key, entry)
+      loadBrowserImageAsset(spec.imageId, spec.imageSource).then(asset => {
+        if (this.disposed || this.maskAssets.get(key) !== entry) return
+        entry.asset = asset
+        this.refreshMasks(key)
+      }, () => { /* Missing image coverage stays empty until explicit refresh. */ })
+    }
+    return entry.asset
   }
 
   report(id, message) {
@@ -73,6 +104,9 @@ export class BrowserUIVfxPlayer {
       try { this.position(entry); this.advance(entry) }
       catch (error) { this.fail(entry, error) }
     }
+    const used = new Set([...this.entries.values()].flatMap(entry => entry.row.masks || [])
+      .filter(mask => mask.primitive === 'sprite').map(mask => imageAssetKey(mask.imageId, mask.imageSource)))
+    for (const key of this.maskAssets.keys()) if (!used.has(key)) this.maskAssets.delete(key)
     this.schedule()
   }
 
@@ -138,14 +172,20 @@ export class BrowserUIVfxPlayer {
     const mask = this.host.ownerDocument.createElement('canvas')
     mask.width = planes[0].width; mask.height = planes[0].height
     const ctx = mask.getContext('2d'), image = ctx.createImageData(mask.width, mask.height)
-    const masks = row.masks.map(spec => ({ spec, inverse: invertMatrix(spec.matrix) }))
+    const createCanvas = (w, h) => {
+      const canvas = this.host.ownerDocument.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      return canvas
+    }
+    const masks = row.masks.map(spec => ({ spec, inverse: invertMatrix(spec.matrix),
+      sample: createMaskSampler(spec, createCanvas, this.maskAsset(spec)) }))
     for (let y = 0; y < mask.height; y++) for (let x = 0; x < mask.width; x++) {
       const world = applyMatrix(m, (x + 0.5) * asset.width / mask.width - asset.width / 2, asset.height / 2 - (y + 0.5) * asset.height / mask.height)
       let coverage = 1
-      for (const { spec, inverse } of masks) {
-        if (!inverse) { coverage = 0; break }
+      for (const { spec, inverse, sample } of masks) {
+        if (!inverse) { coverage *= spec.reverseMaskArea ? 1 : 0; continue }
         const local = applyMatrix(inverse, world.x, world.y)
-        coverage *= imageMaskCoverage(local.x, local.y, spec)
+        coverage *= sample(local.x, local.y)
       }
       image.data[(y * mask.width + x) * 4 + 3] = Math.round(255 * coverage)
     }
@@ -229,6 +269,7 @@ export class BrowserUIVfxPlayer {
     for (const id of this.entries.keys()) this.remove(id)
     this.errors.clear(); this.report('', '')
     this.snapshot = null
+    this.maskAssets.clear()
   }
-  destroy() { this.disposed = true; this.reset(); this.badge.remove() }
+  destroy() { this.disposed = true; this.unsubscribeImages(); this.reset(); this.badge.remove() }
 }

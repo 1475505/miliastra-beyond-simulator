@@ -1,10 +1,12 @@
 import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Mesh, MeshGeometry, Sprite, Text, TextStyle, Texture } from 'pixi.js'
 import { imageFillRect } from './image-fill.js'
 import { imageMaskSpec, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
+import { maskRasterSize } from './image-mask-raster.js'
 import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './scroll-geometry.js'
 import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.js'
 import { sliceRegions, resolveImageType } from '../assets/image-stretch.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
+import { PRIMITIVE_POINTS } from '../assets/primitives.js'
 export { loadBrowserFont } from './browser-font.js'
 export { t, getLocale, getLanguagePreference, setLanguagePreference, subscribeLocale, localizePage, loadSystemLanguage, getSystemLanguage } from '../i18n.js'
 import { DEFAULT_FONT } from '../fonts.js'
@@ -19,9 +21,6 @@ import 'pixi.js/unsafe-eval'
 // one-way projection of its compact paint list / hierarchical scene into a
 // WebGL tree. Parent rotation/translation stays on the parent Container so a
 // whale-girl of thousands of primitives can tilt without rewriting children.
-const TRI_POINTS = [0, -0.5, 0.5, 0.5, -0.5, 0.5]
-const STAR4_POINTS = [0, -0.5, 0.12, -0.12, 0.5, 0, 0.12, 0.12, 0, 0.5, -0.12, 0.12, -0.5, 0, -0.12, -0.12]
-const STAR5_POINTS = [0, -0.5, 0.11, -0.15, 0.48, -0.15, 0.18, 0.07, 0.29, 0.41, 0, 0.2, -0.29, 0.41, -0.18, 0.07, -0.48, -0.15, -0.11, -0.15]
 const PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button', 'grid', 'keyhint'])
 
 function argb(value, fallback = 0xffffffff) {
@@ -85,11 +84,7 @@ function textChromeKey(item, width, height) {
 }
 
 function pointsFor(item, width, height) {
-  const template = item.primitive === 'triangle'
-    ? TRI_POINTS
-    : item.primitive === 'fourstar'
-      ? STAR4_POINTS
-      : STAR5_POINTS
+  const template = PRIMITIVE_POINTS[item.primitive]
   const points = []
   for (let i = 0; i < template.length; i += 2) {
     points.push(template[i] * width, template[i + 1] * height)
@@ -314,12 +309,14 @@ export class PixiPlayRenderer {
       // Renderer-owned GPU source; never destroy another renderer's texture
       // through Pixi's global Texture.from(resource) cache.
       entry.texture = new Texture({ source: new ImageSource({ resource: image }) })
+      entry.image = image
       entry.meta = meta
       entry.error = error
       for (const root of this.nodes.values()) {
         const item = root.__sceneItem
         if (item?.kind !== 'image' || imageAssetKey(item.imageId, item.imageSource) !== key) continue
         root.__visualKey = ''
+        root.__maskKey = null
         this.updateNode(root, item, { nested: !root.__flat && item.parent != null })
       }
       this.app?.render()
@@ -334,6 +331,7 @@ export class PixiPlayRenderer {
       const item = root.__sceneItem
       if (item?.kind !== 'image' || imageAssetKey(item.imageId, item.imageSource) !== key) continue
       root.__visualKey = ''
+      root.__maskKey = null
       this.updateNode(root, item, { nested: !root.__flat && item.parent != null })
     }
     entry?.texture?.destroy(true)
@@ -446,7 +444,7 @@ export class PixiPlayRenderer {
       } else if (item.primitive === 'circle') {
         graphic.ellipse(0, 0, width / 2, height / 2).fill(color)
       } else if (item.primitive === 'ring') {
-        graphic.ellipse(0, 0, Math.max(1, width / 2 - 3.5), Math.max(1, height / 2 - 3.5)).stroke({ ...color, width: 7 })
+        graphic.ellipse(0, 0, width / 2, height / 2).fill(color).ellipse(0, 0, width * .4, height * .4).cut()
       } else if (item.primitive === 'triangle' || item.primitive === 'fourstar' || item.primitive === 'fivestar') {
         graphic.poly(pointsFor(item, width, height)).fill(color)
       } else {
@@ -527,7 +525,7 @@ export class PixiPlayRenderer {
 
   updateImageMask(root, item, width, height) {
     const spec = item.kind === 'image' ? imageMaskSpec({ ...item, sourceWidth: width, sourceHeight: height }, { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }) : null
-    const key = spec ? [spec.width, spec.height, spec.featherX, spec.featherY].join(':') : ''
+    const key = spec ? JSON.stringify(spec) : ''
     if (root.__maskKey === key) return
     root.__maskKey = key
     if (!root.__imageContent && spec) {
@@ -540,29 +538,34 @@ export class PixiPlayRenderer {
     }
     const content = root.__imageContent
     if (!content) return
-    content.visible = !spec || (width > 0 && height > 0)
-    const soft = spec && (spec.featherX > 0 || spec.featherY > 0)
-    const textureWidth = Math.min(2048, Math.max(1, Math.ceil(width)))
-    const textureHeight = Math.min(2048, Math.max(1, Math.ceil(height)))
+    const empty = !(width > 0 && height > 0)
+    content.visible = !spec || !empty || spec.reverseMaskArea
+    // Inverse hard masks also use alpha sprites: the stencil mask bounds would
+    // discard descendants outside the rectangle before inversion could run.
+    const soft = spec && (spec.featherX > 0 || spec.featherY > 0 || spec.primitive !== 'rect' || spec.reverseMaskArea)
+    const rasterSize = spec && maskRasterSize(spec)
+    const textureWidth = rasterSize?.width, textureHeight = rasterSize?.height
+    const asset = spec?.primitive === 'sprite' ? this.imageTexture(item.imageId, item.imageSource) : null
     const previous = root.__imageMask
     // Width-only Tween updates reuse a bounded texture rather than creating a
     // GPU resource every frame. Viewport clipping stays on the outer root.
-    if (soft && content.visible && previous instanceof Sprite
+    if (soft && !empty && content.visible && previous instanceof Sprite
         && previous.texture.source.resource.width === textureWidth && previous.texture.source.resource.height === textureHeight) {
-      paintMaskCanvas(previous.texture.source.resource, spec)
+      paintMaskCanvas(previous.texture.source.resource, spec, asset, (w, h) => DOMAdapter.get().createCanvas(w, h))
       previous.texture.source.update()
       previous.width = width
       previous.height = height
+      content.setMask({ mask: previous, channel: 'alpha', inverse: spec.reverseMaskArea })
       return
     }
     content.mask = null
     previous?.destroy({ context: true, texture: true, textureSource: true })
     root.__imageMask = null
-    if (!spec || !content.visible) return
+    if (!spec || !content.visible || empty) return
     let clip
     if (soft) {
       const canvas = DOMAdapter.get().createCanvas(textureWidth, textureHeight)
-      paintMaskCanvas(canvas, spec)
+      paintMaskCanvas(canvas, spec, asset, (w, h) => DOMAdapter.get().createCanvas(w, h))
       clip = new Sprite({ texture: new Texture({ source: new CanvasSource({ resource: canvas }) }), anchor: 0.5 })
       clip.width = width
       clip.height = height
@@ -571,7 +574,7 @@ export class PixiPlayRenderer {
     }
     clip.eventMode = 'none'
     content.addChild(clip)
-    content.setMask({ mask: clip, channel: 'alpha' })
+    content.setMask({ mask: clip, channel: 'alpha', inverse: spec.reverseMaskArea })
     root.__imageMask = clip
   }
 

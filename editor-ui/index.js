@@ -128,10 +128,10 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
     function shape(primitive, color) {
       if (primitive === 'sprite') return { background: 'transparent' }
       if (primitive === 'circle') return { borderRadius: '50%', background: color }
-      if (primitive === 'ring') return { borderRadius: '50%', border: `7px solid ${color}`, background: 'transparent' }
+      if (primitive === 'ring') return { borderRadius: '50%', background: color, maskImage: 'radial-gradient(ellipse closest-side,transparent 80%,#000 80%)' }
       if (primitive === 'triangle') return { background: color, clipPath: 'polygon(50% 0,100% 100%,0 100%)' }
       if (primitive === 'fourstar') return { background: color, clipPath: 'polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%)' }
-      if (primitive === 'fivestar') return { background: color, clipPath: 'polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)' }
+      if (primitive === 'fivestar') return { background: color, clipPath: 'polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 92%,50% 71%,21% 92%,32% 57%,2% 35%,39% 35%)' }
       if (primitive === 'missing') return { background: '#4822285c', border: '1px dashed #ff7481' }
       return { background: color }
     }

@@ -26,7 +26,7 @@ Runtime 管理逻辑状态；宿主提供画布、输入与素材能力。像素
 | 宿主能力 | 契约入口 |
 |---|---|
 | `canSelectImageType(id, source)`、素材边界与切片 | [图片类型](../../../studio/docs/image-assets.md#图片类型基础拉伸) |
-| 网格刷新、滚动、矩形遮罩与旋转投影 | [控件支持](../../../studio/docs/control-support.md) |
+| 网格刷新、滚动、图片遮罩与旋转投影 | [控件支持](../../../studio/docs/control-support.md) |
 | `audioDuration(id)`、逻辑音效实例与浏览器播放 | [音效与缓存](../../../studio/docs/audio-assets.md) |
 | 布局平台与视口 | [Studio 布局](../../../studio/README.md#json-画布布局与-gia-平台槽) |
 | Worker 手动/实时时钟与帧率 | [试玩时钟](../../../mcp/README.md#试玩时钟) |

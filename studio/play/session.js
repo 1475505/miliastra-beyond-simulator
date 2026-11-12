@@ -415,6 +415,9 @@ function visualFields(control, box) {
       softEdgeMode: enumName(control.softEdgeMode) || 'Percentage',
       softEdgeWidthX: control.softEdgeWidthX,
       softEdgeWidthY: control.softEdgeWidthY,
+      horizontalSoftRange: control.horizontalSoftRange,
+      verticalSoftRange: control.verticalSoftRange,
+      reverseMaskArea: control.reverseMaskArea === true,
     })
   }
   if (control.kind === 'textbox' || control.kind === 'textwindow') {
