@@ -179,6 +179,9 @@
                 config:
                   provider: spawn
                   toolName: subagent
+                  # 0.2.2+: declare tool capabilities; Host owns Session authorization.
+                  modelSelection: true
+                  modelDiscovery: true
                   backgroundMode: continuable
 
               - id: tool-subagent-fork

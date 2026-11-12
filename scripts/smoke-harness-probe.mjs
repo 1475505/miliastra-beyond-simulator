@@ -8,7 +8,7 @@ import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot'
 import { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import * as simulator from 'dsh-plugin-beyond-simulator'
 
-export const inject = ['webServer', 'tools', 'agentPresets', 'skills', 'sessions', 'agents', 'sessionPersistence', 'systemPrompt', 'workspaceController', 'sessionController']
+export const inject = ['webServer', 'tools', 'agentPresets', 'skills', 'sessions', 'agents', 'sessionPersistence', 'systemPrompt', 'workspaceController', 'sessionController', 'llm', 'settings']
 export function apply(ctx, config) {
   ctx.webServer.register({ kind: 'exact', path: '/qxqy-smoke', async handler(_request, response) {
     response.setHeader('content-type', 'application/json')
@@ -71,6 +71,12 @@ export function apply(ctx, config) {
           assert.equal(ctx.tools.schemas(lease.key).filter(tool => tool.name === name).length, 1, `${name} is available exactly once in the preset`)
         }
       } finally { await lease[Symbol.asyncDispose]() }
+      let modelSelection = false
+      if (config.modelSelection) {
+        const { smokeSubagentModels } = await import('./smoke-models.mjs')
+        await smokeSubagentModels(ctx, { presetId, workspace: config.workspace })
+        modelSelection = true
+      }
       // Recover the SAME stored identity after its Agent is gone. Merely listing
       // a preset or reading its Skill misses mount failures on historical chats.
       owned = await ctx.agents.create({ sessionId, meta: { cwd: config.workspace, agentPreset: presetId }, agentOptions, setup })
@@ -167,7 +173,7 @@ export function apply(ctx, config) {
         })).json()
         assert.equal(script.ok, true, JSON.stringify(script))
       }
-      response.end(JSON.stringify({ ok: true, language }))
+      response.end(JSON.stringify({ ok: true, language, modelSelection }))
     } catch (error) {
       response.statusCode = 500
       response.end(JSON.stringify({ ok: false, error: error.stack || String(error) }))

@@ -44,6 +44,7 @@ Host Tools为`qxqy_script_sync`、`qxqy_studio_get/patch/export/play/load`、`qx
 - 宿主准入与 npm peer 的预发布匹配规则不同；兼容范围以根 `package.json` 为准，不用忽略 peer 代替适配。依据：[插件兼容](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/boot/plugin-manager/README.md#version-compatibility-and-exemptions)。
 - 新版默认使用声明式预设；构建从主维护源生成注册项与旧目录副本，更新旧 `.agent-presets` 不一定生效。Persona 变量与用户副本处理见[预设说明](../agent/wonderland-lua-builder/README.md#persona-工作目录变量兼容性)，`list-agents` 入口及持久化接口见[会话恢复](docs/session-recovery.md)。
 - 嵌入预设的 `baseUrl` 可能来自合成 profile，Skill 须按安装包定位；旧目录预设才使用相邻 `skills/`。`test:harness` 验证正文及 `references/workflow.md` 可读，不能只检查菜单可见。
+- 0.2.2+ 的子智能体选模使用官方 `modelSelection/modelDiscovery` 能力声明，白名单归 Host 并按会话保存；配置与更新排查见[预设模型选择](../agent/wonderland-lua-builder/README.md#子智能体模型选择)。
 - 模拟器绑定会话原始工程 cwd；Shell 切目录不切换编辑工程。工具定义、JSON 输出、附件、HTTP 路由、ModuleLoader 与 `conversation.view` 由适配层对接，共享 VM/存档不按宿主版本另建分支。子代理与 Agent Team 调度由官方插件处理，旧 `backgroundMode` 不构成新版同步等待承诺。
 
 <a id="desktop-内嵌试玩208"></a>

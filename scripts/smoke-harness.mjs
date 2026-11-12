@@ -39,17 +39,20 @@ try {
   }
   const harness = JSON.parse(await readFile(join(dirname(cli), '../package.json'), 'utf8'))
   assert.match(harness.version, /^0\.2\./, 'test:harness expects a 0.2 CLI')
+  const modelSelection = Number(harness.version.split('.')[2].split('-')[0]) >= 2
   const { artifacts } = JSON.parse(await readFile(join(root, 'release/manifest.json'), 'utf8'))
   const artifact = artifacts.find(entry => entry.product === 'dsh-plugin')
   execFileSync(process.execPath, [cli, 'plugin', '--profile', 'web', 'add', join(root, 'release', artifact.filename)], {
     cwd: temporary, env, stdio: 'inherit', windowsHide: true, timeout: 180_000,
   })
   await copyFile(join(root, 'scripts/smoke-harness-probe.mjs'), join(profile, 'smoke-probe.mjs'))
+  await copyFile(join(root, 'scripts/smoke-harness-models.mjs'), join(profile, 'smoke-models.mjs'))
   await mkdir(join(temporary, 'game'))
   await writeFile(join(profile, 'smoke.patch.yml'), [
     '- id: workspace-controller', '  config:', `    documentsDirectory: ${JSON.stringify(join(temporary, 'documents'))}`,
     '- insert:', '    - id: simulator-smoke-probe', '      name: ./smoke-probe.mjs',
     '      config:', `        workspace: ${JSON.stringify(join(temporary, 'game'))}`,
+    `        modelSelection: ${modelSelection}`,
     `        languageBrowser: ${!!process.env.QXQY_BROWSER}`, '',
   ].join('\n'))
   child = spawn(process.execPath, [cli, '--profile', 'web', '--patch', join(profile, 'smoke.patch.yml'), '--no-open', '--port', '0'], {
@@ -73,8 +76,10 @@ try {
   const report = await response.json()
   assert.equal(response.status, 200, JSON.stringify(report))
   assert.equal(report.ok, true, JSON.stringify(report))
+  assert.equal(report.modelSelection, modelSelection, '#24 smoke runs on supported hosts')
   assert.deepEqual(report.language, await systemLanguage(), 'installed DSH reads the actual host UI language')
   console.log(`PASS Harness ${harness.version}: CLI tarball admission, full Web boot, preset/Skill discovery, persisted preset session recovery, real tool calls, attachments, HTTP play, native locale ${JSON.stringify(report.language)} and plugin restart lifecycle`)
+  if (modelSelection) console.log('PASS #24: preset route fields/discovery, Host opt-in, allowlist/effort enforcement, preset switch and policy restoration')
   if (process.env.QXQY_BROWSER) {
     const { smokeHarnessLanguage } = await import('./smoke-harness-language.mjs')
     const launchUrl = output.match(/dsh web: (http:\/\/127\.0\.0\.1:\d+[^\s]*)/)?.[1] || url

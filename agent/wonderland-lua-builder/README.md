@@ -46,6 +46,30 @@ Persona 仅引用 `{{model}}`；工作目录由宿主上下文与工具提供。
 
 遇到旧引用先确认来源：旧目录预设需保留自定义内容、删除该句并重启；新版声明式预设需更新插件或修正用户 profile 覆盖，单改 `.agent-presets` 无效。注册项和包内副本由构建同步，不手改生成文件。宿主兼容范围及验证入口统一见[DSH 插件](../../dsh-plugin/README.md#宿主兼容契约)。
 
+### 子智能体模型选择
+
+Harness 0.2.2 起，预设按官方 `standard` 的方式在 spawn 工具声明能力（[#24](https://github.com/1475505/miliastra-beyond-simulator/issues/24)）：
+
+```yaml
+- id: tool-subagent
+  name: '@deepseek-ai/dsh-tool-subagent'
+  config:
+    provider: spawn
+    toolName: subagent
+    modelSelection: true
+    modelDiscovery: true
+```
+
+`modelSelection` 为 `subagent` 添加 `provider`、`model`、`reasoning_effort` 参数；`modelDiscovery` 在该预设作用域注册唯一的 `list_subagent_models`。fork 沿用官方默认，继承父模型。声明式预设、包内旧目录副本均从 `agent.cordis.yml` 构建。
+
+Host 的 `@deepseek-ai/dsh-tool-subagent/model-selection-settings` 管理用户开关与模型白名单；在 Harness 的子智能体设置中配置后**新建会话**，由 Host 保存授权。子会话继承授权，切换预设和恢复历史保留原授权；后改设置不扩张旧会话的权限。没有会话授权时，查询和显式选模仅允许父 Agent 当前模型及其支持的推理强度。预设只声明工具能力，不复制 Host 设置服务或写入白名单，也不使用旧 `modelSelectionSettings`。
+
+如果更新后参数或列表工具仍缺失，检查实际 profile 加载的插件与预设配置；用户保存的整份 `config.plugins` 可能覆盖新包。旧 `.agent-presets` 不会自动覆盖，修改目录副本也不保证声明式预设同步。此选模契约适用于 0.2.2+；0.2.1 及更早宿主仍按原有预设能力运行。
+
+官方依据：[`dsh-v0.2.2-rc.1` standard 预设](https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/web-app/presets/standard.patch.yml)与 [tool-subagent 文档](https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/subagent/tool-subagent/README.md#selecting-a-child-llm)，2026-11-12 在线核对，`documented / official_document / device_status=not_required`。
+
+回归入口 `scripts/smoke-harness-models.mjs` 随 `pnpm test:harness` 在隔离 Host 运行。Windows / Node24.21.0 / Harness0.2.2-rc.1 已验证实际工具参数与列表唯一性、Host 开关及白名单过滤／拒绝、非法推理强度拒绝、standard→本预设切换和关闭开关后的历史授权恢复（`observed / simulator / device_status=not_required`）。模型目录为合成适配器，未调用真实模型；不涵盖模型生成质量与 Desktop 界面操作。
+
 ## 资料与验证边界
 
 启动前先检查工作区指引、本地知识目录，以及当前 AI 宿主的插件/MCP/Skill 配置和可见能力，寻找 `miliastra-toolbox` 系列或其他知识来源。确认当前能读到官方客户端 2D/Lua API 与使用指南，记录来源、版本和缺项；已有资料直接复用，仅询问仍缺少的内容。详见 [知识库发现与可用性核验](skills/qxqy-game-studio/references/workflow.md#知识库发现与可用性核验)。本工作流不捆绑官方知识库，不能从普通 Lua/UI 或 3D 节点经验猜接口。
