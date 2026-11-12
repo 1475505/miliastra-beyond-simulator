@@ -8,7 +8,7 @@ import { paintList, playSnapshot } from '../play/session.js'
 import { renderEditorPng, renderPaintPng, renderScenePng, flattenScenePaint } from '../host-png.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
 import { editorMaskProject, maskScenes, maskSamples, maskAlphas, contourScene, contourSamples, contourAlphas } from './fixtures/image-mask.mjs'
-import { imageMaskSpec, createMaskSampler } from '../play/image-mask.js'
+import { imageMaskSpec, createMaskSampler, paintMaskCanvas } from '../play/image-mask.js'
 import { featherMaskAlpha } from '../play/image-mask-raster.js'
 import { imageAssetKey } from '../assets/catalog.js'
 
@@ -251,6 +251,22 @@ test('percentage ranges, contour feather and inversion follow independently calc
   assert.equal(ring(0, 0), 0)
   assert.ok(ring(45, 0) > .4 && ring(45, 0) < .6, 'both outer edge and hole feather inward')
   assert.equal(item.softEdgeWidthX, 999)
+})
+
+test('mask textures preserve contour coverage at native and resampled resolutions', () => {
+  for (const [primitive, expected] of Object.entries(contourAlphas)) for (const [width, height] of [[200, 200], [125, 75]]) {
+    const canvas = createCanvas(width, height)
+    paintMaskCanvas(canvas, { primitive, width: 100, height: 100, featherX: 0, featherY: 0, reverseMaskArea: true }, null, createCanvas)
+    const ctx = canvas.getContext('2d')
+    contourSamples.slice(1).forEach(([x, y], i) => {
+      const pixel = ctx.getImageData(Math.floor((x - 70) * width / 100), Math.floor((y - 30) * height / 100), 1, 1).data
+      assert.equal(pixel[3], expected[i + 1], `${primitive} ${width}×${height} at ${x},${y}; textures store positive coverage`)
+    })
+  }
+  const canvas = createCanvas(200, 200)
+  paintMaskCanvas(canvas, { primitive: 'ring', width: 100, height: 100, featherX: 10, featherY: 0 }, null, createCanvas)
+  const alpha = canvas.getContext('2d').getImageData(190, 100, 1, 1).data[3]
+  assert.ok(Math.abs(alpha - 121) <= 2, 'pixel center 45.25 is 4.75 units inside a ten-unit outer feather')
 })
 
 test('texture alpha and slice borders determine masks independently of image tint', async () => {

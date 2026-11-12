@@ -5,7 +5,9 @@ import { drawPrimitiveShape } from '../assets/primitives.js'
 // (103025f, maskShapes.ts / maskPreview.ts). These are not native shader laws.
 
 export function featherMaskAlpha(alpha, width, height, featherX, featherY) {
-  const result = Float32Array.from(alpha, value => value / 255)
+  if (!(featherX > 0 || featherY > 0)) return alpha.slice()
+  const result = new Float32Array(alpha.length)
+  for (let i = 0; i < alpha.length; i++) result[i] = alpha[i] / 255
   const scan = (horizontal, feather) => {
     if (!(feather > 0)) return
     const length = horizontal ? width : height, lines = horizontal ? height : width
@@ -20,7 +22,9 @@ export function featherMaskAlpha(alpha, width, height, featherX, featherY) {
   }
   scan(true, featherX)
   scan(false, featherY)
-  return Uint8ClampedArray.from(result, value => Math.round(value * 255))
+  const output = new Uint8ClampedArray(alpha.length)
+  for (let i = 0; i < output.length; i++) output[i] = Math.round(result[i] * 255)
+  return output
 }
 
 export function maskRasterSize(mask) {

@@ -149,12 +149,24 @@ export function paintMaskCanvas(canvas, mask, asset, createCanvas = (w, h) => {
   const ctx = canvas.getContext('2d')
   const image = ctx.createImageData(width, height)
   const data = image.data
-  const coverage = createMaskSampler({ ...mask, reverseMaskArea: false }, createCanvas, asset)
+  const positive = { ...mask, reverseMaskArea: false }
+  const raster = mask.primitive && mask.primitive !== 'rect' ? rasterizeMask(mask, createCanvas, asset) : null
+  // Pixi paints at the contour's own pixel centers: a direct alpha copy is
+  // identical to bilinear sampling there, without four lookups per texel.
+  if (raster?.width === width && raster.height === height) {
+    data.fill(255)
+    for (let y = 0; y < height; y++) {
+      const source = (y + 1) * (width + 2) + 1
+      for (let x = 0; x < width; x++) data[(y * width + x) * 4 + 3] = raster.alpha[source + x]
+    }
+    ctx.putImageData(image, 0, 0)
+    return canvas
+  }
   for (let y = 0; y < height; y += 1) {
     const localY = mask.height / 2 - (y + 0.5) * mask.height / height
     for (let x = 0; x < width; x += 1) {
       const localX = -mask.width / 2 + (x + 0.5) * mask.width / width
-      const alpha = Math.round(255 * coverage(localX, localY))
+      const alpha = Math.round(255 * imageMaskCoverage(localX, localY, positive, raster))
       const i = (y * width + x) * 4
       data[i] = 255
       data[i + 1] = 255
