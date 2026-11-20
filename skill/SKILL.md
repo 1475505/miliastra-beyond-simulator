@@ -66,14 +66,14 @@ qxqy_studio_play { "action": "view",  "args": { "playerIndex": 2 } }     ← 切
 
 | 需求 | 选什么 |
 |---|---|
-| 继续编辑 / 整体备份 | 完整存档包 JSON（`qxqy-simulator-save`，含服务端 + 客户端 + 两类脚本） |
-| 无损工程格式 | Authoring JSON（11 类控件、五画布变换、按钮四状态、脚本挂载全保留） |
-| 与真实编辑器/GIA 链路交换 | 「当前界面 GIA」只导出左栏正在看的那棵树；「资产包 GIA（已改动项）」按官方三类独立文件下载，不夹带未改动的出厂默认模板；「资产包 GIA 整合包」把服务端 `UIControlGroup` 与客户端 `UIControlTemplate` 并排写入同一 GIA 的 `Root.graph`，脚本映射同样并排；导入时拆回两类资产，模板边界保留，挂载关系仍不进 GIA |
+| 继续编辑 / 整体备份 | 完整存档包 JSON（`qxqy-simulator-save`，含服务端 UI、客户端模板、全部客户端 Lua、挂载和服务端逻辑；仅路径脚本还需提供对应文件） |
+| 交换单项 UI 工程 | Authoring JSON；完整存档与四平台布局规则见 [Studio](../studio/README.md#json-画布布局与-gia-平台槽) |
+| 与真实编辑器/GIA 链路交换 | 根据范围选择当前界面、分类资产包、整合包或部分组合。独立脚本 GIA 不含挂载；整合包和包含脚本的部分组合会写入挂载。各入口源码与映射范围统一见 [GIA 导出与脚本挂载](../studio/README.md#gia-导出与脚本挂载) |
 | 单个脚本 | 分项导出 Lua |
 
 引导用户导入 GIA 尝试时必须同步说明边界，管理预期：
 
-- GIA 导出会附简明警告（如"部分内容暂不支持 GIA"）；旋转线号未验证就不写猜测字段，部分填充形状/方向、自定义羽化值、非 100% 进度只保存在 Authoring JSON。
+- GIA 导出会附简明警告（如"部分内容暂不支持 GIA"）；按当前回执说明损失项，不沿用旧版本的旋转、填充或挂载限制。控件与 GIA 支持范围见 [Studio 专题](../studio/README.md#专题树)。
 - 未知 protobuf 字段不保证往返回写。
 - 若当前工作区就是模拟器源码仓库，可先运行 `cd simulator/studio && npm run generate:client-template` 生成探针文件 `probes/client-template-import/qxqy-lua-instantiable-panel.gia`，再导入验证 Lua 动态实例化（预期模板索引 `1073742100`；真实编辑器若重映射，以导入后检视器显示值为准）。
 
@@ -85,7 +85,7 @@ qxqy_studio_play { "action": "view",  "args": { "playerIndex": 2 } }     ← 切
 { "op": { "op": "setControlGuid", "id": "对应控件的内部 id", "guid": 1073742200, "expectedRevision": 12 } }
 ```
 
-`guid` 是编辑器控件/模板索引，须为 `1–2147483647` 的整数，且不能与工程中其他控件或脚本索引重复。服务端「客户端控件容器」不能用此操作修改；其下的客户端节点和客户端模板均可修改。操作保留内部 `id`、层级和脚本挂载，不会自动改写 Lua。
+`guid` 是编辑器控件/模板索引，新写入范围及旧值兼容见 [索引规则](../studio/docs/control-guid-sync.md#索引范围与旧数据)，不能与工程中其他控件或脚本索引重复。服务端「客户端控件容器」、其下的客户端节点和客户端模板均可修改；容器占号时先按 [服务端容器索引校准](../studio/docs/control-guid-sync.md#服务端容器索引校准) 填写其实际值。客户端模板列表的合成根不支持修改。操作保留内部 `id`、层级和脚本挂载，不会自动改写 Lua。
 
 **AI 必须把索引变更与 Lua 引用同步作为同一项修复完成：**
 
@@ -183,7 +183,7 @@ qxqy_studio_play { "action": "serverSend", "args": { "target": "PlayerSelf", "na
 
 play 动作：`start`（重建运行时；可带 `canvasId` 指定设备画布、`playerCount` 指定 1–8 人）、`device`（按 `args.canvasId` 切换设备画布并重建运行时）、`view`（按 `args.playerIndex` 切换当前玩家视角，不重建运行时）、`get`、`step`（`dt` 秒）、`pointer`（`type` = move/down/up/click，click = down+up；`x`/`y` 为当前画布像素）、`key`（按脚本注册监听的键名）、`click`（按控件名直接触发）、`pause`/`resume`、`stop`、`serverGet`/`serverSet`/`serverSend`、`history`/`saveCase`/`runCase`（可带 `canvasId` 钉住用例设备，可带 `playerCount`）。未 start 时 `pointer` / `key` / `click` 都会报 `play session has not started`。
 
-常用 patch op：`select`（id）、`pick`（x/y 命中）、`setCanvas`（canvasId）、`addScript` / `updateScript` / `removeScript`（脚本由存档统一管理；服务端容器会被拒绝）、`setServerLogic`（规则定义）、`newAsset`（assetType）、`addTemplate`、`add`（parentId/kind/name）、`reparent`、`moveSibling`（direction=up/down）、`remove`、`set`（id/key/value）、`setControlGuid`（id/guid，改当前资产的客户端控件索引）、`acknowledgeControlGuidChanges`（changeIds，核验 Lua 同步后清理指定变更记录）、`replace`（project）。数据写操作必须带 `expectedRevision`。
+常用 patch op：`select`（id）、`pick`（x/y 命中）、`setCanvas`（canvasId）、`addScript` / `updateScript` / `removeScript`（脚本由存档统一管理；服务端容器会被拒绝）、`setServerLogic`（规则定义）、`newAsset`（assetType）、`addTemplate`、`add`（parentId/kind/name）、`reparent`、`moveSibling`（direction=up/down）、`remove`、`set`（id/key/value）、`setControlGuid`（id/guid，改当前资产的控件索引，含服务端容器）、`acknowledgeControlGuidChanges`（changeIds，核验 Lua 同步后清理指定变更记录）、`replace`（project）。数据写操作必须带 `expectedRevision`。
 
 `set` 常用 key：变换类 `posX/posY/width/height`、`rotationX/rotationY/rotationZ`（度）、`anchorType`、`anchorMinX/Y`、`anchorMaxX/Y`、`pivotX/Y`；业务类 `text`、`fontSize`、`imageId`、`enableMask`、`enableFill`、`fillType`、`fillAmount`(0–1)、按钮四状态 `defaultChildId/hoverChildId/pressedChildId/unavailableChildId`（默认／悬停／按下／不可用）、`syncAllDevices`；颜色接受 `#AARRGGBB`。X/Y 支持正交压缩与背面镜像；混合轴及嵌套倾转为模拟器策略，范围见 `studio/docs/control-support.md`。以上是常用子集，未列出的字段不要猜——`set` 对不认识的 key 会直接报错，以报错为准。
 

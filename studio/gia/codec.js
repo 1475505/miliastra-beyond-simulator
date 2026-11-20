@@ -3,7 +3,7 @@ import { PLATFORMS, LAYOUT_SCHEMA_VERSION, DEFAULT_GIA_GAME_VERSION } from '../c
 import { assertPlatformNode } from '../ui/transforms.js'
 import { toJson } from '../json.js'
 import { createNode, walk } from '../ui/authoring.js'
-import { GUID_BASE, assertExportGuid, collectUsedGuids, isStoredGuid, isValidGuid, nextFreeGuid } from './guid.js'
+import { GUID_BASE, assertExportGuid, collectUsedGuids, isStoredGuid, isValidGuid, nextControlGuid, nextFreeGuid } from './guid.js'
 import { ensureClientAssetIndices, isValidAssetIndex } from './asset-indices.js'
 import { collectClientNodes } from './client-order.js'
 import { keyHintWireCode } from '../key-hints.js'
@@ -222,7 +222,7 @@ export function assignGuids(project, used = new Set(), { preserveLegacy = false 
     }
   }
   for (const node of pending) {
-    const guid = nextFreeGuid(used)
+    const guid = nextControlGuid(node.kind, used)
     used.add(guid)
     node.guid = guid
     map.set(node.id, guid)

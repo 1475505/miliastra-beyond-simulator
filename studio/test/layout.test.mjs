@@ -1052,7 +1052,13 @@ test('setWorkspace retargets display only and never auto names', () => {
   assert.equal(studio.get().workspace.name, basename(outsideRepo))
 })
 
-test('missing GUIDs start from 1073741850 without rewriting stored ids', () => {
+test('new and unassigned server containers prefer 1073741847 while client controls start at 1073741850', () => {
+  const studio = createStudio()
+  assert.equal(studio.get().root.guid, 1073741847)
+  assert.equal(studio.get().root.children[0].guid, 1073741850)
+  studio.patch({ op: 'newAsset', assetType: 'server-control-template' })
+  assert.equal(studio.get().root.guid, 1073741847)
+  assert.equal(studio.archiveData().assets.client.root.guid, 0, 'the synthetic client holder has no assigned GUID')
   const server = createNode('server-container', { id: 'sc1', guid: 0, name: '客户端控件容器' })
   const root = createNode('container', { id: 'n1', guid: 0, name: '容器节点', isRootContainer: true })
   server.children.push(root)
@@ -1065,8 +1071,9 @@ test('missing GUIDs start from 1073741850 without rewriting stored ids', () => {
     root: server,
   })
   const map = assignGuids(project)
-  assert.equal(map.get('sc1'), 1073741850)
-  assert.equal(map.get('n1'), 1073741851)
+  assert.equal(map.get('sc1'), 1073741847)
+  assert.equal(map.get('n1'), 1073741850)
+  assert.equal(createStudio().importData('gia', studio.exportData('gia').data).snapshot.root.guid, 1073741847)
 })
 
 test('assignGuids keeps later stored ids instead of filling from 1073742000', () => {
@@ -1087,10 +1094,35 @@ test('assignGuids keeps later stored ids instead of filling from 1073742000', ()
   const map = assignGuids(project)
   assert.equal(map.get('n2'), 1073741889)
   assert.equal(project.root.children[0].children[0].guid, 1073741889)
-  assert.equal(map.get('sc1') !== 1073741889, true)
-  assert.equal(map.get('n1') !== 1073741889, true)
-  assert.equal(map.get('n3') !== 1073741889, true)
+  assert.equal(map.get('sc1'), 1073741847)
+  assert.equal(map.get('n1'), 1073741890)
+  assert.equal(map.get('n3'), 1073741891)
   assert.deepEqual([...new Set(map.values())].length, map.size)
+})
+
+test('server allocation avoids an occupied preferred index and preserves existing server GUIDs', () => {
+  for (const occupied of ['child', 'external']) {
+    const project = createProject()
+    project.root.guid = 0
+    const used = new Set()
+    if (occupied === 'child') project.root.children[0].guid = 1073741847
+    else used.add(1073741847)
+    const before = project.root.children.map(node => node.guid)
+    const map = assignGuids(project, used)
+    assert.equal(map.get('sc1'), 1073741861, `${occupied} retains 1073741847; the server falls back above the used range`)
+    assert.deepEqual(project.root.children.map(node => node.guid), before)
+  }
+  for (const guid of [1073741850, 1073742200, 1500000000]) {
+    const archive = createStudio().archiveData()
+    archive.assets.server.root.guid = guid
+    archive.assets.server.root.children[0].guid = 1073742300
+    const studio = createStudio(archive)
+    assert.equal(studio.get().root.guid, guid)
+    assert.equal(studio.get().root.guid, guid, 'repeated snapshots cannot reset a stored server index')
+    assert.deepEqual(studio.get().controlGuidChanges, [])
+    const saved = createStudio(JSON.parse(Buffer.from(studio.exportData('save').data, 'base64')))
+    assert.equal(saved.get().root.guid, guid)
+  }
 })
 
 test('imported save archives keep their explicit name over workspace auto naming', () => {

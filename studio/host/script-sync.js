@@ -29,10 +29,13 @@ export function discoverScriptDirectories(base = join(homedir(), 'AppData', 'Loc
     const levels = join(base, uid, 'Beyond_Local_Save_Level')
     for (const editorId of directories(levels)) {
       const path = join(levels, editorId, 'external_lua_file', 'default_import_file')
-      if (existsSync(path) && statSync(path).isDirectory()) candidates.push({ uid, editorId, path })
+      if (!existsSync(path)) continue
+      const stat = statSync(path)
+      if (stat.isDirectory()) candidates.push({ uid, editorId, path, mtimeMs: stat.mtimeMs })
     }
   }
-  return { candidates }
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs || a.path.localeCompare(b.path))
+  return { candidates: candidates.map(({ uid, editorId, path }) => ({ uid, editorId, path })) }
 }
 
 export class ScriptSync {

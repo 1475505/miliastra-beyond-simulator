@@ -44,23 +44,58 @@ test('invalid, occupied and stale GUID edits are atomic; unchanged index is a no
   const script = studio.patch({ op: 'addScript', path: 'main.lua', source: '-- script' }).scripts[0]
   const before = studio.archiveData()
   const revision = studio.get().version
-  for (const value of ['', ' ', true, false, null, undefined, 0, -1, 1.5, '1.5', '1e3', '0x10', NaN, Infinity,
-    1001, GUID_MIN - 1, GUID_MAX + 1, 2147483648]) {
-    assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n2', guid: value }), /整数/)
+  for (const id of ['n2', 'sc1']) {
+    for (const value of ['', ' ', true, false, null, undefined, 0, -1, 1.5, '1.5', '1e3', '0x10', NaN, Infinity,
+      1001, GUID_MIN - 1, GUID_MAX + 1, 2147483648]) {
+      assert.throws(() => studio.patch({ op: 'setControlGuid', id, guid: value }), /整数/)
+      assert.deepEqual(studio.archiveData(), before)
+    }
+    for (const value of [node(studio, 'n3').guid, node(studio, 'n1', 'client').guid, script.guid]) {
+      assert.throws(() => studio.patch({ op: 'setControlGuid', id, guid: value }), /占用/)
+      assert.deepEqual(studio.archiveData(), before)
+    }
+    assert.throws(() => studio.patch({ op: 'setControlGuid', id, guid: 1073741901, expectedRevision: revision - 1 }), /revision conflict/)
+    assert.deepEqual(studio.archiveData(), before)
+    assert.equal(studio.patch({ op: 'setControlGuid', id, guid: node(studio, id).guid }).version, revision)
     assert.deepEqual(studio.archiveData(), before)
   }
-  for (const value of [node(studio, 'n3').guid, node(studio, 'n1', 'client').guid, script.guid]) {
-    assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n2', guid: value }), /占用/)
-    assert.deepEqual(studio.archiveData(), before)
-  }
-  for (const id of ['sc1', 'missing']) assert.throws(() => studio.patch({ op: 'setControlGuid', id, guid: 1073741901 }), /仅客户端/)
-  assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741901, expectedRevision: revision - 1 }), /revision conflict/)
-  assert.deepEqual(studio.archiveData(), before)
-  assert.equal(studio.patch({ op: 'setControlGuid', id: 'n2', guid: node(studio, 'n2').guid }).version, revision)
+  assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'missing', guid: 1073741901 }), /控件不存在/)
+  assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'sc1', guid: 1073741901, autoFillClientGuids: true }), /仅支持客户端模板/)
   assert.deepEqual(studio.archiveData(), before)
   studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1073741824 })
   studio.patch({ op: 'setControlGuid', id: 'n2', guid: 1077936127 })
   assert.equal(node(studio, 'n2').guid, 1077936127)
+})
+
+test('server container GUID edits preserve the tree and mounts, persist and reach GIA exports', () => {
+  const seed = createStudio().archiveData()
+  seed.assets.server.root.guid = GUID_BASE
+  seed.assets.server.root.children[0].guid = 1073742000
+  const studio = createStudio(seed)
+  studio.patch({ op: 'addScript', path: 'main.lua', source: `local serverIndex = ${GUID_BASE}`, controlId: 'n1', controlAsset: SERVER })
+  const before = studio.patch({ op: 'select', id: 'sc1' })
+  const archive = studio.archiveData()
+  const result = studio.patch({ op: 'setControlGuid', guid: 1073742200, expectedRevision: before.version })
+  assert.equal(result.selectedId, 'sc1')
+  assert.equal(result.inspector.guid, 1073742200)
+  assert.equal(result.version, before.version + 1)
+  assert.deepEqual(studio.archiveData().assets.server.root, { ...archive.assets.server.root, guid: 1073742200 })
+  assert.deepEqual(studio.archiveData().assets.client, archive.assets.client)
+  assert.deepEqual(result.scripts, before.scripts)
+  assert.deepEqual(result.controlGuidChanges.map(({ id, scriptSignature, ...change }) => change), [{
+    controlAsset: SERVER, controlId: 'sc1', controlName: '客户端控件容器', oldGuid: GUID_BASE, newGuid: 1073742200,
+  }])
+  const restored = createStudio()
+  restored.importData('json', studio.exportData('save').data)
+  assert.deepEqual(restored.archiveData(), studio.archiveData())
+  for (const format of ['gia', 'gia-combined']) {
+    const imported = importGia(Buffer.from(restored.exportData(format).data, 'base64'))
+    assert.equal(imported.project.root.guid, 1073742200)
+  }
+  restored.patch({ op: 'selectAsset', assetType: CLIENT })
+  const clientBefore = restored.archiveData()
+  assert.throws(() => restored.patch({ op: 'setControlGuid', id: 'sc1', guid: 1073742201 }), /不是真实控件/)
+  assert.deepEqual(restored.archiveData(), clientBefore, 'the synthetic client-template holder remains uneditable')
 })
 
 test('explicit numeric template references follow GUID edits across both assets', () => {

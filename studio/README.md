@@ -11,6 +11,7 @@ Authoring JSON、GIA、四平台布局、试玩编排、日志、回放与断言
   - [浏览器输入](docs/browser-input.md)：键鼠映射、输入队列与焦点释放。
   - 素材：[图片](docs/image-assets.md) · [音频](docs/audio-assets.md) · [界面／全屏动效](docs/ui-vfx-playback.md)。
 - **GIA 与脚本交付**
+  - [GIA 导出与脚本挂载](#gia-导出与脚本挂载)：整合包、分类文件、脚本包的内容区别。
   - [客户端模板层序](docs/client-template-order.md)：wire 方向与导入索引校准。
   - [部分导出](docs/partial-export.md)：子树、依赖、预览和导出协议。
   - [Lua 索引同步](docs/control-guid-sync.md)：变更映射、文本替换和备份。
@@ -56,7 +57,26 @@ Authoring JSON、GIA、四平台布局、试玩编排、日志、回放与断言
 
 按官方7.1.0对照样本读写 Z 旋转、初始可见性及客户端初始激活。文本垂直对齐上/下有样本，居中值1仍为授权推断，导出会提示。官方输入开关样本还覆盖常驻光标、隔离导航、穿透屏蔽、手柄聚焦与射线检测；未知原始非布尔值保留。
 
-来源为完整工作区 `knowledge/ui/05_验证与不确定性.md` §8–9；独立字节回归见 `test/gia-observed-fields.test.mjs`、`test/gia-loss-warnings.test.mjs` 和 `web/test/gia-input-e2e.test.mjs`。单独 UI GIA 不含脚本源码，导出会提示；旧日记整合包初始化原因仍待设备日志，不能凭模拟器启动或叠页现象定因。
+来源为完整工作区 `knowledge/ui/05_验证与不确定性.md` §8–9；独立字节回归见 `test/gia-observed-fields.test.mjs`、`test/gia-loss-warnings.test.mjs` 和 `web/test/gia-input-e2e.test.mjs`。单独 UI GIA 的源码与挂载范围见下节；旧日记整合包初始化原因仍待设备日志，不能凭模拟器启动或叠页现象定因。
+
+## GIA 导出与脚本挂载
+
+共享编辑器与工具的导出入口由 `index.js::exportDataRaw` 调用 `gia/codec.js` 实现。格式选择如下：
+
+| 导出入口 | UI 与模板 | 脚本映射、源码及挂载 |
+|---|---|---|
+| 资产包 GIA 整合包（控件+脚本） | 服务端 `UIControlGroup` 与客户端 `UIControlTemplate` 并列写入，保留模板边界 | 同包写入脚本映射和内联源码，并把挂载写入两棵控件树的 `GenericSlot`；模拟器导入时按资产恢复。 |
+| 资产包 GIA（已改动项） | 分类输出多个文件；另一类 UI 未改动、未显示且无挂载时，可省略出厂默认资产 | 脚本单独输出；各文件的范围遵循下列单项规则。 |
+| 当前界面 / 服务器控件模板 GIA | 仅对应服务端 UI | 此入口不打包存档脚本源码；需要整合包或另外交付脚本并核对挂载。 |
+| 当前界面 / 客户端控件模板 GIA | 客户端模板及子树 | 写入已登记挂载的映射引用，不附带脚本映射源码；需另行交付所引用脚本。 |
+| 脚本包 GIA | 不含 UI | 只含脚本映射（ID、名称、路径、内联源码），不含控件挂载关系。 |
+| 单项 / 部分组合 GIA | 选择的客户端子树 | 默认包含子树挂载脚本及已登记未挂载模块，保留挂载；可关闭脚本包含。依赖与子树提升规则见[部分导出](docs/partial-export.md)。 |
+
+导出使用存档登记的源码，不会隐式读取磁盘 `path` 填入缺少的内联内容；仅路径脚本需另外确认文件交付。完整 JSON 存档继续作为工程备份格式，GIA 不包含模拟器的服务端逻辑或脚本同步配置。
+
+以上描述当前模拟器的导出与读取行为，不保证任意 GIA 无损往返或游戏导入结果。导入千星沙箱后核对实际脚本映射、挂载与控件索引，并查看导出警告。相关实现为 `exportGia`、`exportCombinedGia`、`exportScriptGia` 和 `withScriptMounts`。
+
+验证入口为 `test/scripts.test.mjs`、`test/partial-export.test.mjs` 和 `test/gia-loss-warnings.test.mjs`，检查整合包还原、脚本挂载、所选子树与源码损失提示；证据范围为源码核对及模拟器合成回归（`evidence_source=observed`、运行端 `simulator`、`device_status=not_required`），不新增游戏真机通过结论。
 
 ## 试玩场景与文字对齐
 

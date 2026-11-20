@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { ImageAssetStore } from '../host/image-assets.js'
 import { isRemoteImage, imageAssetKey } from '../assets/catalog.js'
+import { prefabImageSize } from '../assets/prefab-catalog.js'
 import { restoreSprite } from '../assets/raster.js'
 import { imagePrimitive } from '../constants.js'
 import { renderEditorPng, renderPaintPng } from '../host-png.js'
@@ -49,6 +50,18 @@ test('image lookup distinguishes primitives, remote assets and unsupported IDs',
   assert.equal(isRemoteImage(100101), true)
   assert.equal(imagePrimitive(101001), 'sprite')
   for (const id of [0, -1, 100007, 101019, 107008, 999999, '100101', 100101.5]) assert.equal(isRemoteImage(id), false)
+  // Audited 7.2 catalogue samples: harbor buildings, lights, snow and the new
+  // creature ranges must resolve without admitting null slots or future IDs.
+  for (const id of [20003469, 20003518, 20003564, 20003565, 20003566, 20003664, 20003669, 20003670, 20003674, 30005023, 30006028, 30007014, 30008015]) {
+    assert.equal(isRemoteImage(id, 'Prefab'), true)
+    assert.equal(prefabImageSize(id), 256)
+    assert.equal(isRemoteImage(id, 'StaticReference'), false)
+  }
+  for (const id of [10003001, 20001075, 20001122, 20001157, 20001303, 20001569, 20002756, 20003675, 30005024, 30006029, 30007015, 30008016]) {
+    assert.equal(isRemoteImage(id, 'Prefab'), false)
+  }
+  assert.equal(prefabImageSize(10003004), 128)
+  assert.equal(prefabImageSize(10008001), 128)
 })
 
 test('two stores share disk downloads, restart works offline, refresh and corruption regenerate', async t => {

@@ -79,3 +79,22 @@ test('invalid interval, occupied external GUID, wrong asset and stale revision c
   assert.equal(studio.get().clientGuidAutofill, undefined)
   assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'n1', guid: N + 3, autoFillClientGuids: true }), /仅支持客户端模板/)
 })
+
+test('calibrating the server container releases its index for client autofill', () => {
+  const seed = fixture()
+  seed.assets.server.root.guid = N + 1
+  const studio = createStudio(seed)
+  const before = studio.archiveData()
+  assert.throws(() => studio.patch({ op: 'setControlGuid', id: 'right', guid: N + 3, autoFillClientGuids: true }), /占用/)
+  assert.deepEqual(studio.archiveData(), before, 'the collision cannot partially apply the client batch')
+  studio.patch({ op: 'selectAsset', assetType: 'server-control-template' })
+  studio.patch({ op: 'setControlGuid', id: 'sc1', guid: N + 20 })
+  studio.patch({ op: 'selectAsset', assetType: CLIENT })
+  const result = studio.patch({ op: 'setControlGuid', id: 'right', guid: N + 3, autoFillClientGuids: true })
+  assert.deepEqual(values(studio), [N, N + 1, N + 2, N + 3, N + 4, N + 5, N + 6])
+  assert.equal(studio.archiveData().assets.server.root.guid, N + 20)
+  assert.equal(result.controlGuidChanges[0].controlAsset, 'server-control-template')
+  assert.equal(result.controlGuidChanges[0].controlId, 'sc1')
+  assert.equal(new Set(result.controlGuidChanges.slice(1).map(change => change.batchId)).size, 1)
+  assert.equal(result.controlGuidChanges.length, 8)
+})

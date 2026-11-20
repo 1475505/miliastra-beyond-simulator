@@ -2,8 +2,10 @@
 // interpretation is provided_unverified, not an independently verified contract.
 export const GUID_MIN = 0x40000000 // 1073741824
 export const GUID_MAX = 0x403fffff // 1077936127
-// 新分配的 GraphUnit / ScriptAsset id.id 从 1073741850 起递增；已有合法编号原样保留。
+// 普通控件 / ScriptAsset 从 1073741850 起按已用最大值递增。
 export const GUID_BASE = 1073741850
+// 模拟器给新服务端容器优先使用的空闲编号，不是合法范围的下界。
+export const SERVER_CONTAINER_GUID = 1073741847
 
 export function isValidGuid(value) {
   const guid = Number(value)
@@ -48,6 +50,11 @@ export function nextFreeGuid(used, start = GUID_BASE) {
   return next
 }
 
+export function nextControlGuid(kind, used) {
+  if (kind === 'server-container' && !used.has(SERVER_CONTAINER_GUID)) return SERVER_CONTAINER_GUID
+  return nextFreeGuid(used)
+}
+
 export function stampMissingGuids(root, used = new Set(), { skipServerContainer = false } = {}) {
   const pending = []
   walk(root, (node) => {
@@ -61,7 +68,7 @@ export function stampMissingGuids(root, used = new Set(), { skipServerContainer 
     pending.push(node)
   })
   for (const node of pending) {
-    const guid = nextFreeGuid(used)
+    const guid = nextControlGuid(node.kind, used)
     node.guid = guid
     used.add(guid)
   }

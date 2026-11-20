@@ -7,7 +7,7 @@
 图片控件选择图片源并填入白名单 `imageId` 后，编辑器画布、Pixi 试玩和 Host PNG 截图均可显示对应素材。首次实际使用时按需下载，重启后直接读取磁盘缓存，已缓存素材可离线使用。未知来源/ID 不发网络请求，下载失败保留占位。
 
 - **静态引用 `StaticReference`**：素材源 `https://oss.070077.xyz/images/`。`studio/assets/catalog.js` 固定 `data.json` 白名单（2026-10-02 快照）；`100001–100006` 走图元代理，远程 ID 请求 `sprite/<id>.png` 与 `border/<id>.json`。
-- **元件 `Prefab`**：素材源 `https://oss.070077.xyz/prefabs/`。`studio/assets/prefab-catalog.js` 固定目录和尺寸（2026-10-11、schemaVersion 2、dataVersion 7.1.0），排除空条目；只请求 `sprite/<id>.png`，不请求 border JSON。来源/类型和尺寸依据素材提供方清单，不是新增真机证据。
+- **元件 `Prefab`**：素材源 `https://oss.070077.xyz/prefabs/`。`studio/assets/prefab-catalog.js` 固定目录和尺寸（2026-11-15在线核对、schemaVersion 2、dataVersion 7.2.0），含2949个非空图标，排除7个空条目；只请求 `sprite/<id>.png`，不请求 border JSON。来源/类型和尺寸依据素材提供方清单，不是新增真机证据。
 - 不接受存档传入任意 URL，不在启动时下载远程清单，也不会全量下载白名单素材。更新白名单需重新核对目录并修改源文件。
 - 选中远程图片，在属性面板点击 **「↻ 重新下载此素材」** 可重新请求源文件并替换缓存。刷新失败保留之前的可用文件；刷新不会扩充 ID 白名单。
 - 同源编辑器与试玩页通过浏览器 storage 通知刷新；若浏览器禁用 storage，可重新打开试玩页。不同源的页面（例如另一端口或另一宿主）不会收到通知，可能继续使用其 HTTP 缓存至到期。

@@ -472,7 +472,7 @@ function registerTools(ctx, registry) {
 
   ctx.tools.register(defineTool({
     name: 'qxqy_studio_patch',
-    description: '修改当前会话的千星 UI 工程。op 必须携带 expectedRevision。客户端控件索引用 setControlGuid（id、guid）；必须根据快照 controlGuidChanges 更新存档 Lua source 和相关源文件的索引引用并核对，完成后用 acknowledgeControlGuidChanges（changeIds）确认，禁止盲目替换全部同值数字。',
+    description: '修改当前会话的千星 UI 工程。op 必须携带 expectedRevision。控件索引用 setControlGuid（id、guid），支持服务端客户端控件容器、客户端控件及模板；必须根据快照 controlGuidChanges 更新存档 Lua source 和相关源文件的索引引用并核对，完成后用 acknowledgeControlGuidChanges（changeIds）确认，禁止盲目替换全部同值数字。',
     parameters: {
       op: { type: 'json', required: true, description: '编辑器 patch 对象。' },
     },

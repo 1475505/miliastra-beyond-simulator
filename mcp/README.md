@@ -194,7 +194,7 @@ qxqy_studio_export({ handle: "project-1", action: "export", args: {
 
 ### 客户端控件索引校准
 
-真实编辑器导入 GIA 后若重新分配了客户端控件索引，可在 Web/DSH 编辑器修改选中客户端控件的「索引」，或使用当前资产的 `setControlGuid`。`id` 是存档内部控件 ID，`guid` 是用户回传的实际索引；新写入范围及旧值兼容见 [索引规则](../studio/docs/control-guid-sync.md#索引范围与旧数据)。操作保留内部 ID 和脚本挂载，拒绝服务端容器及工程中重复的控件/脚本索引。
+真实编辑器导入 GIA 后若重新分配了控件索引，可在 Web/DSH 编辑器修改选中控件的「索引」，或使用当前资产的 `setControlGuid`。`id` 是存档内部控件 ID，`guid` 是用户回传的实际索引；新写入范围及旧值兼容见 [索引规则](../studio/docs/control-guid-sync.md#索引范围与旧数据)。服务端「客户端控件容器」也可单独修改，具体入口与冲突处理见 [服务端容器索引校准](../studio/docs/control-guid-sync.md#服务端容器索引校准)。操作保留内部 ID 和脚本挂载，拒绝工程中重复的控件/脚本索引及客户端模板列表的合成根。
 
 同一批客户端模板导入且结构未改动时，可在客户端资产下附加 `autoFillClientGuids: true`：以指定控件为锚点，按 GIA 原生父先子后顺序填写全部模板及子控件。它不是全体旧 GUID 加固定偏移；服务端界面和脚本不参与，越界或与范围外控件/脚本冲突会整批拒绝。变更账本中的同一 `batchId` 代表同时映射，处理 Lua 引用时不可按数字逐条替换。Web/DSH 有对应的默认关闭复选框及区间预览。规则依据与适用边界见 [模板层序与索引校准](../studio/docs/client-template-order.md#imported-index-calibration)。
 

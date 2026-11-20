@@ -534,7 +534,12 @@ export function createStudio(seed, options = {}) {
   function setControlGuid(op) {
     const project = checkRevision(op)
     const node = findNode(project.root, op.id ?? project.selectedId)
-    if (!node || node.kind === 'server-container') throw new Error('仅客户端控件或客户端控件模板允许修改索引')
+    if (!node) throw new Error('控件不存在，请重新选择后修改索引')
+    // The server asset has a real GIA container; the client asset's holder is
+    // only an authoring root and has no exported control identity.
+    if (node.kind === 'server-container' && activeAssetType !== SERVER_ASSET) {
+      throw new Error('客户端模板列表根节点不是真实控件，不能修改索引')
+    }
     const guid = controlGuid(op.guid)
     legacyControlGuid(node.guid)
     if (op.autoFillClientGuids !== undefined && typeof op.autoFillClientGuids !== 'boolean') {

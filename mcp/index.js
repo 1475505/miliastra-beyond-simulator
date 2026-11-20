@@ -94,7 +94,7 @@ const tools = [
   },
   {
     name: 'qxqy_studio_patch',
-    description: '修改指定工程。op 必须包含 expectedRevision；冲突时先重新 get 再重算。客户端控件索引用 setControlGuid（id、guid），修改后必须语义核对并更新 Lua 引用；完成后用 acknowledgeControlGuidChanges（changeIds）确认记录，禁止只改索引或盲目替换全部同值数字。',
+    description: '修改指定工程。op 必须包含 expectedRevision；冲突时先重新 get 再重算。控件索引用 setControlGuid（id、guid），支持服务端客户端控件容器、客户端控件及模板；修改后必须语义核对并更新 Lua 引用，完成后用 acknowledgeControlGuidChanges（changeIds）确认记录，禁止只改索引或盲目替换全部同值数字。',
     inputSchema: objectSchema({
       ...handleProperty,
       op: { type: 'object', description: 'studio.patch 操作对象，例如 {"op":"set","id":"...","key":"text","value":"...","expectedRevision":1}。', additionalProperties: true },

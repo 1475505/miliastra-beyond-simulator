@@ -493,6 +493,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
           e('div', { className: 'qxsim-script-footer', style: { marginTop: 16 } }, e('span', null, draft?.dirty ? t('有未保存的修改') : (notice || t('保存后会写入当前存档，下次试玩生效'))), e('span', { className: 'spacer' }))))
     }
     function ControlGuidEditor({ inspector, autofill, onSave }) {
+      const label = inspector.kind === 'server-container' ? t('服务端控件索引') : t('客户端控件索引')
       const [draft, setDraft] = React.useState(String(inspector.guid ?? ''))
       const [automatic, setAutomatic] = React.useState(false)
       const [busy, setBusy] = React.useState(false)
@@ -516,9 +517,9 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       }
       return e('form', { onSubmit: submit, 'data-quick-start-target': 'control-guid', style: { marginTop: 8 } },
         e('label', { className: 'qxsim-field' },
-          e('span', { className: 'qxsim-field-label' }, t('客户端控件索引')),
+          e('span', { className: 'qxsim-field-label' }, label),
           e('div', { style: { display: 'flex', gap: 6 } },
-            e('input', { type: 'text', inputMode: 'numeric', 'aria-label': t('客户端控件索引'), value: draft, disabled: busy, onChange: (event) => { setDraft(event.target.value); setError('') }, onKeyDown: (event) => { if (event.key === 'Escape') { setDraft(String(inspector.guid)); setError('') } } }),
+            e('input', { type: 'text', inputMode: 'numeric', 'aria-label': label, value: draft, disabled: busy, onChange: (event) => { setDraft(event.target.value); setError('') }, onKeyDown: (event) => { if (event.key === 'Escape') { setDraft(String(inspector.guid)); setError('') } } }),
             e('button', { type: 'submit', className: 'qxsim-action', disabled: busy || (!automatic && draft.trim() === String(inspector.guid)) || (automatic && !validRange) }, busy ? t('保存中') : t('修改')))),
         canAutofill ? e('label', { style: { display: 'flex', gap: 6, alignItems: 'center', margin: '6px 0' } },
           e('input', { type: 'checkbox', checked: automatic, disabled: busy, onChange: (event) => setAutomatic(event.target.checked) }), t('自动修改其他客户端索引值')) : null,
@@ -937,6 +938,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
       }
       const clientTemplates = snap.asset?.type === 'client-control-template'
       const canInspectorScript = Boolean(snap.inspector && snap.inspector.kind !== 'server-container')
+      const canEditControlGuid = Boolean(snap.inspector && (snap.inspector.kind !== 'server-container' || snap.asset?.type === 'server-control-template'))
       const canvasHiddenIds = new Set()
       for (const row of snap.tree || []) {
         if (hiddenCanvasIds[row.id] || (row.ancestorIds || []).some((id) => hiddenCanvasIds[id])) canvasHiddenIds.add(row.id)
@@ -1036,7 +1038,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
              e(MaskedControls, { boxes: renderBoxes, canvasWidth, canvasHeight, renderControl: item => renderControl(item, snap, canvasWidth, canvasHeight, effectiveZoom, fontFamily) }),
             selectionBox ? renderControl(selectionBox, snap, canvasWidth, canvasHeight, effectiveZoom, fontFamily, true) : null))), error ? e('div', { className: 'qxsim-status error' }, '⚠ ', t(error)) : e('div', { className: 'qxsim-status' }, e('span', null, t`● ${t(snap.asset?.label) || t('控件')}编辑`), e('span', null, notice || (selectedRow ? t`当前：${selectedRow.name}` : '')), e('span', { className: 'spacer' }), e('span', null, clientTemplates ? t('GIA 导出后可在 Lua 中按 prefabId 实例化') : t('字段在失焦或 Enter 时提交')))),
           e('aside', { className: 'qxsim-inspector', 'data-quick-start-target': 'inspector' }, snap.inspector ? e(React.Fragment, null,
-            e('div', { className: 'qxsim-inspector-head' }, e('div', { className: 'qxsim-inspector-line' }, e('span', { className: 'qxsim-kind' }, (KIND_META[snap.inspector.kind] || ['◇'])[0]), e('strong', null, t(snap.inspector.label)), clientTemplates && selectedRow?.depth === 0 ? e('span', { className: 'qxsim-template-tag' }, t('可实例化')) : null), e('div', { className: 'qxsim-node-id' }, clientTemplates && selectedRow?.depth === 0 ? t('模板索引 ') : t('控件 GUID '), e('code', null, snap.inspector.guid ?? snap.inspector.id), ' · ', selectedRow?.name || t('节点')), snap.inspector.kind !== 'server-container' ? e(ControlGuidEditor, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, autofill: snap.clientGuidAutofill, onSave: (id, guid, automatic) => changeControlGuid(id, guid, snap.asset.type, automatic) }) : null),
+            e('div', { className: 'qxsim-inspector-head' }, e('div', { className: 'qxsim-inspector-line' }, e('span', { className: 'qxsim-kind' }, (KIND_META[snap.inspector.kind] || ['◇'])[0]), e('strong', null, t(snap.inspector.label)), clientTemplates && selectedRow?.depth === 0 ? e('span', { className: 'qxsim-template-tag' }, t('可实例化')) : null), e('div', { className: 'qxsim-node-id' }, clientTemplates && selectedRow?.depth === 0 ? t('模板索引 ') : t('控件 GUID '), e('code', null, snap.inspector.guid ?? snap.inspector.id), ' · ', selectedRow?.name || t('节点')), canEditControlGuid ? e(ControlGuidEditor, { key: `${snap.asset.type}:${snap.inspector.id}`, inspector: snap.inspector, autofill: snap.clientGuidAutofill, onSave: (id, guid, automatic) => changeControlGuid(id, guid, snap.asset.type, automatic) }) : null),
             clientTemplates && selectedRow ? e('div', { className: 'qxsim-section-body' },
               e('button', { className: 'qxsim-action qxsim-export-single', title: t('导出当前客户端控件及其子树'), onClick: () => {
                 void exportFile('gia-partial', 'client-control-template', { controlIds: [selectedRow.id], includeScripts: true }).catch(() => {})
