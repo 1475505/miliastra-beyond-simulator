@@ -9,6 +9,7 @@ import { createRequire } from 'node:module'
 import { build } from 'esbuild'
 import { startTestBrowser } from './browser-helper.mjs'
 import { editorMaskProject, maskScenes, maskSamples, maskAlphas, contourSamples, contourAlphas, contourScene } from '../../studio/test/fixtures/image-mask.mjs'
+import { imageTiltFixture } from '../../studio/test/fixtures/image-tilt.mjs'
 import { renderScenePng, flattenScenePaint } from '../../studio/host-png.js'
 import { createStudio } from '../../studio/index.js'
 import { createWebServer } from '../server.js'
@@ -18,7 +19,7 @@ import { imageAssetKey } from '../../studio/assets/catalog.js'
 // Native Canvas instances must come from the same module as Host PNG.
 const { createCanvas, loadImage } = createRequire(new URL('../../studio/package.json', import.meta.url))('@napi-rs/canvas')
 
-test('GPU and PNG agree on grouped masks, flat fallback, empty masks and viewport updates', { skip: !process.env.QXQY_BROWSER, timeout: 90_000 }, async t => {
+test('GPU and PNG agree on hierarchy projection, masks and viewport updates', { skip: !process.env.QXQY_BROWSER, timeout: 90_000 }, async t => {
   const bundle = await build({ stdin: { resolveDir: fileURLToPath(new URL('../../', import.meta.url)), sourcefile: 'mask-test.js', contents: `
 import { PixiPlayRenderer } from './studio/play/pixi-renderer.js';
 import { refreshBrowserImage } from './studio/assets/browser.js';
@@ -139,6 +140,63 @@ renderer.ready.then(() => window.ready = true);
       assert.equal(p[2], 0, 'no abandoned white clip graphic')
     })
   }
+  const tilted = imageTiltFixture(t)
+  const tiltSamples = [[58, 80], [81, 80], [120, 80], [159, 80], [182, 80]]
+  const [clear, cyan, red, yellow] = [[0, 0, 0, 0], [55, 203, 231, 255], [255, 0, 0, 255], [255, 255, 0, 255]]
+  const original = [clear, red, cyan, yellow, clear]
+  let tiltScene = tilted.scene()
+  const sampleTilt = scene => browser.evaluate(`window.sample(${JSON.stringify(scene)},false,${JSON.stringify(tiltSamples)})`)
+  assert.deepEqual(await sampleTilt(tiltScene), original)
+  for (const [change, expected] of [
+    [() => tilted.lua('Pose', 45, 45), Array(5).fill(clear)],
+    [() => tilted.lua('Pose', 45, -45), original],
+    [() => tilted.lua('SetDepth', 2), [red, cyan, cyan, cyan, yellow]],
+    [() => { tilted.lua('SetDepth', 1); tilted.lua('Pose', 90, -90) }, original],
+    [() => tilted.lua('Pose', 90, 90), [clear, yellow, cyan, red, clear]],
+    [() => tilted.lua('Pose', 0, 0), original],
+  ]) {
+    change()
+    tiltScene = tilted.scene(tiltScene.revision)
+    assert.equal(tiltScene.reset, false)
+    assert.deepEqual(await sampleTilt(tiltScene), expected)
+  }
+
+  // Separate projected planes: viewport x=110..130, image mask x=85..125
+  // with an 8-unit on-screen feather. The face behind them remains face-on.
+  const projected = maskScenes().grid
+  const [, viewport, mask, face] = projected.nodes
+  mask.group = true
+  const plane = (a, tx = 0) => ({ a, b: 0, c: 0, d: 1, tx, ty: 0 })
+  viewport.projectedMatrix = plane(.5)
+  mask.projectedMatrix = plane(.4, -15)
+  face.projectedMatrix = plane(1)
+  const projectedSamples = [[89, 80], [112, 80], [121, 80], [128, 80], [135, 80]]
+  for (const flat of [true, false]) await check(projected, [0, 255, 112, 0, 0], flat, projectedSamples)
+  await browser.evaluate(`window.tiltMaskTexture = renderer.nodes.get('mask').__imageMask.texture;void 0`)
+  const deltaAlphas = async changed => {
+    const delta = { format: 'tree-v1', reset: false, changed }
+    const pixels = await browser.evaluate(`window.sample(${JSON.stringify(delta)},false,${JSON.stringify(projectedSamples)})`)
+    return pixels.map(p => p[3])
+  }
+  // Projection-only movement must not rebuild the soft edge raster.
+  mask.projectedMatrix = plane(.4, -7)
+  const movedAlphas = await deltaAlphas([mask])
+  for (const [i, alpha] of [0, 255, 255, 143, 0].entries()) {
+    assert.ok(Math.abs(movedAlphas[i] - alpha) <= 2, `moved mask alpha at ${projectedSamples[i]}`)
+  }
+  assert.equal(await browser.evaluate(`renderer.nodes.get('mask').__imageMask.texture === tiltMaskTexture`), true)
+  // The same backend must not treat an edge-on mask as a singular parent
+  // transform: inverted empty coverage keeps the independently turned face.
+  mask.projectedMatrix = plane(0)
+  assert.deepEqual(await deltaAlphas([mask]), [0, 0, 0, 0, 0])
+  mask.reverseMaskArea = true
+  assert.deepEqual(await deltaAlphas([mask]), [0, 255, 255, 255, 0])
+  for (const flat of [true, false]) await check(projected, [0, 255, 255, 255, 0], flat, projectedSamples)
+  viewport.projectedMatrix = plane(0)
+  assert.deepEqual(await deltaAlphas([viewport]), [0, 0, 0, 0, 0])
+  viewport.projectedMatrix = plane(.5)
+  assert.deepEqual(await deltaAlphas([viewport]), [0, 255, 255, 255, 0])
+
   const textureScene = contourScene('sprite', { imageId: 101001, imageType: 'Basic' })
   const textureMask = textureScene.nodes.find(n => n.id === 'mask')
   const textureSamples = [[60, 80], [82, 80], [120, 80], [169, 80]]

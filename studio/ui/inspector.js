@@ -3,12 +3,13 @@ import {
   applyMatrix,
   canvasBox,
   classifyAnchor,
-  composeRectMatrix,
+  composeRectSpace,
   computeRect,
   identityMatrix,
   invertMatrix,
   inspectorFromRect,
   platformOfPreset,
+  projectRectSpace,
   transformedRectMetrics,
 } from './layout.js'
 import { readCurrentTransform } from './sync.js'
@@ -31,15 +32,14 @@ export function painterBoxes(root, boxes) {
 export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId), keyHintDevice = 'auto') {
   const canvas = canvasBox(canvasId)
   const boxes = {}
-  function rec(node, parentBox, parentMatrix, parentVisible = true, masks = []) {
+  function rec(node, parentBox, parentSpace, parentVisible = true, masks = []) {
     const transform = getPlatformTransform(node.transformByPlatform, platform)
     const box = computeRect(parentBox, transform)
     // A server container is an authoring-only bridge to the client root: its
     // rect is deliberately skipped for child layout, so skip its visual
     // transform as well.
-    const matrix = node.kind === 'server-container'
-      ? parentMatrix
-      : composeRectMatrix(parentMatrix, box, transform)
+    const space = node.kind === 'server-container' ? parentSpace : composeRectSpace(parentSpace, box, transform)
+    const matrix = space ? projectRectSpace(space) : identityMatrix()
     const render = transformedRectMetrics(box, matrix)
     const visibleInHierarchy = parentVisible && node.visible !== false
     const mask = node.kind === 'image' && node.enableMask === true
@@ -113,9 +113,9 @@ export function layoutTree(root, canvasId, platform = platformOfPreset(canvasId)
       } : {}),
     }
     const childParent = node.kind === 'server-container' ? parentBox : box
-    for (const child of node.children || []) rec(child, childParent, matrix, visibleInHierarchy, nextMasks)
+    for (const child of node.children || []) rec(child, childParent, space, visibleInHierarchy, nextMasks)
   }
-  rec(root, canvas, identityMatrix())
+  rec(root, canvas, null)
   return { canvas, boxes }
 }
 

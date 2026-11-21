@@ -1,3 +1,5 @@
+import { applyMatrix, hasPlaneArea } from '../ui/layout.js'
+
 // Shared geometry in local, top-left/y-down coordinates, centered on a control.
 export function scrollBarGeometry(scroll, width, height) {
   if (!scroll?.showBar || scroll.max <= 0 || width <= 0 || height <= 0) return null
@@ -23,8 +25,17 @@ export function visibleTextLines(scroll, height) {
   return { text: scroll.lines.slice(first, last).join('\n'), y: first * scroll.lineHeight }
 }
 
-// Convex viewport intersections for the legacy flattened Pixi paint path.
+// A centered viewport rectangle on its own projected plane, not on the
+// (possibly differently tilted) plane of a child it clips.
+export function rectClipPolygon(width, height, matrix) {
+  if (!(width > 0 && height > 0) || (matrix && !hasPlaneArea(matrix))) return []
+  const w = width / 2, h = height / 2
+  return [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => matrix ? applyMatrix(matrix, x, y) : { x, y })
+}
+
+// Convex viewport intersections for Pixi (either winding is allowed).
 export function intersectClipPolygons(polygons) {
+  if (polygons.some(polygon => polygon.length < 3)) return []
   let output = polygons[0] || []
   const cross = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)
   for (const clip of polygons.slice(1)) {

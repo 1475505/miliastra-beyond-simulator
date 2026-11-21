@@ -1,12 +1,12 @@
 import { createRequire } from 'node:module'
 import { clipImageFill, imageFillClip, imageFillRect } from './play/image-fill.js'
 import { imageMaskSpec, createMaskSampler, groupMaskedPaint } from './play/image-mask.js'
-import { applyMatrix, invertMatrix } from './ui/layout.js'
+import { applyMatrix, invertMatrix, multiplyMatrix } from './ui/layout.js'
 import { tintedImage } from './assets/raster.js'
 import { rasterizeSlices, resolveImageType } from './assets/image-stretch.js'
 import { imageAssetKey } from './assets/catalog.js'
 import { drawPrimitiveShape } from './assets/primitives.js'
-import { scrollBarGeometry } from './play/scroll-geometry.js'
+import { rectClipPolygon, scrollBarGeometry } from './play/scroll-geometry.js'
 import { localFontStack } from './host/local-font.js'
 import { textLayout } from './play/text-layout.js'
 import { drawRichText } from './play/rich-text-paint.js'
@@ -228,6 +228,7 @@ function drawPrimitive(ctx, item, width, height, assets) {
 }
 
 function drawPaintItem(ctx, item, canvasHeight, assets) {
+  if (item.clipPolygons?.some(polygon => polygon.length < 3)) return
   const width = Math.max(0, finite(item.sourceWidth, finite(item.width)))
   const height = Math.max(0, finite(item.sourceHeight, finite(item.height)))
   ctx.save()
@@ -278,19 +279,7 @@ function drawStageBackground(ctx, width, height, { checker = false } = {}) {
   ctx.fillRect(0, 0, width, height)
 }
 
-function multiplyAffine(outer, inner) {
-  return {
-    a: outer.a * inner.a + outer.c * inner.b,
-    b: outer.b * inner.a + outer.d * inner.b,
-    c: outer.a * inner.c + outer.c * inner.d,
-    d: outer.b * inner.c + outer.d * inner.d,
-    tx: outer.a * inner.tx + outer.c * inner.ty + outer.tx,
-    ty: outer.b * inner.tx + outer.d * inner.ty + outer.ty,
-  }
-}
-
-function sceneLocalMatrix(node) {
-  const raw = node?.matrix
+function sceneMatrix(raw) {
   if (!raw || typeof raw !== 'object') return { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }
   return {
     a: finite(raw.a, 1),
@@ -326,8 +315,9 @@ export function flattenScenePaint(scene) {
     if (!SCENE_PAINT_KINDS.has(node.kind)) return
     const width = Math.abs(finite(node.sourceWidth) * Math.hypot(world.a, world.b))
     const height = Math.abs(finite(node.sourceHeight) * Math.hypot(world.c, world.d))
+    const { projectedMatrix, ...paint } = node
     out.push({
-      ...node,
+      ...paint,
       left: world.tx - width / 2,
       bottom: world.ty - height / 2,
       width,
@@ -338,25 +328,20 @@ export function flattenScenePaint(scene) {
       ...(masks.length ? { masks } : {}),
     })
   }
-  function visit(parentKey, parentWorld, parentNode = null, clips = [], masks = []) {
+  function visit(parentKey, carrier, parentWorld = null, parentNode = null, clips = [], masks = []) {
     const list = children.get(parentKey) || []
     for (let i = list.length - 1; i >= 0; i -= 1) {
       const node = list[i]
-      const world = parentWorld
-        ? multiplyAffine(parentWorld, sceneLocalMatrix(node))
-        : sceneLocalMatrix(node)
+      const local = sceneMatrix(node.projectedMatrix || node.matrix)
+      const world = carrier ? multiplyMatrix(carrier, local) : local
       let itemClips = clips
       if (node.clipToParent && parentWorld && parentNode) {
-        const w = parentNode.sourceWidth / 2, h = parentNode.sourceHeight / 2
-        itemClips = [...clips, [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => ({
-          x: parentWorld.a * x + parentWorld.c * y + parentWorld.tx,
-          y: parentWorld.b * x + parentWorld.d * y + parentWorld.ty,
-        }))]
+        itemClips = [...clips, rectClipPolygon(parentNode.sourceWidth, parentNode.sourceHeight, parentWorld)]
       }
       const spec = imageMaskSpec(node, world)
       const nextMasks = spec ? [...masks, spec] : masks
       if (node.kind !== 'grid') emit(node, world, itemClips, nextMasks)
-      visit(String(node.id), world, node, itemClips, nextMasks)
+      visit(String(node.id), node.projectedMatrix ? carrier : world, world, node, itemClips, nextMasks)
       if (node.kind === 'grid') emit(node, world, itemClips, nextMasks)
     }
   }

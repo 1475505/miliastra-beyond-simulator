@@ -6,16 +6,16 @@ import { CANVAS_PRESETS, imagePrimitive } from '../constants.js'
 import {
   applyMatrix,
   canvasBox,
-  composeRectMatrix,
+  composeRectSpace,
   computeRect,
-  identityMatrix,
   invertMatrix,
-  localRectMatrix,
+  projectRectSpace,
+  rectScenePose,
 } from '../ui/layout.js'
 import { recordEvent } from '../autotest/format.js'
 import { textWindowMetrics, clamp } from './scroll.js'
 import { textLayout } from './text-layout.js'
-import { scrollBarGeometry } from './scroll-geometry.js'
+import { rectClipPolygon, scrollBarGeometry } from './scroll-geometry.js'
 import { audioDuration } from '../assets/audio-catalog.js'
 import { uiVfxAsset } from '../assets/ui-vfx-catalog.js'
 import { imageSourceName, imageTypeAccess } from '../assets/catalog.js'
@@ -85,14 +85,14 @@ export function runtimeLayout(session) {
 // pointer hit testing.
 export function runtimeTransforms(session, boxes = runtimeLayout(session)) {
   const transforms = new Map()
-  function rec(control, parentMatrix) {
+  function rec(control, parentSpace) {
     const box = boxes.get(control.Id)
     if (!box) return
-    const matrix = composeRectMatrix(parentMatrix, box, control)
-    transforms.set(control.Id, matrix)
-    for (const child of control.children) rec(child, matrix)
+    const space = composeRectSpace(parentSpace, box, control)
+    transforms.set(control.Id, projectRectSpace(space))
+    for (const child of control.children) rec(child, space)
   }
-  for (const root of session.runtime.roots) rec(root, identityMatrix())
+  for (const root of session.runtime.roots) rec(root, null)
   return transforms
 }
 
@@ -386,7 +386,7 @@ export function paintList(session, boxes = runtimeLayout(session)) {
     const children = control.children || []
     for (let i = children.length - 1; i >= 0; i -= 1) {
       const itemClips = control._gridItems?.includes(children[i])
-        ? [...clips, [[box.left, box.bottom], [box.right, box.bottom], [box.right, box.top], [box.left, box.top]].map(([x, y]) => applyMatrix(matrix, x, y))]
+        ? [...clips, rectClipPolygon(box.width, box.height, transform.matrix)]
         : clips
       rec(children[i], itemClips, nextMasks)
     }
@@ -439,24 +439,13 @@ function visualFields(control, box) {
   return fields
 }
 
-function localCenterMatrix(box, control, parentBox) {
-  const local = localRectMatrix(box, control)
-  const center = applyMatrix(local, box.centerX, box.centerY)
-  return {
-    a: local.a,
-    b: local.b,
-    c: local.c,
-    d: local.d,
-    tx: center.x - (parentBox ? parentBox.centerX : 0),
-    ty: center.y - (parentBox ? parentBox.centerY : 0),
-  }
-}
-
 function sceneFingerprint(node) {
   const m = node.matrix
+  const p = node.projectedMatrix
   return [
     node.parent, node.z, node.group ? 1 : 0,
     m.a, m.b, m.c, m.d, m.tx, m.ty,
+    p ? [p.a, p.b, p.c, p.d, p.tx, p.ty].join(',') : '',
     node.kind, node.name, node.sourceWidth, node.sourceHeight, node.pressed,
     node.primitive, node.imageColor, node.imageId, node.imageSource, node.imageType,
     node.fillType, node.fillHorizontalType, node.fillVerticalType, node.fillRadial90Type, node.fillRadialType, node.fillAmount,
@@ -469,7 +458,7 @@ function sceneFingerprint(node) {
   ].join('\t')
 }
 
-function sceneNode(control, parentId, parentBox, box, z, paintedChildren) {
+function sceneNode(control, parentId, box, pose, z, paintedChildren) {
   // tree-v1 z is the stored front-to-back tree position, not Lua's numeric
   // sibling index. Keep this wire convention; renderers negate the position.
   return {
@@ -477,7 +466,10 @@ function sceneNode(control, parentId, parentBox, box, z, paintedChildren) {
     parent: parentId,
     z,
     group: paintedChildren >= 16,
-    matrix: localCenterMatrix(box, control, parentBox),
+    matrix: pose.matrix,
+    // Optional tree-v1 override in the nearest planar ancestor's coordinates.
+    // A tilted node's hierarchy carrier stays untransformed; its face doesn't.
+    ...(pose.spatial ? { projectedMatrix: projectRectSpace(pose.spatial) } : {}),
     ...visualFields(control, box),
   }
 }
@@ -486,6 +478,7 @@ function collectSceneNodes(session) {
   const rootBox = canvasBox({ width: session.runtime.canvasWidth, height: session.runtime.canvasHeight })
   const include = new Set()
   const childCounts = new Map()
+  const spaces = new Map()
   const boxes = new Map()
   function mark(control, parentBox, parentActive) {
     const box = computeRect(parentBox, control)
@@ -506,19 +499,21 @@ function collectSceneNodes(session) {
     childCounts.set(control.Id, paintedChildren)
     return true
   }
-  function emit(control, parentId, parentBox, z) {
+  function emit(control, parentId, parentBox, parentSpace, z) {
     if (!include.has(control.Id)) return
     const box = boxes.get(control.Id)
-    nodes.push(sceneNode(control, parentId, parentBox, box, z, childCounts.get(control.Id) || 0))
+    const pose = rectScenePose(box, control, parentBox, parentSpace)
+    if (pose.spatial) spaces.set(control.Id, pose.spatial)
+    nodes.push(sceneNode(control, parentId, box, pose, z, childCounts.get(control.Id) || 0))
     const children = control.children || []
-    for (let i = 0; i < children.length; i += 1) emit(children[i], control.Id, box, i)
+    for (let i = 0; i < children.length; i += 1) emit(children[i], control.Id, box, pose.spatial, i)
   }
   const nodes = []
   for (let i = 0; i < session.runtime.roots.length; i += 1) {
     mark(session.runtime.roots[i], rootBox, true)
-    emit(session.runtime.roots[i], null, null, i)
+    emit(session.runtime.roots[i], null, null, null, i)
   }
-  return { nodes, childCounts }
+  return { nodes, childCounts, spaces }
 }
 
 function clearPlayDirty(control) {
@@ -543,6 +538,7 @@ function collectDirtyScene(session, cache) {
     removed.push(id)
     cache.fingerprints.delete(id)
     cache.childCounts.delete(id)
+    cache.spaces.delete(id)
     count -= 1
   }
   session.runtime._playRemoved = []
@@ -552,31 +548,37 @@ function collectDirtyScene(session, cache) {
       removed.push(control.Id)
       cache.fingerprints.delete(control.Id)
       cache.childCounts.delete(control.Id)
+      cache.spaces.delete(control.Id)
       count -= 1
     }
     const children = control.children
     for (let i = 0; i < children.length; i += 1) removeTree(children[i])
   }
 
-  function rec(control, parentBox, parentId, z, parentActive, forceDeep) {
-    const deep = forceDeep || control._playDeepDirty === true
-    const dirty = deep || control._playDirty === true
-    const walkKids = deep || control._playChildDirty === true
-    if (!dirty && !walkKids) return
+  function rec(control, parentBox, parentSpace, parentId, z, forceDeep) {
+    const layoutDirty = forceDeep || control._playDeepDirty === true
+    const dirty = layoutDirty || control._playDirty === true
+    if (!dirty && !control._playChildDirty) return
 
-    const active = parentActive && control.active !== false
-    if (!active || control.visible === false) {
+    if (control.active === false || control.visible === false) {
       removeTree(control)
       return
     }
 
     const box = computeRect(parentBox, control)
+    const pose = rectScenePose(box, control, parentId == null ? null : parentBox, parentSpace)
+    const previousSpace = cache.spaces.get(control.Id) || null
+    // A depth-only change (e.g. scaleZ) can leave this face unchanged but alter
+    // a tilted descendant. Track the full pose separately from the wire hash.
+    const spaceChanged = pose.spatial === null ? previousSpace !== null
+      : !previousSpace || pose.spatial.some((v, i) => v !== previousSpace[i])
+    const deep = layoutDirty || spaceChanged
     let paintedChildren = cache.childCounts.get(control.Id) || 0
-    if (walkKids) {
+    if (deep || control._playChildDirty) {
       paintedChildren = 0
       const children = control.children
       for (let i = 0; i < children.length; i += 1) {
-        rec(children[i], box, control.Id, i, true, deep)
+        rec(children[i], box, pose.spatial, control.Id, i, deep)
         if (cache.fingerprints.has(children[i].Id)) paintedChildren += 1
       }
     }
@@ -587,6 +589,7 @@ function collectDirtyScene(session, cache) {
         removed.push(control.Id)
         cache.fingerprints.delete(control.Id)
         cache.childCounts.delete(control.Id)
+        cache.spaces.delete(control.Id)
         count -= 1
       }
       return
@@ -594,10 +597,12 @@ function collectDirtyScene(session, cache) {
 
     const prevCount = cache.childCounts.get(control.Id)
     cache.childCounts.set(control.Id, paintedChildren)
+    if (pose.spatial) cache.spaces.set(control.Id, pose.spatial)
+    else cache.spaces.delete(control.Id)
     const groupChanged = (paintedChildren >= 16) !== ((prevCount || 0) >= 16)
-    if (!dirty && !groupChanged && cache.fingerprints.has(control.Id)) return
+    if (!dirty && !spaceChanged && !groupChanged && cache.fingerprints.has(control.Id)) return
 
-    const item = sceneNode(control, parentId, parentBox === rootBox ? null : parentBox, box, z, paintedChildren)
+    const item = sceneNode(control, parentId, box, pose, z, paintedChildren)
     const fp = sceneFingerprint(item)
     if (cache.fingerprints.get(item.id) === fp) return
     if (!cache.fingerprints.has(item.id)) count += 1
@@ -606,7 +611,7 @@ function collectDirtyScene(session, cache) {
   }
 
   for (let i = 0; i < session.runtime.roots.length; i += 1) {
-    rec(session.runtime.roots[i], rootBox, null, i, true, false)
+    rec(session.runtime.roots[i], rootBox, null, null, i, false)
   }
   cache.count = count
   return { changed, removed, count }
@@ -622,13 +627,13 @@ function sceneView(session, sceneRev) {
   let cache = session.viewCache
   const fresh = !cache
   if (!cache) {
-    const { nodes, childCounts } = collectSceneNodes(session)
+    const { nodes, childCounts, spaces } = collectSceneNodes(session)
     const rev = nextRevision()
     cache = session.viewCache = {
       rev, baseRev: rev, history: [], historyIds: 0,
       nodes: new Map(nodes.map(node => [node.id, node])),
       fingerprints: new Map(nodes.map(node => [node.id, sceneFingerprint(node)])),
-      childCounts, count: nodes.length,
+      childCounts, spaces, count: nodes.length,
     }
     session.runtime._playRemoved = []
   } else {
@@ -884,15 +889,14 @@ export function hitPlayControl(session, x, y) {
   prepareScroll(session)
   const rootBox = canvasBox({ width: session.runtime.canvasWidth, height: session.runtime.canvasHeight })
   const memo = new Map()
-  function rec(control, parentBox, parentMatrix, parentActive) {
-    if (!parentActive || control.active === false || control.visible === false) return null
+  function rec(control, parentBox, parentSpace) {
+    if (control.active === false || control.visible === false) return null
     if (!subtreeCanHit(control, memo)) return null
     const box = computeRect(parentBox, control)
-    const matrix = composeRectMatrix(parentMatrix, box, control)
-    const inverse = invertMatrix(matrix)
-    if (!inverse) return null
-    const local = applyMatrix(inverse, x, y)
-    const inside = local.x >= box.left && local.x <= box.right && local.y >= box.bottom && local.y <= box.top
+    const space = composeRectSpace(parentSpace, box, control)
+    const inverse = invertMatrix(projectRectSpace(space))
+    const local = inverse && applyMatrix(inverse, x, y)
+    const inside = local && local.x >= box.left && local.x <= box.right && local.y >= box.bottom && local.y <= box.top
     // A layout host forwards the pointer to its children even when the pointer is
     // outside its own rect: on device only a mask clips raycasts, so a zero-size
     // anchor container must not swallow hits on children that overflow it. The
@@ -906,17 +910,16 @@ export function hitPlayControl(session, x, y) {
     }
     if (pointerRecursesInto(control)) {
       for (let i = 0; i < control.children.length; i += 1) {
-        const child = rec(control.children[i], box, matrix, true)
+        const child = rec(control.children[i], box, space)
         if (child) return child
       }
     }
     if (!inside) return null
     return acceptsPlayPointer(control) ? control : null
   }
-  const identity = identityMatrix()
   // Later roots paint over earlier ones; hit testing must match that cover order.
   for (let i = session.runtime.roots.length - 1; i >= 0; i -= 1) {
-    const hit = rec(session.runtime.roots[i], rootBox, identity, true)
+    const hit = rec(session.runtime.roots[i], rootBox, null)
     if (hit) return hit
   }
   return null

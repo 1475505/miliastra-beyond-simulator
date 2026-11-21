@@ -2,7 +2,8 @@ import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics
 import { imageFillClip } from './image-fill.js'
 import { imageMaskSpec, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
 import { maskRasterSize } from './image-mask-raster.js'
-import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './scroll-geometry.js'
+import { scrollBarGeometry, visibleTextLines, intersectClipPolygons, rectClipPolygon } from './scroll-geometry.js'
+import { applyMatrix, hasPlaneArea, identityMatrix, invertMatrix } from '../ui/layout.js'
 import { loadBrowserImageAsset, subscribeImageRefresh } from '../assets/browser.js'
 import { sliceRegions, resolveImageType } from '../assets/image-stretch.js'
 import { imageAssetKey, imageSourceName } from '../assets/catalog.js'
@@ -19,9 +20,10 @@ import 'pixi.js/unsafe-eval'
 
 // The Runtime owns all gameplay semantics.  This module is intentionally a
 // one-way projection of its compact paint list / hierarchical scene into a
-// WebGL tree. Parent rotation/translation stays on the parent Container so a
-// whale-girl of thousands of primitives can tilt without rewriting children.
+// WebGL tree. Planar transforms stay on the parent Container. Tilted faces
+// have already been composed in 3D; the tree still owns z-order and clipping.
 const PAINT_KINDS = new Set(['image', 'textbox', 'textwindow', 'button', 'grid', 'keyhint'])
+const IDENTITY = identityMatrix()
 
 function argb(value, fallback = 0xffffffff) {
   const raw = Number(value == null ? fallback : value) >>> 0
@@ -40,7 +42,9 @@ function affine(item) {
   const raw = item?.matrix
   if (!raw || typeof raw !== 'object') return null
   const values = [raw.a, raw.b, raw.c, raw.d, raw.tx, raw.ty].map(Number)
-  return values.every(Number.isFinite) ? values : null
+  if (!values.every(Number.isFinite)) return null
+  const [a, b, c, d, tx, ty] = values
+  return { a, b, c, d, tx, ty }
 }
 
 function textAnchor(item) {
@@ -135,7 +139,7 @@ export function createCircleTexture(size) {
 
 /**
  * WebGL-only display adapter for the deterministic Runtime.
- * Hierarchical scene nodes keep parent transforms on the parent Container;
+ * Hierarchical scene nodes keep planar transforms on the parent Container;
  * the flattened paint list remains for tests and fallbacks.
  */
 export class PixiPlayRenderer {
@@ -483,16 +487,20 @@ export class PixiPlayRenderer {
       root.x = finite(item.left) + width / 2
       root.y = this.canvasHeight - finite(item.bottom) - height / 2
       root.rotation = -finite(item.rotationZ) * Math.PI / 180
+      root.skew.set(0)
       root.scale.set(1)
       return
     }
-    const [a, b, c, d, tx, ty] = matrix
+    this.setPlaneMatrix(root, matrix, nested)
+  }
+
+  setPlaneMatrix(target, { a, b, c, d, tx, ty }, nested, sx = 1, sy = sx) {
     // Runtime matrices use bottom-left / Y-up coordinates. Pixi's local
     // and stage coordinates are Y-down, hence the signs on b/c and ty.
     // Nested nodes are already relative to a converted parent, so ty flips
     // about 0 rather than the canvas height.
-    this.scratch.set(a, -b, -c, d, tx, nested ? -ty : this.canvasHeight - ty)
-    root.setFromMatrix(this.scratch)
+    this.scratch.set(a * sx, -b * sx, -c * sy, d * sy, tx, nested ? -ty : this.canvasHeight - ty)
+    target.setFromMatrix(this.scratch)
   }
 
   updateNode(root, item, { nested = false } = {}) {
@@ -506,7 +514,12 @@ export class PixiPlayRenderer {
       // and recreating the same geometry after a size/color update.
       root.__visualKey = visualKey
     }
-    if (root.__visual) root.__visual.scale.set(item.pressed ? 0.98 : 1)
+    const projected = item.projectedMatrix
+    const pressedScale = item.pressed ? .98 : 1
+    if (root.__visual) {
+      if (projected || root.__projected) this.setPlaneMatrix(root.__visual, projected || IDENTITY, true, pressedScale)
+      else root.__visual.scale.set(pressedScale)
+    }
     const circle = root.__visual?.__circle
     if (circle) {
       const diameter = Math.max(width, height)
@@ -518,14 +531,30 @@ export class PixiPlayRenderer {
       circle.alpha = color.alpha
       circle.visible = width > 0 && height > 0
     }
-    this.applyMatrix(root, item, nested)
+    // Keep the hierarchy, but transform only this face. A singular projected
+    // parent must not flatten (or hide) a child that turns back toward us.
+    if (projected) this.setPlaneMatrix(root, IDENTITY, nested)
+    else this.applyMatrix(root, item, nested)
     this.updateImageMask(root, item, width, height)
+    root.__projected = !!projected
+  }
+
+  positionImageMask(clip, matrix, width, height) {
+    const sx = clip instanceof Sprite ? width / clip.texture.orig.width : 1
+    const sy = clip instanceof Sprite ? height / clip.texture.orig.height : 1
+    this.setPlaneMatrix(clip, matrix, true, sx, sy)
   }
 
   updateImageMask(root, item, width, height) {
-    const spec = item.kind === 'image' ? imageMaskSpec({ ...item, sourceWidth: width, sourceHeight: height }, { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }) : null
-    const key = spec ? JSON.stringify(spec) : ''
-    if (root.__maskKey === key) return
+    const spec = item.kind === 'image' ? imageMaskSpec({ ...item, sourceWidth: width, sourceHeight: height }, IDENTITY) : null
+    const projected = item.projectedMatrix
+    const empty = !(width > 0 && height > 0) || (projected && !hasPlaneArea(projected))
+    const key = spec ? JSON.stringify([spec, !!empty]) : ''
+    if (root.__maskKey === key) {
+      const mask = root.__imageMask
+      if ((projected || root.__projected) && mask) this.positionImageMask(mask, projected || IDENTITY, width, height)
+      return
+    }
     root.__maskKey = key
     if (!root.__imageContent && spec) {
       const content = new Container()
@@ -537,7 +566,6 @@ export class PixiPlayRenderer {
     }
     const content = root.__imageContent
     if (!content) return
-    const empty = !(width > 0 && height > 0)
     content.visible = !spec || !empty || spec.reverseMaskArea
     // Inverse hard masks also use alpha sprites: the stencil mask bounds would
     // discard descendants outside the rectangle before inversion could run.
@@ -552,8 +580,7 @@ export class PixiPlayRenderer {
         && previous.texture.source.resource.width === textureWidth && previous.texture.source.resource.height === textureHeight) {
       paintMaskCanvas(previous.texture.source.resource, spec, asset, (w, h) => DOMAdapter.get().createCanvas(w, h))
       previous.texture.source.update()
-      previous.width = width
-      previous.height = height
+      this.positionImageMask(previous, projected || IDENTITY, width, height)
       content.setMask({ mask: previous, channel: 'alpha', inverse: spec.reverseMaskArea })
       return
     }
@@ -566,12 +593,11 @@ export class PixiPlayRenderer {
       const canvas = DOMAdapter.get().createCanvas(textureWidth, textureHeight)
       paintMaskCanvas(canvas, spec, asset, (w, h) => DOMAdapter.get().createCanvas(w, h))
       clip = new Sprite({ texture: new Texture({ source: new CanvasSource({ resource: canvas }) }), anchor: 0.5 })
-      clip.width = width
-      clip.height = height
     } else {
       clip = new Graphics().rect(-width / 2, -height / 2, width, height).fill(0xffffff)
     }
     clip.eventMode = 'none'
+    this.positionImageMask(clip, projected || IDENTITY, width, height)
     content.addChild(clip)
     content.setMask({ mask: clip, channel: 'alpha', inverse: spec.reverseMaskArea })
     root.__imageMask = clip
@@ -621,10 +647,10 @@ export class PixiPlayRenderer {
     const parent = this.nodes.get(item?.parent)?.__sceneItem
     let polygons = item?.clipPolygons || []
     if (!root.__flat && item?.clipToParent && parent) {
-      const w = parent.sourceWidth / 2, h = parent.sourceHeight / 2
-      polygons = [[[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => ({ x, y }))]
+      polygons = [rectClipPolygon(parent.sourceWidth, parent.sourceHeight, parent.projectedMatrix)]
     }
-    const key = JSON.stringify([polygons, item?.matrix])
+    const carrier = item?.projectedMatrix ? IDENTITY : affine(item)
+    const key = JSON.stringify([polygons, polygons.length ? carrier : null])
     if (root.__clipKey === key) return
     root.__clipKey = key
     root.mask = null
@@ -632,10 +658,9 @@ export class PixiPlayRenderer {
     root.__viewportClip = null
     root.visible = true
     if (!polygons.length) return
-    const values = affine(item)
-    if (!values || Math.abs(values[0] * values[3] - values[1] * values[2]) < 1e-8) { root.visible = false; return }
-    const matrix = new Matrix(...values).invert()
-    const points = intersectClipPolygons(polygons).flatMap(point => { const p = matrix.apply(point); return [p.x, -p.y] })
+    const inverse = carrier && invertMatrix(carrier)
+    if (!inverse) { root.visible = false; return }
+    const points = intersectClipPolygons(polygons).flatMap(point => { const p = applyMatrix(inverse, point.x, point.y); return [p.x, -p.y] })
     if (points.length < 6 || !points.every(Number.isFinite)) { root.visible = false; return }
     const clip = new Graphics().poly(points).fill({ color: 0xffffff, alpha: 1 })
     root.addChild(clip)

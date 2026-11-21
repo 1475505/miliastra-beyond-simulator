@@ -134,7 +134,7 @@ export function identityMatrix() {
 }
 
 /** Returns outer ∘ inner (apply inner first, then outer). */
-function multiplyMatrix(outer, inner) {
+export function multiplyMatrix(outer, inner) {
   return {
     a: outer.a * inner.a + outer.c * inner.b,
     b: outer.b * inner.a + outer.d * inner.b,
@@ -152,61 +152,108 @@ export function applyMatrix(matrix, x, y) {
   }
 }
 
+function determinant(matrix) {
+  return matrix.a * matrix.d - matrix.b * matrix.c
+}
+
+function hasArea(value) {
+  return Number.isFinite(value) && Math.abs(value) >= 1e-8
+}
+
+export function hasPlaneArea(matrix) {
+  return hasArea(determinant(matrix))
+}
+
 export function invertMatrix(matrix) {
-  const determinant = matrix.a * matrix.d - matrix.b * matrix.c
-  if (!Number.isFinite(determinant) || Math.abs(determinant) < 1e-8) return null
+  const det = determinant(matrix)
+  if (!hasArea(det)) return null
   return {
-    a: matrix.d / determinant,
-    b: -matrix.b / determinant,
-    c: -matrix.c / determinant,
-    d: matrix.a / determinant,
-    tx: (matrix.c * matrix.ty - matrix.d * matrix.tx) / determinant,
-    ty: (matrix.b * matrix.tx - matrix.a * matrix.ty) / determinant,
+    a: matrix.d / det,
+    b: -matrix.b / det,
+    c: -matrix.c / det,
+    d: matrix.a / det,
+    tx: (matrix.c * matrix.ty - matrix.d * matrix.tx) / det,
+    ty: (matrix.b * matrix.tx - matrix.a * matrix.ty) / det,
   }
 }
 
-/**
- * Maps a node's untransformed parent-space rectangle to its own transformed
- * space. Scale and rotation are both about the RectTransform pivot.
- */
-export function localRectMatrix(box, transform) {
+const clean = value => Math.abs(value) < 1e-12 ? 0 : value
+
+// Local rotation follows the Runtime's Z-X-Y convention (Ry * Rx * Rz),
+// with scale in local axes. Keep depth for the hierarchy, not for sorting.
+function rectPose(box, transform, centered, parentBox, forceSpatial) {
   const rotation = transform.rotation || { x: transform.localRotationX, y: transform.localRotationY, z: transform.localRotationZ }
-  const scale = transform.scale || { x: transform.localScaleX, y: transform.localScaleY }
+  const scale = transform.scale || { x: transform.localScaleX, y: transform.localScaleY, z: transform.localScaleZ }
   const pivot = transform.pivot || { x: transform.pivotX, y: transform.pivotY }
   const radians = num(rotation?.z) * Math.PI / 180
   const cos = Math.cos(radians)
   const sin = Math.sin(radians)
-  // ROTXY2 PC device: single-axis orthographic compression, edge-on at 90°,
-  // and visible mirrored backs. Mixed axes follow Runtime's Z-X-Y Euler
-  // convention (Ry * Rx * Rz); that composition remains simulator policy.
-  const rx = num(rotation?.x) * Math.PI / 180
-  const ry = num(rotation?.y) * Math.PI / 180
-  const cx = Math.cos(rx), sx = Math.sin(rx), cy = Math.cos(ry), sy = Math.sin(ry)
-  const clean = value => Math.abs(value) < 1e-12 ? 0 : value
+  const rx = (num(rotation?.x) % 360) * Math.PI / 180
+  const ry = (num(rotation?.y) % 360) * Math.PI / 180
+  const cx = rx ? Math.cos(rx) : 1, sx = rx ? Math.sin(rx) : 0
+  const cy = ry ? Math.cos(ry) : 1, sy = ry ? Math.sin(ry) : 0
   const scaleX = num(scale?.x, 1)
   const scaleY = num(scale?.y, 1)
   const pivotX = box.left + box.width * num(pivot?.x, 0.5)
   const pivotY = box.bottom + box.height * num(pivot?.y, 0.5)
-  const a = clean(cy * cos + sy * sx * sin) * scaleX
-  const b = clean(cx * sin) * scaleX
-  const c = clean(-cy * sin + sy * sx * cos) * scaleY
-  const d = clean(cx * cos) * scaleY
-  return {
-    a,
-    b,
-    c,
-    d,
-    tx: pivotX - a * pivotX - c * pivotY,
-    ty: pivotY - b * pivotX - d * pivotY,
+  const dx = (centered ? box.centerX : 0) - pivotX
+  const dy = (centered ? box.centerY : 0) - pivotY
+  const x = pivotX - (parentBox?.centerX ?? 0)
+  const y = pivotY - (parentBox?.centerY ?? 0)
+  const a = (cy * cos + sy * sx * sin) * scaleX
+  const b = cx * sin * scaleX
+  const c = (-cy * sin + sy * sx * cos) * scaleY
+  const d = cx * cos * scaleY
+  const matrix = { a: clean(a), b: clean(b), c: clean(c), d: clean(d), tx: x, ty: y }
+  matrix.tx += matrix.a * dx + matrix.c * dy
+  matrix.ty += matrix.b * dx + matrix.d * dy
+  if (!forceSpatial && !(centered && (rx || ry))) return { matrix, spatial: null }
+  const scaleZ = num(scale?.z, 1)
+  const zx = (-sy * cos + cy * sx * sin) * scaleX
+  const zy = (sy * sin + cy * sx * cos) * scaleY
+  const spatial = [
+    a, c, sy * cx * scaleZ, x + a * dx + c * dy,
+    b, d, -sx * scaleZ, y + b * dx + d * dy,
+    zx, zy, cy * cx * scaleZ, zx * dx + zy * dy,
+  ]
+  return { matrix, spatial }
+}
+
+// Row-major 3x4 affine matrices, with an implicit homogeneous last row.
+function multiplySpatial(outer, inner) {
+  const out = new Array(12)
+  for (let row = 0; row < 12; row += 4) {
+    for (let col = 0; col < 4; col += 1) {
+      out[row + col] = outer[row] * inner[col] + outer[row + 1] * inner[4 + col] + outer[row + 2] * inner[8 + col]
+    }
+    out[row + 3] += outer[row + 3]
   }
+  return out
+}
+
+/** Orthographic projection of the input plane z=0. */
+export function projectRectSpace(spatial) {
+  return { a: clean(spatial[0]), b: clean(spatial[4]), c: clean(spatial[1]), d: clean(spatial[5]), tx: clean(spatial[3]), ty: clean(spatial[7]) }
+}
+
+export function localRectMatrix(box, transform) {
+  return rectPose(box, transform, false, null, false).matrix
+}
+
+/** World pose in untransformed layout coordinates (anchors still use the original boxes). */
+export function composeRectSpace(parent, box, transform) {
+  const { spatial } = rectPose(box, transform, false, null, true)
+  return parent ? multiplySpatial(parent, spatial) : spatial
 }
 
 /**
- * Produces a world matrix for one RectTransform. `parentMatrix` is the final
- * transform of its parent; its layout rect remains deliberately unscaled.
+ * Center-relative scene pose. Planar ancestors can stay ordinary 2D groups:
+ * their Z basis has no XY component. Once a branch tilts, accumulate in 3D
+ * relative to the last planar ancestor (or the canvas) until each face projects.
  */
-export function composeRectMatrix(parentMatrix, box, transform) {
-  return multiplyMatrix(parentMatrix || identityMatrix(), localRectMatrix(box, transform))
+export function rectScenePose(box, transform, parentBox, parentSpatial) {
+  const { matrix, spatial } = rectPose(box, transform, true, parentBox, !!parentSpatial)
+  return { matrix, spatial: parentSpatial ? multiplySpatial(parentSpatial, spatial) : spatial }
 }
 
 /**

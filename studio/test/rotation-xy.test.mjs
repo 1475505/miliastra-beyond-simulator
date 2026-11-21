@@ -8,10 +8,11 @@ import { PLATFORMS } from '../constants.js'
 import { createNode } from '../ui/authoring.js'
 import { layoutTree, painterBoxes, hitTest } from '../ui/inspector.js'
 import { computeRect, canvasBox, localRectMatrix } from '../ui/layout.js'
-import { paintList, playSnapshot } from '../play/session.js'
-import { renderScenePng, renderPaintPng, renderEditorPng } from '../host-png.js'
+import { hitPlayControl, paintList, playSnapshot } from '../play/session.js'
+import { flattenScenePaint, renderScenePng, renderPaintPng, renderEditorPng } from '../host-png.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
 import { controlTransformStyle } from '../../editor-ui/control-transform.js'
+import { imageTiltFixture } from './fixtures/image-tilt.mjs'
 
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`)
 test('XY inspector edits preserve other axes and respect four-platform synchronization', () => {
@@ -129,4 +130,97 @@ end` })
     }
   }
   assert.equal(runtime.logs.some(l => l.level === 'lua-error'), false)
+})
+
+test('IMGGEOM Y rotations and parent Z scale give 100, 0, 100 and 150 percent widths', async t => {
+  const { runtime, session, lua, scene, parent } = imageTiltFixture(t)
+  const renderer = Object.create(PixiPlayRenderer.prototype)
+  Object.assign(renderer, { ready: Promise.resolve(), nodes: new Map(), scratch: new Matrix(), canvasWidth: 240, canvasHeight: 160,
+    app: { stage: new Container(), render() {}, renderer: { resize() {} } } })
+  t.after(() => renderer.clearNodes())
+  const face = parent.GetChild('Face'), hit = parent.GetChild('Hit')
+  const [left, right] = face.children.map(c => c.Id)
+  const opts = { background: 'transparent' }
+  const full = scene()
+  const nodes = new Map(full.nodes.map(node => [node.id, node]))
+  let revision = full.revision
+  await renderer.applyScene(full, 240, 160)
+  const visual = renderer.nodes.get(face.Id).__visual
+  const cases = [
+    ['R0', () => {}, 1],
+    ['R1', () => lua('Pose', 45, 45), 0],
+    ['R2', () => lua('Pose', 45, -45), 1],
+    ['R3', () => lua('SetDepth', 2), 1.5],
+    ['Z Field', () => lua('DepthField', 1), 1],
+    ['Z Tween half', () => { lua('DepthTween', 2); runtime.step(.5) }, 1.25],
+    ['Edge-on parent, recovered child', () => { runtime.step(.5); lua('SetDepth', 1); lua('Pose', 90, -90) }, 1],
+    ['Flipped child', () => lua('Pose', 90, 90), -1],
+    ['Planar again', () => lua('Pose', 0, 0), 1],
+  ]
+  for (const [label, change, scale] of cases) {
+    change()
+    const delta = scene(revision)
+    assert.equal(delta.reset, false)
+    for (const node of delta.changed) nodes.set(node.id, node)
+    assert.deepEqual(delta.removed, [])
+    if (label === 'R3' || label.startsWith('Z ')) {
+      assert.deepEqual(new Set(delta.changed.map(n => n.id)), new Set([face.Id, left, right]), 'parent face unchanged, but its descendants must refresh')
+    }
+    revision = delta.revision
+    const current = { nodes: [...nodes.values()] }
+    const item = flattenScenePaint(current).find(n => n.id === face.Id)
+    assert.deepEqual([item.sourceWidth, item.sourceHeight], [100, 42])
+    close(item.width, 100 * Math.abs(scale))
+    close(item.matrix.a, scale)
+    close(item.matrix.tx, 120)
+    const png = renderScenePng(current, 240, 160, opts)
+    assert.deepEqual(png.data, renderPaintPng(paintList(session), 240, 160, opts).data)
+    const ctx = createCanvas(240, 160).getContext('2d')
+    ctx.drawImage(await loadImage(png.data), 0, 0)
+    const row = ctx.getImageData(28, 80, 184, 1).data
+    // A half-pixel edge contributes partial coverage when the width is odd.
+    const coverage = row.reduce((sum, value, i) => i % 4 === 3 ? sum + value : sum, 0) / 255
+    assert.ok(Math.abs(coverage - 100 * Math.abs(scale)) < .02, `${label}: pixel width ${coverage}`)
+    if (scale !== 0) {
+      for (const [offset, color] of [[-39, [255, 0, 0, 255]], [39, [255, 255, 0, 255]]]) {
+        assert.deepEqual([...ctx.getImageData(Math.floor(120 + scale * offset), 80, 1, 1).data], color, label)
+      }
+    }
+    assert.equal(hitPlayControl(session, 120, 80), scale === 0 ? null : hit)
+    assert.equal(hitPlayControl(session, 185, 80), label === 'R3' ? hit : null)
+
+    await renderer.applyScene(delta, 240, 160)
+    assert.equal(renderer.nodes.get(face.Id).__visual, visual, 'geometry is reused through pose changes')
+    const world = visual.getGlobalTransform(new Matrix())
+    close(world.a, scale)
+    close(world.d, 1)
+    close(world.tx, 120)
+    close(world.ty, 80)
+    close(renderer.nodes.get(left).__visual.getGlobalTransform(new Matrix()).tx, 120 - 39 * scale)
+    assert.deepEqual(scene(revision).changed, [], 'a settled pose sends no redundant delta')
+  }
+  assert.equal(runtime.logs.some(l => l.level === 'lua-error'), false)
+})
+
+test('editor projects an off-center child pivot through parent Z scale without changing local layout', () => {
+  const picture = createNode('image', { id: 'face' })
+  const tilt = createNode('container', { children: [picture] })
+  const root = createNode('container', { children: [tilt] })
+  Object.assign(picture.transformByPlatform.KEYBOARD, {
+    size: { x: 100, y: 42 }, pivot: { x: 0, y: .5 }, offset: { x: 20, y: 0 }, rotation: { x: 0, y: -90, z: 0 },
+  })
+  tilt.transformByPlatform.KEYBOARD.rotation.y = 90
+  tilt.transformByPlatform.KEYBOARD.scale.z = 2
+  root.transformByPlatform.KEYBOARD.rotation.z = 90
+  const { boxes } = layoutTree(root, 'pc-16-9')
+  const box = boxes.face, p = box.renderMatrix
+  // Child's pivot offset along X projects into depth in the parent. Its own
+  // width turns back, doubles, then the planar root turns it up the screen.
+  assert.deepEqual([box.left, box.width, box.height], [820, 100, 42])
+  close(box.renderWidth, 200)
+  close(p.a, 0); close(p.b, 2); close(p.c, -1); close(p.d, 0)
+  close(p.c * box.centerY + p.tx, 800)
+  close(p.b * box.centerX + p.ty, 550)
+  assert.equal(hitTest([box], 800, 630), 'face')
+  assert.equal(hitTest([box], 800, 420), null)
 })

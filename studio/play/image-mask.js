@@ -10,7 +10,7 @@
  * texture alpha contours, inward scanline feather, percentage opaque spans and
  * complement AFTER feathering. Nested masks multiply coverage. Not device proof.
  */
-import { applyMatrix, invertMatrix } from '../ui/layout.js'
+import { applyMatrix } from '../ui/layout.js'
 import { imagePrimitive } from '../constants.js'
 import { imageSourceName } from '../assets/catalog.js'
 import { rasterizeMask, sampleMaskRaster } from './image-mask-raster.js'
@@ -91,23 +91,13 @@ export function groupMaskedPaint(items) {
   return root.children
 }
 
-const identity = () => ({ a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 })
-
-function relativeMatrix(parent, world) {
-  const p = invertMatrix(parent) || identity()
-  return {
-    a: p.a * world.a + p.c * world.b, b: p.b * world.a + p.d * world.b,
-    c: p.a * world.c + p.c * world.d, d: p.b * world.c + p.d * world.d,
-    tx: p.a * world.tx + p.c * world.ty + p.tx, ty: p.b * world.tx + p.d * world.ty + p.ty,
-  }
-}
-
 // The legacy paint fallback has no parent tree. Reconstruct only mask groups;
-// use synthetic IDs so real controls can never alias their mask containers.
+// all faces and viewport polygons are already in canvas space. The group must
+// not transform them, even if the mask's own projected plane is singular.
 export function maskedPaintScene(items) {
   const nodes = []
   let sequence = 0
-  const visit = (entries, parent = null, parentWorld = identity()) => {
+  const visit = (entries, parent = null) => {
     entries.forEach((entry, index) => {
       const id = `paint-mask:${sequence++}`
       const z = entries.length - 1 - index
@@ -115,21 +105,19 @@ export function maskedPaintScene(items) {
         const mask = entry.mask
         nodes.push({ id, parent, z, group: false, kind: 'image', primitive: mask.primitive || 'rect', imageColor: 0,
           imageId: mask.imageId, imageSource: mask.imageSource, imageType: mask.imageType, reverseMaskArea: mask.reverseMaskArea,
-          sourceWidth: mask.width, sourceHeight: mask.height, matrix: relativeMatrix(parentWorld, mask.matrix),
+          sourceWidth: mask.width, sourceHeight: mask.height, projectedMatrix: mask.matrix,
           enableMask: true, enableSoftEdge: true, softEdgeMode: 'Pixel',
           softEdgeWidthX: mask.featherX, softEdgeWidthY: mask.featherY })
-        visit(entry.children, id, mask.matrix)
+        visit(entry.children, id)
       } else {
         const item = entry.item
         const width = item.sourceWidth ?? item.width ?? 0, height = item.sourceHeight ?? item.height ?? 0
         const angle = (item.rotationZ || 0) * Math.PI / 180
         const world = item.matrix || { a: Math.cos(angle), b: Math.sin(angle), c: -Math.sin(angle), d: Math.cos(angle),
           tx: (item.left || 0) + width / 2, ty: (item.bottom || 0) + height / 2 }
-        const inverse = invertMatrix(parentWorld)
-        const clips = (item.clipPolygons || []).map(polygon => polygon.map(point => inverse ? applyMatrix(inverse, point.x, point.y) : point))
         const { masks, ...paint } = item
         nodes.push({ ...paint, id, parent, z, group: false, enableMask: false, clipToParent: false,
-          sourceWidth: width, sourceHeight: height, matrix: relativeMatrix(parentWorld, world), clipPolygons: clips })
+          sourceWidth: width, sourceHeight: height, projectedMatrix: world })
       }
     })
   }

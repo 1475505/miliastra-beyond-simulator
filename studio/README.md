@@ -104,6 +104,8 @@ Lua 调用图片的 `SetFillHorizontal`、`SetFillVertical`、`SetFillRadial90`�
 
 `play/pixi-renderer.js` 的视窗裁剪按变动节点及其裁剪依赖更新，不逐帧扫描整棵美术树；父尺寸变化、换父、删除、取消裁剪和扁平回退同步维护依赖。Web预览仅在画布尺寸或容器尺寸变化时重新计算CSS视口，避免每帧读取布局。
 
+普通二维分支的 `matrix` 仍相对父级中心，移动父组不必重发所有子图。对 X/Y 倾转分支，`tree-v1` 额外发送 `projectedMatrix`，表示合成三维变换后在最近二维祖先（或画布）坐标中的面。渲染时只变换各自的面和遮罩，父子树仍管理裁切与层序。祖先的深度变化即使没改变自身投影，也会更新投影改变的后代。几何与真机范围见[旋转投影](docs/control-support.md#xy-旋转投影2026-10-12)。
+
 回归：`test/play-snapshot.test.mjs` 验证多查看端、历史预算和截取前不复制；调度见 `test/browser-session.test.mjs`，裁剪复用见 `test/pixi-cache.test.mjs`，浏览器视口见 `web/test/key-input-browser.test.mjs`。性能对照保存在完整工作区 `probes/browser-play-performance-20261107/`：观察的是画面提交率，受传输链路和图形后端影响，不等于显示器呈现帧率；初始化和大组恢复仍可能有尖峰。
 
 <a id="2026-10-18-高频文字更新与缓存残留16"></a>
