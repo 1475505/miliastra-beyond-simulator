@@ -55,13 +55,15 @@ test('image route supports HTTP cache/ETag, rejects unknown IDs and shares cache
   assert.equal((await fetch(url, { headers: { 'if-none-match': response.headers.get('etag') } })).status, 304)
   const head = await fetch(url, { method: 'HEAD' })
   assert.equal(head.status, 200); assert.equal((await head.arrayBuffer()).byteLength, 0)
-  assert.equal((await fetch(app.url + imageAssetUrl(101019))).status, 404)
+  assert.equal((await fetch(app.url + imageAssetUrl(107021))).status, 404)
   assert.equal((await fetch(app.url + '/qxqy-assets/sprite-v1/http.png')).status, 404)
   assert.equal((await fetch(app.url + '/api/editor.png')).status, 200)
   assert.equal(requests.length, 2)
   const refresh = await fetch(app.url + '/editor/api/image-refresh', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: 'images', imageId: 101001 }) })
   assert.equal(refresh.status, 200)
   assert.equal(requests.length, 4)
+  assert.equal((await fetch(app.url + imageAssetUrl(101019))).status, 200)
+  assert.deepEqual(requests.slice(4).map(url => new URL(url).pathname).sort(), ['/images/border/101019.json', '/images/sprite/101019.png'])
 })
 
 test('real browser: DOM tint, HTTP cache, Pixi static completion, stale-ID races, shared textures and refresh', {

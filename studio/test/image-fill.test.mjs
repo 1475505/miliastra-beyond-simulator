@@ -34,16 +34,30 @@ function FillVertical(direction, amount)
   image:SetFillVertical(Enum.ImageFillVerticalType[direction], amount)
   assert(image.fillVerticalType == Enum.ImageFillVerticalType[direction])
 end
+function FillRadial90(origin, amount) image:SetFillRadial90(Enum.ImageFillRadial90Type[origin], amount) end
+function FillRadial180(origin, amount) image:SetFillRadial180(Enum.ImageFillRadialType[origin], amount) end
+function FillRadial360(origin, amount) image:SetFillRadial360(Enum.ImageFillRadialType[origin], amount) end
+function RadialOrigin(origin) image.fillRadialType = Enum.ImageFillRadialType[origin] end
+function CornerOrigin(origin) image.fillRadial90Type = Enum.ImageFillRadial90Type[origin] end
+function TweenFill()
+  image:SetFillRadial360(Enum.ImageFillRadialType.Top, 0)
+  game.Tween(image, { fillAmount = 1 }, 1):SetEase(Enum.EaseType.Linear):Play()
+end
 function Unused() image:SetFillUnused() end
 function DirectFields()
   image.fillType = Enum.ImageFillType.Vertical
   image.fillVerticalType = Enum.ImageFillVerticalType.Bottom
   image.fillAmount = 0.5
 end
+function DirectRadialFields()
+  image.fillType = Enum.ImageFillType.Radial180
+  image.fillRadialType = Enum.ImageFillRadialType.Top
+  image.fillAmount = 0.5
+end
 ` })
   assert.deepEqual(runtime.mountErrors, [])
   const setFill = (axis, direction, amount) => runtime.invokeOn(script.env, 'Fill' + axis, [direction, amount])
-  const invoke = name => runtime.invokeOn(script.env, name, [])
+  const invoke = (name, ...args) => runtime.invokeOn(script.env, name, args)
   const scene = options => playSnapshot(session, { view: true, ...options }).scene
   const node = () => scene().nodes.find(item => item.name === 'Image')
   return { runtime, root, control, session, setFill, invoke, scene, node }
@@ -145,6 +159,95 @@ test('Pixi uses image-local masks for all four half fills, hides zero, and remov
   assert.equal(root.__visual.children.length, 1)
 })
 
+// Screen quadrants of a non-square rectangle, away from sector boundaries.
+// Angles are measured in local UI units, not in normalized texture space.
+const radialSamples = [[90, 50], [150, 50], [90, 110], [150, 110]]
+const radialCases = [
+  ['Radial90', 'BottomLeft', .5, [true, false, false, false]],
+  ['Radial90', 'TopLeft', .5, [true, true, false, true]],
+  ['Radial90', 'TopRight', .5, [false, false, false, true]],
+  ['Radial90', 'BottomRight', .5, [true, false, true, true]],
+  ['Radial180', 'Bottom', .5, [true, false, true, false]],
+  ['Radial180', 'Left', .5, [true, true, false, false]],
+  ['Radial180', 'Top', .5, [false, true, false, true]],
+  ['Radial180', 'Right', .5, [false, false, true, true]],
+  ['Radial360', 'Bottom', .25, [false, false, true, false]],
+  ['Radial360', 'Left', .25, [true, false, false, false]],
+  ['Radial360', 'Top', .25, [false, true, false, false]],
+  ['Radial360', 'Right', .25, [false, false, false, true]],
+  ['Radial360', 'Left', .75, [true, true, false, true]], // sweep wraps around 0°
+]
+
+test('radial Lua fills match independent pixel expectations in PNG and Pixi for all origins', async t => {
+  const f = fixture(t)
+  assert.equal(f.control.enableFill, false, 'Lua fill does not require the authoring switch')
+  const renderer = Object.create(PixiPlayRenderer.prototype)
+  renderer.scratch = new Matrix()
+  renderer.canvasHeight = 160
+  const root = new Container()
+  t.after(() => { renderer.clearVisual(root); root.destroy() })
+  for (const [mode, origin, amount, expected] of radialCases) {
+    f.setFill(mode, origin, amount)
+    const scene = f.scene()
+    const png = renderScenePng(scene, 240, 160)
+    const at = await pixels(png)
+    const label = `${mode}/${origin}/${amount}`
+    assert.deepEqual(radialSamples.map(([x, y]) => isWhite(at(x, y))), expected, label)
+    assert.deepEqual(png.data, renderPaintPng(paintList(f.session), 240, 160).data, label)
+    renderer.updateNode(root, f.node())
+    const clip = root.__visual.children.at(-1).mask
+    assert.ok(clip instanceof Graphics)
+    assert.deepEqual(radialSamples.map(([x, y]) => clip.containsPoint({ x: x - 120, y: y - 80 })), expected, label)
+  }
+  for (const mode of ['Radial90', 'Radial180', 'Radial360']) for (const amount of [0, 1]) {
+    f.setFill(mode, mode === 'Radial90' ? 'TopLeft' : 'Top', amount)
+    const at = await pixels(renderScenePng(f.scene(), 240, 160))
+    assert.deepEqual(radialSamples.map(([x, y]) => isWhite(at(x, y))), radialSamples.map(() => amount === 1))
+    renderer.updateNode(root, f.node())
+    assert.equal(root.__visual.children.at(-1).visible, amount === 1)
+    assert.equal(root.__visual.children.at(-1).mask, undefined)
+  }
+  f.invoke('Unused')
+  f.invoke('DirectRadialFields')
+  const at = await pixels(renderScenePng(f.scene(), 240, 160))
+  assert.deepEqual(radialSamples.map(([x, y]) => isWhite(at(x, y))), [false, true, false, true])
+})
+
+test('radial origin-only edits and Lua Tween progress reach scene deltas and replace stale Pixi clips', async t => {
+  const f = fixture(t)
+  const renderer = Object.create(PixiPlayRenderer.prototype)
+  renderer.scratch = new Matrix()
+  renderer.canvasHeight = 160
+  const root = new Container()
+  t.after(() => { renderer.clearVisual(root); root.destroy() })
+  for (const [mode, edit, key, start, end] of [
+    ['Radial90', 'CornerOrigin', 'fillRadial90Type', 'BottomLeft', 'TopLeft'],
+    ['Radial360', 'RadialOrigin', 'fillRadialType', 'Top', 'Right'],
+  ]) {
+    f.setFill(mode, start, .25)
+    const before = f.scene()
+    renderer.updateNode(root, f.node())
+    const context = root.__visual.children.at(-1).mask.context
+    f.invoke(edit, end)
+    const patch = f.scene({ sceneRev: before.revision })
+    assert.equal(patch.reset, false)
+    assert.equal(patch.changed.length, 1)
+    assert.equal(patch.changed[0][key], end)
+    assert.equal(patch.changed[0].fillAmount, .25)
+    assert.equal(f.control[key].Name, end)
+    renderer.updateNode(root, patch.changed[0])
+    assert.equal(context.destroyed, true)
+  }
+  f.invoke('TweenFill')
+  const before = f.scene()
+  f.runtime.step(.25)
+  const patch = f.scene({ sceneRev: before.revision })
+  assert.equal(patch.changed.find(item => item.name === 'Image')?.fillAmount, .25)
+  const at = await pixels(renderScenePng(f.scene(), 240, 160))
+  assert.deepEqual(radialSamples.map(([x, y]) => isWhite(at(x, y))), [false, true, false, false])
+  assert.deepEqual(f.runtime.logs.filter(item => item.level === 'error'), [])
+})
+
 test('circle fill clips the original circle instead of rescaling its shape', async t => {
   const f = fixture(t, 100002)
   f.setFill('Vertical', 'Top', 0.5)
@@ -155,7 +258,7 @@ test('circle fill clips the original circle instead of rescaling its shape', asy
   assert.equal(isWhite(at(85, 45)), false, 'circle corner stays outside the source shape')
 })
 
-test('image-local fill rotates with its parent and does not clip child controls', async t => {
+test('image-local radial fill rotates with its parent and does not clip child controls', async t => {
   const f = fixture(t, 100001, [{
     name: 'Child', kind: 'image', active: true, visible: true,
     sizeDeltaX: 12, sizeDeltaY: 12,
@@ -163,7 +266,7 @@ test('image-local fill rotates with its parent and does not clip child controls'
     anchoredPositionX: 20, anchoredPositionY: -20,
     pivotX: 0.5, pivotY: 0.5, imageId: 100001, imageColor: 0xffff0000,
   }])
-  f.setFill('Vertical', 'Top', 0.5)
+  f.setFill('Radial360', 'Left', 0.5)
   let at = await pixels(renderScenePng(f.scene(), 240, 160))
   assert.deepEqual(at(140, 100), [255, 0, 0, 255], 'child in the cropped half remains visible')
   f.root.SetLocalRotation(0, 0, 90)

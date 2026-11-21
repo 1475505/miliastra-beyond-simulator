@@ -2,6 +2,8 @@
 
 单用户自托管 Web 编辑器和磁盘存档预览，无需 Harness。复用共享 Studio、Lua Runtime、固定步长试玩 Worker、Pixi 渲染器及 `editor-ui` 编辑界面。
 
+新手入门、日常操作与常见问题集中在[完整使用指南](../docs/user-guide.md)。本页维护 Web 接入和部署细节。
+
 <a id="052-更新"></a>
 公开发布说明见 [GitHub Releases](https://github.com/1475505/miliastra-beyond-simulator/releases)，本页维护当前使用与部署。更新或修改字体后，重启 Web 服务并刷新页面。
 

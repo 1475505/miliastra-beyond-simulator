@@ -1,22 +1,17 @@
 import { PREFAB_CACHE_VERSION, prefabImageSize } from './prefab-catalog.js'
 
-// Pinned from https://oss.070077.xyz/images/data.json (2026-10-02).
-// 1,522 non-empty entries; all paths verified as sprite/<id>.png and
+// Pinned from https://oss.070077.xyz/images/data.json (2026-11-21).
+// 1,543 non-empty entries; all paths verified as sprite/<id>.png and
 // border/<id>.json. Empty/missing entries are deliberately not admitted.
 // Refreshing image bytes does not expand this allowlist.
 export const IMAGE_SOURCE = 'https://oss.070077.xyz/images/'
 export const IMAGE_CACHE_VERSION = 'sprite-v1'
 export const IMAGE_ASSET_PREFIX = '/qxqy-assets/'
 const RANGES = [
-  [100001, 100006], [100101, 100213], [101001, 101018], [101020, 101028],
-  [101030, 101046], [101048, 101048], [101050, 101054], [101056, 101080],
-  [102001, 102052], [103001, 103148], [104001, 104010], [105001, 105140],
-  [105142, 105219], [105221, 105317], [106001, 106047], [106049, 106096],
-  [107001, 107007], [107010, 107020], [107031, 107092], [107094, 107180],
-  [107183, 107201], [107203, 107205], [107207, 107228], [107231, 107278],
-  [107280, 107402], [108001, 108017], [108019, 108020], [109001, 109031],
-  [109033, 109034], [109036, 109075], [110001, 110053], [111001, 111139],
-  [112001, 112042],
+  [100001, 100006], [100101, 100213], [101001, 101080], [102001, 102052],
+  [103001, 103148], [104001, 104010], [105001, 105317], [106001, 106096],
+  [107001, 107020], [107031, 107402], [108001, 108020], [109001, 109075],
+  [110001, 110053], [111001, 111139], [112001, 112042],
 ]
 
 export function imageSourceName(source) {
@@ -28,14 +23,24 @@ export function imageSourceName(source) {
 
 export function imageAssetKey(id, source) { return `${imageSourceName(source)}:${id}` }
 
-export function canSelectImageType(id, source) {
-  return imageSourceName(source) === 'StaticReference' && isRemoteImage(id, source)
+function isStaticImage(id) {
+  return Number.isSafeInteger(id) && RANGES.some(([min, max]) => id >= min && id <= max)
+}
+
+// Lua field eligibility is not the download list or the editor's slice control.
+export function imageTypeAccess(id, source, fromTemplate) {
+  if (imageSourceName(source) !== 'StaticReference' || !isStaticImage(id)) return null
+  if (id > 100006) return 'rw' // existing simulator policy for other known static images
+  if (fromTemplate) return null // IMGGEOM only tested preplaced controls
+  if (id === 100001) return 'rw'
+  if (id === 100002) return 'ro' // observed initial read, but not a write to the circle itself
+  return null
 }
 
 export function isRemoteImage(id, source) {
   const name = imageSourceName(source)
   if (name === 'Prefab') return prefabImageSize(id) !== null
-  return name === 'StaticReference' && Number.isSafeInteger(id) && id > 100006 && RANGES.some(([min, max]) => id >= min && id <= max)
+  return name === 'StaticReference' && isStaticImage(id) && id > 100006
 }
 
 export function imageAssetUrl(id, revision = 0, source) {

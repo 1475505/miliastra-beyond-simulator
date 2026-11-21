@@ -8,6 +8,7 @@ Authoring JSON、GIA、四平台布局、试玩编排、日志、回放与断言
 
 - **控件与渲染**
   - [控件支持矩阵](docs/control-support.md)：11 类控件、文字、旋转、遮罩、滚动及保真边界。
+  - [Lua 图片进度填充](#图片填充渲染边界)：试玩和截图的显示规则。
   - [浏览器输入](docs/browser-input.md)：键鼠映射、输入队列与焦点释放。
   - 素材：[图片](docs/image-assets.md) · [音频](docs/audio-assets.md) · [界面／全屏动效](docs/ui-vfx-playback.md)。
 - **GIA 与脚本交付**
@@ -84,9 +85,11 @@ Runtime 保留 Lua `EnumItem` 身份，`play/session.js` 在 scene/paint 边界�
 
 ## 图片填充渲染边界
 
-`play/image-fill.js` 统一水平/垂直矩形裁切；scene/paint 投影方向与进度，更新参与渲染缓存。0不画、1完整、Unused取消；只裁图片自身，子控件独立。径向填充未实现；超范围有限进度截到可见范围是模拟器策略。素材限制见 [图片说明](docs/image-assets.md)。
+Lua 调用图片的 `SetFillHorizontal`、`SetFillVertical`、`SetFillRadial90`、`SetFillRadial180`、`SetFillRadial360` 后，试玩画面和试玩 PNG 截图会显示对应填充。不需要在检视器打开开关。直接修改 `fillType`、方向/起点字段也会更新画面，`fillAmount` 可以用 Tween 变化。`0` 不画图片，`1` 显示整图；`SetFillUnused()` 取消进度裁切。
 
-回归：`test/image-fill.test.mjs`，覆盖固定象限像素、Pixi mask bounds、父旋转与子控件。
+径向效果按 [Miliastra-image-editor-webui `2b8ced9` 的 `maskPreview.ts`](https://github.com/1475505/Miliastra-image-editor-webui/blob/2b8ced9595773ebbfc2dbc1d2f723ee5379abce8/frontend/src/maskPreview.ts#L78-L117) 对齐：90° 从所选角、180° 从所选边的中点、360° 从图片中心朝所选边开始，均顺时针。`play/image-fill.js` 在图片局部坐标求裁切区域，试玩 Pixi 和 PNG 共用。填充随图片变换，只裁图片本身，不改变子控件、点击范围或遮罩轮廓。编辑画布不执行 Lua，检视器、存档和 GIA 编解码规则不变。
+
+回归：`test/image-fill.test.mjs` 在 Lua VM 中调用填充、变更起点、驱动 Tween，检查增量与 PNG 像素；`web/test/image-mask-browser.test.mjs` 在 Edge 验证 WebGL 裁切、拉伸素材和反向遮罩组合。结果为 `observed / simulator`，对应真机径向像素效果仍待验证（`device_status=pending`）。
 
 ## 浏览器图形缓存
 

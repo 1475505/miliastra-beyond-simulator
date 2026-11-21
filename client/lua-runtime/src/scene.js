@@ -39,7 +39,7 @@ const KIND_RW = {
   container: ['isolateNavigation', 'disableKeyEventPassthrough', 'disableCursorEventPassthrough', 'showCursor'],
   textbox: ['text', 'fontSize', 'fontColor', 'bgColor', 'enableOutline', 'outlineColor', 'horizontalAlignment', 'verticalAlignment', 'adaptiveFontSize', 'minimumFontSize'],
   textwindow: ['interactable', 'showScrollBar', 'text', 'fontSize', 'fontColor', 'bgColor', 'enableOutline', 'outlineColor', 'horizontalAlignment', 'verticalAlignment', 'adaptiveFontSize', 'minimumFontSize'],
-  // imageType is admitted separately by the host's preview capability policy.
+  // imageType has a separate host policy for Lua field access.
   image: ['imageColor', 'enableMask', 'enableSoftEdge', 'softEdgeMode', 'softEdgeWidthX', 'softEdgeWidthY', 'horizontalSoftRange', 'verticalSoftRange', 'reverseMaskArea', 'fillType', 'fillHorizontalType', 'fillVerticalType', 'fillRadial90Type', 'fillRadialType', 'fillAmount'],
   button: ['interactable', 'clickAudioId', 'raycastTarget'],
   cursor: ['raycastTarget'],
@@ -74,7 +74,7 @@ const KIND_METHODS = {
 }
 
 export function luaFieldAccess(control, key) {
-  if (control.kind === 'image' && key === 'imageType' && control.runtime.canSelectImageType(control.imageId, control.imageSource)) return 'rw'
+  if (control.kind === 'image' && key === 'imageType') return control.runtime.imageTypeAccess(control.imageId, control.imageSource, control._fromTemplate)
   if (BASE_RO.includes(key) || (KIND_RO[control.kind] || []).includes(key)) return 'ro'
   if (BASE_RW.includes(key) || (KIND_RW[control.kind] || []).includes(key)) return 'rw'
   return null
@@ -144,8 +144,9 @@ const DEFAULTS = {
 }
 
 export class Control {
-  constructor(runtime, spec) {
+  constructor(runtime, spec, fromTemplate = false) {
     this.runtime = runtime
+    this._fromTemplate = fromTemplate
     this.kind = spec.kind || 'container'
     this.typeofName = TYPEOF[this.kind] || TYPEOF.container
     this.alive = true
@@ -202,7 +203,7 @@ export class Control {
     if (this.kind === 'grid') this.scrollProgress = spec.scrollProgress ?? 0
     if (spec.children) {
       for (const child of spec.children) {
-        const c = child instanceof Control ? child : new Control(runtime, child)
+        const c = child instanceof Control ? child : new Control(runtime, child, fromTemplate)
         this.addChild(c)
       }
     }
@@ -408,7 +409,7 @@ export class Control {
   // The value a Lua read returns; rotation reads are normalised (see readbackEuler).
   luaFieldValue(key) {
     if (key === 'id') return this.Id
-    if (key === 'imageType') return this.imageType ?? 'Stretch'
+    if (key === 'imageType') return this.imageType ?? 'Basic'
     const index = ROTATION_FIELDS.indexOf(key)
     if (index < 0) return this[key]
     return readbackEuler(this.localRotationX, this.localRotationY, this.localRotationZ)[index]
@@ -545,9 +546,13 @@ export class Control {
   SetImage(source, id) {
     const previous = this.imageSource?.Name || this.imageSource
     const next = source?.Name || source
-    if (id !== this.imageId || previous !== next) this.imageType = null
+    const changed = id !== this.imageId || previous !== next
+    // IMGGEOM verified readback when swapping from Basic. Keep an explicit
+    // Basic between supported images; leave other changed-asset resets as-is.
+    const keepBasic = changed && (this.imageType?.Name ?? this.imageType) === 'Basic' && luaFieldAccess(this, 'imageType')
     this.imageSource = source
     this.imageId = id
+    if (changed && !(keepBasic && luaFieldAccess(this, 'imageType'))) this.imageType = null
     this.markPlayDirty()
   }
 

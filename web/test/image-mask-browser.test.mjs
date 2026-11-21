@@ -83,8 +83,33 @@ renderer.ready.then(() => window.ready = true);
   const inverseSoft = contourScene('rect', { reverseMaskArea: true, enableSoftEdge: true, softEdgeWidthX: 20 })
   await check(inverseSoft, [255, 121, 0, 0, 6])
   await check(inverseSoft, [255, 121, 0, 0, 6], true)
-  const percentage = contourScene('rect', { enableSoftEdge: true, softEdgeMode: 'Percentage', horizontalSoftRange: 60, verticalSoftRange: 100 })
-  await check(percentage, [0, 134, 255, 255, 249])
+  const percentage = contourScene('rect', { enableSoftEdge: true, softEdgeMode: 'Percentage', horizontalSoftRange: 100, verticalSoftRange: 100 })
+  // The two edge samples are 10.5 units into the mask; range 60 gives a 20-unit feather on a 100-unit side.
+  const percentageSamples = [[60, 80], [80, 80], [120, 40], [120, 80]]
+  await check(percentage, [0, 255, 255, 255], false, percentageSamples)
+  const percentageMask = percentage.nodes.find(n => n.id === 'mask')
+  for (const [extra, alpha] of [
+    [{ horizontalSoftRange: 60 }, [0, 134, 255, 255]],
+    [{ verticalSoftRange: 60 }, [0, 134, 134, 255]],
+    [{ reverseMaskArea: true }, [255, 121, 121, 0]],
+    [{ reverseMaskArea: false }, [0, 134, 134, 255]],
+  ]) {
+    Object.assign(percentageMask, extra)
+    const delta = { format: 'tree-v1', reset: false, changed: [percentageMask] }
+    const gpu = await browser.evaluate(`window.sample(${JSON.stringify(delta)},false,${JSON.stringify(percentageSamples)})`)
+    gpu.forEach((pixel, i) => assert.ok(Math.abs(pixel[3] - alpha[i]) <= 2, `${JSON.stringify(extra)}: pixel ${percentageSamples[i]} alpha ${pixel[3]}, expected ${alpha[i]}`))
+  }
+  // A 270° sector with a disjoint inverted mask must never restore the part
+  // discarded by progress fill. The samples avoid edges for stable readback.
+  const radial = contourScene('rect', { sourceWidth: 40, reverseMaskArea: true })
+  const artwork = radial.nodes.at(-1)
+  Object.assign(artwork, { sourceWidth: 100, sourceHeight: 60, fillType: 'Radial360', fillRadialType: 'Top', fillAmount: .75 })
+  const fillSamples = [[90, 65], [150, 65], [90, 95], [150, 95], [128, 94]]
+  await check(radial, [0, 255, 255, 255, 0], false, fillSamples)
+  const turned = { format: 'tree-v1', reset: false, changed: [{ ...artwork, fillRadialType: 'Right' }] }
+  const filled = await browser.evaluate(`window.sample(${JSON.stringify(turned)},false,${JSON.stringify(fillSamples)})`)
+  assert.deepEqual(filled.map(pixel => pixel[3]), [255, 0, 255, 255, 0], 'changing only the origin updates the real GPU clip')
+  await check(radial, [0, 255, 255, 255, 0], true, fillSamples)
   const contour = contourScene('circle')
   await check(contour, contourAlphas.circle, false, contourSamples)
   const baseMask = contour.nodes.find(n => n.id === 'mask')
@@ -121,6 +146,9 @@ renderer.ready.then(() => window.ready = true);
   await browser.evaluate(`window.sample(${JSON.stringify(textureScene)})`)
   await browser.wait(`!!renderer.imageTextures.get('StaticReference:101001')?.texture`)
   await check(textureScene, [0, 255, 0, 255], false, textureSamples, assets)
+  const spriteFill = { ...radial, nodes: [radial.nodes[0], { ...artwork, parent: 'root', primitive: 'sprite',
+    imageId: 101001, imageType: 'Stretch', fillRadialType: 'Bottom', fillAmount: .25 }] }
+  await check(spriteFill, [255, 0, 0], false, [[70, 96], [90, 96], [169, 96]], assets)
   textureMask.imageType = 'Stretch'
   await check(textureScene, [0, 0, 0, 255], false, textureSamples, assets)
   textureMask.reverseMaskArea = true

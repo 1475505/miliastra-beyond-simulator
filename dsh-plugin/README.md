@@ -18,6 +18,7 @@ dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.3.1.tgz
 
 ## 文档与功能入口
 
+- [完整使用指南](../docs/user-guide.md)：单篇包含新手快速入门、使用说明和常见问题，适用于 Web / Harness 共用编辑器。
 - [GitHub Releases](https://github.com/1475505/miliastra-beyond-simulator/releases)：公开发布说明与安装包。
 - [模拟器操作Skill](../skill/SKILL.md)：工具工作流；构建复制到包内`dsh-plugin/skill.md`，通过独立skills组件注册`qxqy-simulator`。
 - [游戏制作预设](../agent/wonderland-lua-builder/README.md)：源码、七步流程与行为评估。构建嵌入声明式预设，并携带旧宿主目录副本；已有用户副本不覆盖。

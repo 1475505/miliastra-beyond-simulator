@@ -6,6 +6,10 @@ A standalone simulator for **2D + Lua game development in Miliastra Wonderland**
 
 Available as a **Web editor, an MCP server, and a DeepSeek Harness plugin**, with support for AI tools such as OpenCode, WorkBuddy, and Codex.
 
+## Getting started
+
+The **[complete user guide (Chinese)](docs/user-guide.md)** covers [Harness setup](docs/user-guide.md#harness), [other AI apps](docs/user-guide.md#connect-ai), a [playable first example](docs/user-guide.md#quick-start), AI-assisted creation, and in-game delivery, with tool links, prompts, and an [FAQ](docs/user-guide.md#faq). Open **Quick Start** in the bottom-right corner of the editor for an interactive walkthrough.
+
 ## Features
 
 | Capability | Description |
@@ -158,6 +162,7 @@ See the [distribution guide](DISTRIBUTION.md) for packaging and publishing.
 Follow the branch for your task. Each module README owns its topic links.
 
 - **Usage and integrations**
+  - [Complete user guide (Chinese)](docs/user-guide.md): setup, a first example, AI-assisted creation, in-game delivery, and FAQ in one document.
   - [Web](web/README.md): editor, disk previews, and deployment.
   - [MCP](mcp/README.md): project handles, tools, and clocks.
   - [Harness plugin](dsh-plugin/README.md): installation, compatibility, and troubleshooting.

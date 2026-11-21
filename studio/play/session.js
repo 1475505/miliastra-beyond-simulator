@@ -18,7 +18,7 @@ import { textLayout } from './text-layout.js'
 import { scrollBarGeometry } from './scroll-geometry.js'
 import { audioDuration } from '../assets/audio-catalog.js'
 import { uiVfxAsset } from '../assets/ui-vfx-catalog.js'
-import { imageSourceName, canSelectImageType } from '../assets/catalog.js'
+import { imageSourceName, imageTypeAccess } from '../assets/catalog.js'
 import { centerMaskMatrix, imageMaskSpec } from './image-mask.js'
 import { randomUUID } from 'node:crypto'
 import { KEY_HINT_DEVICES, keyHintCode, resolveKeyHint } from '../key-hints.js'
@@ -184,7 +184,7 @@ function createPlayerRuntime(compiled, templateBundle, scripts, language) {
     canvasHeight: compiled.canvasHeight,
     device: compiled.device,
     audioDuration,
-    canSelectImageType,
+    imageTypeAccess,
     ...(language ? { language } : {}),
   })
   rt.keyHintDevice = compiled.keyHintDevice
@@ -316,6 +316,8 @@ function imageFillFields(control) {
     fillType: enumName(control.fillType),
     fillHorizontalType: enumName(control.fillHorizontalType),
     fillVerticalType: enumName(control.fillVerticalType),
+    fillRadial90Type: enumName(control.fillRadial90Type),
+    fillRadialType: enumName(control.fillRadialType),
     fillAmount: control.fillAmount,
   }
 }
@@ -457,8 +459,9 @@ function sceneFingerprint(node) {
     m.a, m.b, m.c, m.d, m.tx, m.ty,
     node.kind, node.name, node.sourceWidth, node.sourceHeight, node.pressed,
     node.primitive, node.imageColor, node.imageId, node.imageSource, node.imageType,
-    node.fillType, node.fillHorizontalType, node.fillVerticalType, node.fillAmount,
+    node.fillType, node.fillHorizontalType, node.fillVerticalType, node.fillRadial90Type, node.fillRadialType, node.fillAmount,
     node.enableMask, node.enableSoftEdge, node.softEdgeMode, node.softEdgeWidthX, node.softEdgeWidthY,
+    node.horizontalSoftRange, node.verticalSoftRange, node.reverseMaskArea,
     node.text, node.fontSize, node.fontColor, node.bgColor,
     node.adaptiveFontSize, node.minimumFontSize, JSON.stringify(node.textLayout),
     node.enableOutline, node.outlineColor, node.horizontalAlignment, node.verticalAlignment,

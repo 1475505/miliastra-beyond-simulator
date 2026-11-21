@@ -1,5 +1,5 @@
 import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Mesh, MeshGeometry, Sprite, Text, TextStyle, Texture } from 'pixi.js'
-import { imageFillRect } from './image-fill.js'
+import { imageFillClip } from './image-fill.js'
 import { imageMaskSpec, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
 import { maskRasterSize } from './image-mask-raster.js'
 import { scrollBarGeometry, visibleTextLines, intersectClipPolygons } from './scroll-geometry.js'
@@ -96,7 +96,7 @@ function visualKeyOf(item, width, height) {
   if (spriteCircle(item)) return [item.kind, item.primitive, item.imageId, imageSourceName(item.imageSource), 'sprite'].join('\t')
   return [
     item.kind, item.primitive, width, height, item.imageColor, item.imageId, imageSourceName(item.imageSource), item.imageType,
-    item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillAmount,
+    item.fillType, item.fillHorizontalType, item.fillVerticalType, item.fillRadial90Type, item.fillRadialType, item.fillAmount,
     item.text, item.fontSize, item.fontColor, item.bgColor, item.enableOutline,
     item.adaptiveFontSize, item.minimumFontSize, JSON.stringify(item.textLayout),
     item.outlineColor, item.horizontalAlignment, item.verticalAlignment, item.pressed,
@@ -106,6 +106,20 @@ function visualKeyOf(item, width, height) {
 
 function spriteCircle(item) {
   return item.kind === 'image' && item.primitive === 'circle' && (!item.fillType || item.fillType === 'Unused')
+}
+
+function applyImageFill(visual, artwork, item, width, height) {
+  const fill = imageFillClip(item, width, height)
+  if (!fill || !artwork.visible) return
+  if (fill.kind === 'empty') {
+    artwork.visible = false
+    return
+  }
+  const clip = new Graphics()
+  if (fill.kind === 'rect') clip.rect(fill.x, fill.y, fill.width, fill.height)
+  else clip.poly(fill.points)
+  artwork.mask = clip.fill(0xffffff)
+  visual.addChild(clip)
 }
 
 export function createCircleTexture(size) {
@@ -423,13 +437,8 @@ export class PixiPlayRenderer {
       const color = argb(item.imageColor, 0xffffffff)
       sprite.tint = color.color
       sprite.alpha = color.alpha
-      const fill = imageFillRect(item, width, height)
-      sprite.visible = width > 0 && height > 0 && (!fill || (fill.width > 0 && fill.height > 0))
-      if (fill && sprite.visible) {
-        const clip = new Graphics().rect(fill.x, fill.y, fill.width, fill.height).fill(0xffffff)
-        sprite.mask = clip
-        visual.addChild(clip)
-      }
+      sprite.visible = width > 0 && height > 0
+      applyImageFill(visual, sprite, item, width, height)
       visual.addChild(sprite)
     } else if (spriteCircle(item)) {
       const circle = new Sprite({ texture: this.circleTexture(Math.max(width, height)), anchor: 0.5 })
@@ -450,17 +459,7 @@ export class PixiPlayRenderer {
       } else {
         graphic.rect(-width / 2, -height / 2, width, height).fill(color)
       }
-      const fill = imageFillRect(item, width, height)
-      if (fill) {
-        // A zero-size Graphics mask has no geometry; hide the image explicitly
-        // so all rendering backends agree that amount zero is empty.
-        graphic.visible = fill.width > 0 && fill.height > 0
-        if (graphic.visible) {
-          const clip = new Graphics().rect(fill.x, fill.y, fill.width, fill.height).fill({ color: 0xffffff, alpha: 1 })
-          graphic.mask = clip
-          visual.addChild(clip)
-        }
-      }
+      if (item.kind === 'image') applyImageFill(visual, graphic, item, width, height)
       visual.addChild(graphic)
     }
     const bar = scrollBarGeometry(item.scroll, width, height)

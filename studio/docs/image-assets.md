@@ -6,7 +6,7 @@
 
 图片控件选择图片源并填入白名单 `imageId` 后，编辑器画布、Pixi 试玩和 Host PNG 截图均可显示对应素材。首次实际使用时按需下载，重启后直接读取磁盘缓存，已缓存素材可离线使用。未知来源/ID 不发网络请求，下载失败保留占位。
 
-- **静态引用 `StaticReference`**：素材源 `https://oss.070077.xyz/images/`。`studio/assets/catalog.js` 固定 `data.json` 白名单（2026-10-02 快照）；`100001–100006` 走图元代理，远程 ID 请求 `sprite/<id>.png` 与 `border/<id>.json`。
+- **静态引用 `StaticReference`**：`studio/assets/catalog.js` 固定[素材源清单](https://oss.070077.xyz/images/data.json)的 1,543 个非空条目（2026-11-21 快照）；`100001–100006` 走图元代理，其余 1,537 个 ID 按需请求同源 `sprite/<id>.png` 与 `border/<id>.json`。
 - **元件 `Prefab`**：素材源 `https://oss.070077.xyz/prefabs/`。`studio/assets/prefab-catalog.js` 固定目录和尺寸（2026-11-15在线核对、schemaVersion 2、dataVersion 7.2.0），含2949个非空图标，排除7个空条目；只请求 `sprite/<id>.png`，不请求 border JSON。来源/类型和尺寸依据素材提供方清单，不是新增真机证据。
 - 不接受存档传入任意 URL，不在启动时下载远程清单，也不会全量下载白名单素材。更新白名单需重新核对目录并修改源文件。
 - 选中远程图片，在属性面板点击 **「↻ 重新下载此素材」** 可重新请求源文件并替换缓存。刷新失败保留之前的可用文件；刷新不会扩充 ID 白名单。
@@ -24,7 +24,7 @@ imageControl:SetImage(Enum.ImageSource.StaticReference, 101001)
 
 签名和来源枚举依据完整工作区 `knowledge/guide/Lua客户端UI脚本API.md` 的 `ClientUIImageControl.SetImage` 与 `Enum.ImageSource.Prefab`。Lua 中 `imageSource`、`imageId` 是只读字段，通过 `SetImage` 设置；编辑器的来源选择只改变 Authoring 配置，不改变 Lua 访问约束。
 
-来源与 ID 必须匹配：`StaticReference + 10003004`、`Prefab + 101001` 都显示缺失框，不根据 ID 猜来源。旧工程/手写 Runtime spec 未提供来源时兼容为 `StaticReference`；`Item`、`Equipment` 等尚未接入的明确来源不会借用静态图片。
+来源与 ID 必须匹配：`StaticReference + 10003004`、`Prefab + 101001` 都显示缺失框，不根据 ID 猜来源。旧工程/手写 Runtime spec 未提供来源时兼容为 `StaticReference`。Lua 可设置并读回 `Item`、`Equipment`、`Skill`、`UnitStatus`、`Faction`、`Currency` 的来源和 ID，但模拟器还没有这些来源的配置 ID → 图标映射；预览只显示缺失框，不请求素材，也不借用同号静态图。静态图库的道具、技能等分类不等于这些 `ImageSource`。
 
 JSON 存档保留元件来源；GIA 图片来源槽尚未核实，导出会明确提示来源未映射，真机请在 Lua 中用上述 `SetImage` 设置。此功能显示元件的 **2D 图标**，不渲染其 3D 模型。
 
@@ -48,7 +48,7 @@ Web、MCP、DSH 使用同一套 `ImageAssetStore`，同一系统用户默认共�
 
 静态 PNG 按元数据的 `m_Rect` 还原逻辑宽高，用 `m_RD.textureRectOffset` 恢复左下方向的透明留白。独立 PNG 不再按图集中 `textureRect.x/y` 二次裁切；浮点裁切边界按最近整数像素取整。已是完整逻辑尺寸的 PNG 保留原画布。尺寸不匹配、超大图和非 `None` 的 packingRotation 明确失败，避免静默画错。元件 PNG 校验清单尺寸后保留原图透明边界，不套用静态图片的裁切规则。
 
-这是素材提供方数据驱动的**模拟器预览策略**。支持控件尺寸/旋转、原图 alpha、`imageColor` RGB 乘色/alpha，以及水平和垂直填充。基础／九切片拉伸见下节；图元和素材透明轮廓、反转与软边见 [图片遮罩](control-support.md#图片遮罩与羽化)。径向填充、材质及动效未在此处扩展，不据此推断真机视觉一致。
+这是素材提供方数据驱动的**模拟器预览策略**。支持控件尺寸/旋转、原图 alpha、`imageColor` RGB 乘色/alpha，以及水平和垂直填充；径向效果见 [Lua 试玩填充](../README.md#图片填充渲染边界)。基础／九切片拉伸见下节；图元和素材透明轮廓、反转与软边见 [图片遮罩](control-support.md#图片遮罩与羽化)。不据此推断真机视觉一致。
 
 网络和解码在宿主/显示层，Lua Worker 与存档不携带图片字节。Pixi 异步加载完成后主动重绘，静态或暂停场景也能更新；删除/换来源/换 ID 后丢弃过期结果，纹理按来源+ID 共用并在不再使用时释放。只有来源变化也会触发增量场景更新。编辑器图片使用 Canvas2D 乘色。Host 截图先冻结当前快照，再有界等待资源准备，不调用 step；失败项通过截图元数据 `assetWarnings` 返回来源、ID 与错误，并使用占位。
 
@@ -70,8 +70,10 @@ Web、MCP、DSH 使用同一套 `ImageAssetStore`，同一系统用户默认共�
 - **基础 `Basic`**：整张贴图随控件宽高缩放。
 - **拉伸 `Stretch`**：使用原始 `m_Border`（X 左、Y 下、Z 右、W 上）三切片／九切片。角保持本地 UI 尺寸，边单向伸长、中心双向伸长。边界不乘 2/3，也不除以 `m_PixelsToUnits`；父级缩放在切片之后应用。
 - 源边界超过源图尺寸时先归一化；控件小于左右／上下边界和时，分别按轴等比例压缩边界。零宽／零高源中心仍绘制目标区域，重复接缝的双线性样本，不留空洞。
-- 任一边界大于零时支持且默认拉伸；明确选择基础会保留。边界为零或缺失、基础图元、Prefab 图标都按基础绘制。换来源/ID 时清除旧类型选择，重新按素材确定默认。
+- 任一边界大于零时支持且默认拉伸；明确选择基础会保留。边界为零或缺失、基础图元、Prefab 图标都按基础绘制。在编辑器换来源/ID 时清除旧类型选择，重新按素材确定默认。
 - Authoring `imageType` 为 `null | "Basic" | "Stretch"`，null 表示未指定、由素材边界选择。编辑器类型下拉在边界读取期间禁用，已知不支持时只显示基础。保存保留明确的选择；未知 GIA 类型值单独保存在 `giaRaw.imageSlotType`，显式编辑才替换。
+
+**非方形图标的外观（[#27](https://github.com/1475505/miliastra-beyond-simulator/issues/27)）**：静态闭锁 `100169` 的[逻辑画布](https://oss.070077.xyz/images/border/100169.json)与 PNG 均为 48×60，无裁切偏移、无切片边框。在模拟器中，96×120 的控件保留原图比例，改成 120×120 会把同一把锁横向拉宽 25%。编辑画布、Pixi 和 Host PNG 的基础绘制都按控件宽高映射。真机在相同矩形内如何缩放尚待同屏对照；不能从这张素材推导所有基础图片的修正系数。
 
 Lua 使用已声明的枚举字段：
 
@@ -82,7 +84,9 @@ image.imageType = Enum.ImageType.Basic
 image.imageType = Enum.ImageType.Stretch
 ```
 
-**Lua 兼容边界：** Runtime 不联网，也不以异步加载结果决定脚本字段是否存在。Studio 对远程静态图片白名单接受 Basic/Stretch 选择请求，类型未指定时读回 Stretch；三种渲染端根据实际边界统一解析，不支持切片的图片即使收到 Stretch 仍按基础绘制。这一请求层策略不证明该 ID 的真机 `imageType` 可写。基础图元 100001–100006、Prefab 与其他未知来源仍保留此前的字段不可写行为。正式脚本对未实机确认的素材继续用 `pcall`；直接使用独立 Runtime 时需注入 `canSelectImageType` 策略。
+**Lua 策略：** Studio 对静态引用白名单中非基础图元维持 `Basic` / `Stretch` 读写；预置控件当前使用 `100001` 时也可读写，使用 `100002` 时只开放已验证的读取（包括换图前后按当前素材判定）。其余基础图元、模板动态实例上的基础图元、Prefab 和其他未知来源维持原有限制。字段不依赖联网或边框。可读但未指定类型时，Lua 读 `Basic`（GIA 的默认值）；编辑器和渲染端对未指定的类型仍按素材边框自动选择。Lua `SetImage` 在受支持素材间保留已指定的 `Basic`；未验证的 `Stretch` 起点换图维持模拟器原有的清除策略。直接使用独立 Runtime 时，可注入 `imageTypeAccess(id, source, fromTemplate)` 并返回 `'rw'`、`'ro'` 或 `null`；缺省不开字段，旧 `canSelectImageType` 仍可用于注入可读写条件。
+
+**真机证据与边界：** 完整知识工作区 `probes/image-transform-type/device-20261121.md` 的 PC 回传中，预置 `106030`、`101019`、`100001` 都能读写，使用 `SetImage` 换到这三种素材后，写入前读 `Basic`，写入后读回 `Stretch`。`101019` 无边框，`100001` 为基础矩形，类型变更都未见外观差异。用户报告原生编辑器不开放这两种素材的拉伸；这不影响 Lua 字段。换图起点均为 `Basic`，不能分辨保留还是重置；也未验证新版模板动态实例或其他来源。旧 Flappy Fish 动态实例拒写是独立观察，未确认实例可用 `pcall`。
 
 ### 元数据缓存与旧版本兼容
 

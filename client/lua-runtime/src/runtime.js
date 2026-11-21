@@ -63,7 +63,8 @@ export class LuaRuntime {
     this.language = options.language ?? 'LanguageChs'
     this.stageMode = options.stageMode ?? 'Classic'
     this.testPlay = options.testPlay !== false
-    this.canSelectImageType = options.canSelectImageType || (() => false)
+    const canSelectImageType = options.canSelectImageType
+    this.imageTypeAccess = options.imageTypeAccess || ((id, source) => canSelectImageType?.call(this, id, source) ? 'rw' : null)
     this.clock = { time: 0, levelTime: 0, paused: false, frame: 0 }
     this.logs = []
     this.mountErrors = []
@@ -660,7 +661,7 @@ export class LuaRuntime {
       Id: this.nextControlId(),
       authoringId: null,
       prefabIndex: Number(prefabIndex),
-    })
+    }, true)
     parent.addChild(control)
     // Dynamic instances start above existing siblings. Keep editor/template
     // child lists front-to-back; only raise this new root, before its scripts

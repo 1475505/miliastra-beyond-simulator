@@ -6,6 +6,10 @@
 
 提供 **Web 编辑器、MCP 服务和 DeepSeek Harness 插件**，支持 OpenCode、WorkBuddy、Codex 等 AI 工具。
 
+## 新手文档
+
+**[完整使用指南](docs/user-guide.md)**：从 [Harness 安装全流程](docs/user-guide.md#harness)或[其他 AI 应用接入](docs/user-guide.md#connect-ai)开始，继续[试玩示例](docs/user-guide.md#quick-start)、AI 制作和游戏交付，附工具链接、提示词及[常见问题](docs/user-guide.md#faq)。已打开编辑器时，也可点击右下角「快速上手」跟随实操引导。
+
 ## 包含什么
 
 | 能力 | 说明 |
@@ -158,6 +162,7 @@ pnpm test
 按任务逐层阅读；模块 README 管理自己的专题入口。
 
 - **使用与接入**
+  - [完整使用指南](docs/user-guide.md)：安装接入、示例试玩、AI 制作、游戏交付和常见问题，集中在同一篇。
   - [Web](web/README.md)：编辑器、磁盘预览与部署。
   - [MCP](mcp/README.md)：工程句柄、工具协议与时钟。
   - [Harness 插件](dsh-plugin/README.md)：安装、宿主兼容与排障。

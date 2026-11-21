@@ -2,6 +2,8 @@
 
 独立的 MCP stdio server，让 Codex 或其他 MCP client 直接驱动千星沙箱模拟器。它不依赖 DSH；编辑和试玩仍复用 `../studio`、`../client/lua-runtime` 与 `../server`。
 
+新手入门、操作流程与排障集中在[完整使用指南](../docs/user-guide.md)，可直接跳到[连接 AI](../docs/user-guide.md#connect-ai)或[与 AI 配合](../docs/user-guide.md#ai)。本页维护配置与工具契约。
+
 <a id="052-更新"></a>
 公开发布说明见 [GitHub Releases](https://github.com/1475505/miliastra-beyond-simulator/releases)，本页维护当前接入与工具契约。更新或修改字体后重启 MCP 服务；配套 Web 使用兼容版本。
 

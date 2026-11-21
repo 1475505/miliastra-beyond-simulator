@@ -292,24 +292,71 @@ test('texture alpha and slice borders determine masks independently of image tin
   assert.equal(await alphaPixel(png, 169, 80), 0)
 })
 
-test('Lua image, reverse and percentage changes reach both scene and flat rendering', async t => {
+test('isolated Lua mask assignments and percentage Tweens update scene deltas and pixels', async t => {
   const f = fixture(t)
   const script = f.runtime.mountScript({ path: 'mask-controls', control: f.root, source: `
-function UpdateMask()
-  local mask = script.object:GetChild('Mask')
-  mask:SetImage(Enum.ImageSource.StaticReference, 100002)
-  mask.reverseMaskArea = true
-  mask.enableSoftEdge = true
-  mask.softEdgeMode = Enum.ImageMaskSoftEdgeMode.Percentage
-  mask.horizontalSoftRange = 80
-  mask.verticalSoftRange = 60
-end` })
-  const before = f.scene()
-  f.runtime.invokeOn(script.env, 'UpdateMask', [])
-  const delta = playSnapshot(f.session, { view: true, sceneRev: before.revision }).scene
-  const mask = delta.changed.find(n => n.name === 'Mask')
-  assert.equal(mask.primitive, 'circle'); assert.equal(mask.reverseMaskArea, true)
-  assert.equal(mask.horizontalSoftRange, 80); assert.equal(mask.verticalSoftRange, 60)
-  assert.deepEqual(renderScenePng(f.scene(), 240, 160).data, renderPaintPng(paintList(f.session), 240, 160).data)
+local mask = script.object:GetChild('Mask')
+mask.enableSoftEdge = true
+mask.softEdgeMode = Enum.ImageMaskSoftEdgeMode.Percentage
+mask.horizontalSoftRange = 100
+mask.verticalSoftRange = 100
+function Horizontal(range) mask.horizontalSoftRange = range end
+function Vertical(range) mask.verticalSoftRange = range end
+function Invert(reverse) mask.reverseMaskArea = reverse end
+function TweenRange(field)
+  game.Tween(mask, { [field] = 20 }, 1):SetEase(Enum.EaseType.Linear):Play()
+end
+function UseCircle() mask:SetImage(Enum.ImageSource.StaticReference, 100002) end` })
+  assert.deepEqual(f.runtime.mountErrors, [])
+  const invoke = (name, ...args) => f.runtime.invokeOn(script.env, name, args)
+  const options = { background: 'transparent' }
+  // Mask bounds in PNG are x=70..170, y=50..110. At the two edge samples
+  // the pixel centers are 9.5 units from the left and 8.5 from the top.
+  const points = [[79, 68], [120, 58], [40, 68], [120, 68], [210, 80]]
+  const checkPixels = async (scene, alphas) => {
+    const png = renderScenePng(scene, 240, 160, options)
+    const ctx = createCanvas(240, 160).getContext('2d')
+    ctx.drawImage(await loadImage(png.data), 0, 0)
+    assert.deepEqual(points.map(([x, y]) => ctx.getImageData(x, y, 1, 1).data[3]), alphas)
+    assert.deepEqual(png.data, renderPaintPng(paintList(f.session), 240, 160, options).data)
+  }
+  let scene = f.scene()
+  const checkDelta = (key, value) => {
+    const delta = playSnapshot(f.session, { view: true, sceneRev: scene.revision }).scene
+    assert.equal(delta.reset, false)
+    assert.deepEqual(delta.changed.map(node => [node.id, node[key]]), [[f.mask.Id, value]], key)
+    scene = f.scene()
+  }
+  for (const [action, argument, field, value, alphas] of [
+    ['Horizontal', 60, 'horizontalSoftRange', 60, [121, 255, 0, 255, 255]],
+    ['Vertical', 40, 'verticalSoftRange', 40, [121, 120, 0, 255, 255]],
+    ['Invert', true, 'reverseMaskArea', true, [134, 135, 255, 0, 255]],
+    ['Invert', false, 'reverseMaskArea', false, [121, 120, 0, 255, 255]],
+  ]) {
+    invoke(action, argument)
+    checkDelta(field, value)
+    await checkPixels(scene, alphas)
+  }
+
+  invoke('Horizontal', 100)
+  invoke('Vertical', 100)
+  scene = f.scene()
+  invoke('TweenRange', 'horizontalSoftRange')
+  f.runtime.step(0.5)
+  checkDelta('horizontalSoftRange', 60)
+  await checkPixels(scene, [121, 255, 0, 255, 255])
+  f.runtime.step(0.5)
+  checkDelta('horizontalSoftRange', 20)
+  await checkPixels(scene, [61, 255, 0, 255, 255])
+  invoke('TweenRange', 'verticalSoftRange')
+  f.runtime.step(0.5)
+  checkDelta('verticalSoftRange', 60)
+  await checkPixels(scene, [61, 181, 0, 255, 255])
+  f.runtime.step(0.5)
+  checkDelta('verticalSoftRange', 20)
+  await checkPixels(scene, [61, 90, 0, 197, 255])
+
+  invoke('UseCircle')
+  checkDelta('primitive', 'circle')
   assert.equal(f.runtime.logs.some(n => n.level === 'lua-error'), false)
 })

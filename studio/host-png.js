@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { imageFillRect } from './play/image-fill.js'
+import { clipImageFill, imageFillClip, imageFillRect } from './play/image-fill.js'
 import { imageMaskSpec, createMaskSampler, groupMaskedPaint } from './play/image-mask.js'
 import { applyMatrix, invertMatrix } from './ui/layout.js'
 import { tintedImage } from './assets/raster.js'
@@ -245,13 +245,8 @@ function drawPaintItem(ctx, item, canvasHeight, assets) {
   }
   else if (item.kind === 'button') drawButtonItem(ctx, item, width, height)
   else if (item.kind !== 'grid') {
-    const clip = imageFillRect(item, width, height)
-    if (clip) {
-      ctx.beginPath()
-      ctx.rect(clip.x, clip.y, clip.width, clip.height)
-      ctx.clip()
-    }
-    drawPrimitive(ctx, item, width, height, assets)
+    const clip = item.kind === 'image' ? imageFillClip(item, width, height) : null
+    if (clipImageFill(ctx, clip)) drawPrimitive(ctx, item, width, height, assets)
   }
   drawScrollBar(ctx, item, width, height)
   ctx.restore()

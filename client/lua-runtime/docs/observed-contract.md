@@ -22,7 +22,7 @@
 - userdata 按类型封闭，只开放官方 API 字段/方法；缺字段读 nil，写 `cannot set <field>, no such field`。Authoring 的按钮四态、`enableFill`、网格 cellSize 等不进入 Lua 表面；`script.tickEnabled`、`EnumItem.__kind` 也不开放。
 - [官方 API](https://act.mihoyo.com/ys/ugc/tutorial/detail/mhtakr07vej4)（2026-10-24 核对）采用小写 `id/prefabIndex`。模拟器兼容只读整数 `Id`，与 `id` 相同且销毁后不可读；别名不证明真机支持。Script 使用 `scriptMappingId`，grid 使用 `itemPrefabIndex`，reference 使用 `referencedPrefabIndex`，不新增 `script.id/prefabId`。回归见 `test/runtime.test.mjs`。
 - `FindChild` 支持 `A/B`，`GetChild` 仅直接子节点。`GetChildren` 返回可操作的 Control 引用；历史本地 API rev223 未约定数组顺序，模拟器采用最上层在前。`test/children-reference.test.mjs` 验证引用和排序，不以此证明真机数组顺序。
-- `imageType` 只有部分真机图片可写，基础图元模板赋值曾报缺字段。独立 Runtime 默认拒绝，Studio 注入白名单策略；具体接受范围、读回及渲染规则统一见[图片类型](../../../studio/docs/image-assets.md#图片类型基础拉伸)。
+- `imageType` 的访问、读回与切片是独立判定。独立 Runtime 默认拒绝，Studio 注入白名单策略；具体接受范围和与真机的已知差异见[图片类型](../../../studio/docs/image-assets.md#图片类型基础拉伸)。
 - `game` 全局函数用点号，桥接逐项核对 API 参数个数。2026-09-25 日记回传 `game:GetClientUIRoots()` 报 `(0 expected, got 1)`；对其他函数的统一检查是模拟器防错策略。日记初始化未解决范围见[Studio](../../../studio/README.md#gia-图元与初始状态)。
 
 ## 输入与显示层序
