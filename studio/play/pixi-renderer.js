@@ -1,6 +1,6 @@
 import { Application, CanvasSource, ImageSource, Container, DOMAdapter, Graphics, Matrix, Mesh, MeshGeometry, Sprite, Text, TextStyle, Texture } from 'pixi.js'
 import { imageFillClip } from './image-fill.js'
-import { imageMaskSpec, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
+import { imageMaskSpec, isHardRectMask, paintMaskCanvas, maskedPaintScene } from './image-mask.js'
 import { maskRasterSize } from './image-mask-raster.js'
 import { scrollBarGeometry, visibleTextLines, intersectClipPolygons, rectClipPolygon } from './scroll-geometry.js'
 import { applyMatrix, hasPlaneArea, identityMatrix, invertMatrix } from '../ui/layout.js'
@@ -548,8 +548,9 @@ export class PixiPlayRenderer {
   updateImageMask(root, item, width, height) {
     const spec = item.kind === 'image' ? imageMaskSpec({ ...item, sourceWidth: width, sourceHeight: height }, IDENTITY) : null
     const projected = item.projectedMatrix
-    const empty = !(width > 0 && height > 0) || (projected && !hasPlaneArea(projected))
-    const key = spec ? JSON.stringify([spec, !!empty]) : ''
+    const hard = spec !== null && isHardRectMask(spec)
+    const empty = !(width > 0 && height > 0) || (projected != null && !hasPlaneArea(projected)) || (hard && spec.reverseMaskArea)
+    const key = spec ? JSON.stringify([spec, empty]) : ''
     if (root.__maskKey === key) {
       const mask = root.__imageMask
       if ((projected || root.__projected) && mask) this.positionImageMask(mask, projected || IDENTITY, width, height)
@@ -566,30 +567,26 @@ export class PixiPlayRenderer {
     }
     const content = root.__imageContent
     if (!content) return
-    content.visible = !spec || !empty || spec.reverseMaskArea
-    // Inverse hard masks also use alpha sprites: the stencil mask bounds would
-    // discard descendants outside the rectangle before inversion could run.
-    const soft = spec && (spec.featherX > 0 || spec.featherY > 0 || spec.primitive !== 'rect' || spec.reverseMaskArea)
-    const rasterSize = spec && maskRasterSize(spec)
+    content.visible = !spec || !empty
+    const rasterSize = spec && !empty && !hard ? maskRasterSize(spec) : null
     const textureWidth = rasterSize?.width, textureHeight = rasterSize?.height
     const asset = spec?.primitive === 'sprite' ? this.imageTexture(item.imageId, item.imageSource) : null
     const previous = root.__imageMask
     // Width-only Tween updates reuse a bounded texture rather than creating a
     // GPU resource every frame. Viewport clipping stays on the outer root.
-    if (soft && !empty && content.visible && previous instanceof Sprite
+    if (rasterSize && previous instanceof Sprite
         && previous.texture.source.resource.width === textureWidth && previous.texture.source.resource.height === textureHeight) {
       paintMaskCanvas(previous.texture.source.resource, spec, asset, (w, h) => DOMAdapter.get().createCanvas(w, h))
       previous.texture.source.update()
       this.positionImageMask(previous, projected || IDENTITY, width, height)
-      content.setMask({ mask: previous, channel: 'alpha', inverse: spec.reverseMaskArea })
       return
     }
     content.mask = null
     previous?.destroy({ context: true, texture: true, textureSource: true })
     root.__imageMask = null
-    if (!spec || !content.visible || empty) return
+    if (!spec || empty) return
     let clip
-    if (soft) {
+    if (rasterSize) {
       const canvas = DOMAdapter.get().createCanvas(textureWidth, textureHeight)
       paintMaskCanvas(canvas, spec, asset, (w, h) => DOMAdapter.get().createCanvas(w, h))
       clip = new Sprite({ texture: new Texture({ source: new CanvasSource({ resource: canvas }) }), anchor: 0.5 })
@@ -599,7 +596,9 @@ export class PixiPlayRenderer {
     clip.eventMode = 'none'
     this.positionImageMask(clip, projected || IDENTITY, width, height)
     content.addChild(clip)
-    content.setMask({ mask: clip, channel: 'alpha', inverse: spec.reverseMaskArea })
+    // The texture already contains bounded reversed coverage when requested;
+    // Pixi's inverse flag would also reveal pixels outside its bounds.
+    content.setMask({ mask: clip, channel: 'alpha' })
     root.__imageMask = clip
   }
 

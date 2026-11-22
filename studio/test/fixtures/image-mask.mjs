@@ -57,6 +57,18 @@ export function contourScene(primitive, extra = {}) {
     image('red', 'mask', { sourceHeight: 140 })])
 }
 
+// The 96×96 ring is centered at (120, 80). The 40×30 mask is 80 units
+// away, so their bounds are disjoint even when both are rotated.
+export function disjointReverseMaskScene(angle) {
+  const radians = angle * Math.PI / 180, a = Math.cos(radians), b = Math.sin(radians)
+  return scene([
+    root(),
+    mask('mask', 'root', { sourceWidth: 40, sourceHeight: 30, reverseMaskArea: true,
+      matrix: { a, b, c: -b, d: a, tx: 80, ty: 0 } }),
+    image('ring', 'mask', { primitive: 'ring', imageId: 100006, sourceWidth: 96, sourceHeight: 96, matrix: matrix(-80 * a, 80 * b) }),
+  ])
+}
+
 export function editorMaskProject({ nested = false } = {}) {
   const project = createDefaultProject()
   const image = (id, width, height, extra = {}) => createNode('image', {

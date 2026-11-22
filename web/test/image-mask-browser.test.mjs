@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
 import { startTestBrowser } from './browser-helper.mjs'
-import { editorMaskProject, maskScenes, maskSamples, maskAlphas, contourSamples, contourAlphas, contourScene } from '../../studio/test/fixtures/image-mask.mjs'
+import { editorMaskProject, maskScenes, maskSamples, maskAlphas, contourSamples, contourAlphas, contourScene, disjointReverseMaskScene } from '../../studio/test/fixtures/image-mask.mjs'
 import { imageTiltFixture } from '../../studio/test/fixtures/image-tilt.mjs'
 import { renderScenePng, flattenScenePaint } from '../../studio/host-png.js'
 import { createStudio } from '../../studio/index.js'
@@ -66,7 +66,7 @@ renderer.ready.then(() => window.ready = true);
     samples.forEach(([x, y], i) => {
       const png = [...ctx.getImageData(x, y, 1, 1).data]
       const expected = [png[0] * png[3] / 255, png[1] * png[3] / 255, png[2] * png[3] / 255, png[3]]
-      assert.ok(Math.abs(png[3] - alpha[i]) <= 1, `independent expected alpha at ${x},${y}`)
+      assert.ok(Math.abs(png[3] - alpha[i]) <= 1, `PNG alpha at ${x},${y}: ${png[3]}, expected ${alpha[i]}`)
       gpu[i].forEach((channel, c) => assert.ok(Math.abs(channel - expected[c]) <= 2, `flat=${flat} pixel=${x},${y} GPU=${gpu[i]} PNG=${expected}`))
     })
   }
@@ -76,14 +76,24 @@ renderer.ready.then(() => window.ready = true);
   }
   for (const [primitive, alpha] of Object.entries(contourAlphas)) for (const reverseMaskArea of [false, true]) {
     const scene = contourScene(primitive, { reverseMaskArea })
-    const expected = alpha.map(a => reverseMaskArea ? 255 - a : a)
+    const expected = alpha.map((a, i) => reverseMaskArea && i !== 0 ? 255 - a : a)
     await check(scene, expected, false, contourSamples)
     await check(scene, expected, true, contourSamples)
   }
-  await check(contourScene('rect', { reverseMaskArea: true, sourceWidth: 0 }), contourSamples.map(() => 255), false, contourSamples)
+  await check(contourScene('ring', { reverseMaskArea: true, sourceWidth: 0 }), contourSamples.map(() => 0), false, contourSamples)
   const inverseSoft = contourScene('rect', { reverseMaskArea: true, enableSoftEdge: true, softEdgeWidthX: 20 })
-  await check(inverseSoft, [255, 121, 0, 0, 6])
-  await check(inverseSoft, [255, 121, 0, 0, 6], true)
+  for (const flat of [false, true]) await check(inverseSoft, [0, 121, 0, 0, 6], flat)
+  for (const angle of [0, 45, 90]) {
+    const disjoint = disjointReverseMaskScene(angle)
+    for (const flat of [false, true]) await check(disjoint, [0, 0], flat, [[164, 80], [76, 80]])
+  }
+  const rotated = maskScenes().single
+  const s = Math.SQRT1_2
+  Object.assign(rotated.nodes[1], { reverseMaskArea: true, matrix: { a: s, b: s, c: -s, d: s, tx: 0, ty: 0 } })
+  rotated.nodes[2].sourceHeight = 140
+  // (80,50) is inside the screen bounds but outside the rotated rectangle;
+  // (148,51) is 9.7 units inside the right feather in mask-local coordinates.
+  for (const flat of [false, true]) await check(rotated, [0, 131, 0], flat, [[80, 50], [148, 51], [120, 80]])
   const percentage = contourScene('rect', { enableSoftEdge: true, softEdgeMode: 'Percentage', horizontalSoftRange: 100, verticalSoftRange: 100 })
   // The two edge samples are 10.5 units into the mask; range 60 gives a 20-unit feather on a 100-unit side.
   const percentageSamples = [[60, 80], [80, 80], [120, 40], [120, 80]]
@@ -92,7 +102,7 @@ renderer.ready.then(() => window.ready = true);
   for (const [extra, alpha] of [
     [{ horizontalSoftRange: 60 }, [0, 134, 255, 255]],
     [{ verticalSoftRange: 60 }, [0, 134, 134, 255]],
-    [{ reverseMaskArea: true }, [255, 121, 121, 0]],
+    [{ reverseMaskArea: true }, [0, 121, 121, 0]],
     [{ reverseMaskArea: false }, [0, 134, 134, 255]],
   ]) {
     Object.assign(percentageMask, extra)
@@ -100,23 +110,25 @@ renderer.ready.then(() => window.ready = true);
     const gpu = await browser.evaluate(`window.sample(${JSON.stringify(delta)},false,${JSON.stringify(percentageSamples)})`)
     gpu.forEach((pixel, i) => assert.ok(Math.abs(pixel[3] - alpha[i]) <= 2, `${JSON.stringify(extra)}: pixel ${percentageSamples[i]} alpha ${pixel[3]}, expected ${alpha[i]}`))
   }
-  // A 270° sector with a disjoint inverted mask must never restore the part
-  // discarded by progress fill. The samples avoid edges for stable readback.
-  const radial = contourScene('rect', { sourceWidth: 40, reverseMaskArea: true })
+  // A 270° sector intersects the reversed feather, rather than revealing
+  // pixels cut by either the fill shape or the mask rectangle.
+  const radial = contourScene('rect', { sourceWidth: 80, reverseMaskArea: true, enableSoftEdge: true, softEdgeWidthX: 20 })
   const artwork = radial.nodes.at(-1)
   Object.assign(artwork, { sourceWidth: 100, sourceHeight: 60, fillType: 'Radial360', fillRadialType: 'Top', fillAmount: .75 })
-  const fillSamples = [[90, 65], [150, 65], [90, 95], [150, 95], [128, 94]]
-  await check(radial, [0, 255, 255, 255, 0], false, fillSamples)
+  const fillSamples = [[90, 65], [150, 65], [90, 95], [150, 95], [128, 94], [75, 95], [164, 95]]
+  await check(radial, [0, 134, 121, 134, 0, 0, 0], false, fillSamples)
   const turned = { format: 'tree-v1', reset: false, changed: [{ ...artwork, fillRadialType: 'Right' }] }
   const filled = await browser.evaluate(`window.sample(${JSON.stringify(turned)},false,${JSON.stringify(fillSamples)})`)
-  assert.deepEqual(filled.map(pixel => pixel[3]), [255, 0, 255, 255, 0], 'changing only the origin updates the real GPU clip')
-  await check(radial, [0, 255, 255, 255, 0], true, fillSamples)
+  for (const [i, alpha] of [121, 0, 121, 134, 0, 0, 0].entries()) {
+    assert.ok(Math.abs(filled[i][3] - alpha) <= 2, `changing only the origin updates the GPU clip at ${fillSamples[i]}`)
+  }
+  await check(radial, [0, 134, 121, 134, 0, 0, 0], true, fillSamples)
   const contour = contourScene('circle')
   await check(contour, contourAlphas.circle, false, contourSamples)
   const baseMask = contour.nodes.find(n => n.id === 'mask')
   const changedMask = { ...baseMask, primitive: 'ring', imageId: 100006, reverseMaskArea: true }
   const changed = await browser.evaluate(`window.sample(${JSON.stringify({ format: 'tree-v1', reset: false, changed: [changedMask] })},false,${JSON.stringify(contourSamples)})`)
-  changed.forEach((pixel, i) => assert.ok(Math.abs(pixel[3] - (255 - contourAlphas.ring[i])) <= 2, 'incremental shape + reverse'))
+  changed.forEach((pixel, i) => assert.ok(Math.abs(pixel[3] - (i === 0 ? 0 : 255 - contourAlphas.ring[i])) <= 2, 'incremental shape + reverse'))
   const nested = contourScene('circle')
   const inner = { ...baseMask, id: 'inner', parent: 'mask', primitive: 'ring', imageId: 100006, reverseMaskArea: true }
   nested.nodes.find(n => n.id === 'red').parent = 'inner'
@@ -185,13 +197,15 @@ renderer.ready.then(() => window.ready = true);
     assert.ok(Math.abs(movedAlphas[i] - alpha) <= 2, `moved mask alpha at ${projectedSamples[i]}`)
   }
   assert.equal(await browser.evaluate(`renderer.nodes.get('mask').__imageMask.texture === tiltMaskTexture`), true)
-  // The same backend must not treat an edge-on mask as a singular parent
-  // transform: inverted empty coverage keeps the independently turned face.
+  // The edge-on mask clips even when reversed. Disabling it, however, must
+  // restore the face inside its independent viewport without flattening it.
   mask.projectedMatrix = plane(0)
   assert.deepEqual(await deltaAlphas([mask]), [0, 0, 0, 0, 0])
   mask.reverseMaskArea = true
+  assert.deepEqual(await deltaAlphas([mask]), [0, 0, 0, 0, 0])
+  for (const flat of [true, false]) await check(projected, [0, 0, 0, 0, 0], flat, projectedSamples)
+  mask.enableMask = false
   assert.deepEqual(await deltaAlphas([mask]), [0, 255, 255, 255, 0])
-  for (const flat of [true, false]) await check(projected, [0, 255, 255, 255, 0], flat, projectedSamples)
   viewport.projectedMatrix = plane(0)
   assert.deepEqual(await deltaAlphas([viewport]), [0, 0, 0, 0, 0])
   viewport.projectedMatrix = plane(.5)
@@ -210,18 +224,18 @@ renderer.ready.then(() => window.ready = true);
   textureMask.imageType = 'Stretch'
   await check(textureScene, [0, 0, 0, 255], false, textureSamples, assets)
   textureMask.reverseMaskArea = true
-  await check(textureScene, [255, 255, 255, 0], false, textureSamples, assets)
-  await check(textureScene, [255, 255, 255, 0], true, textureSamples, assets)
+  await check(textureScene, [0, 255, 255, 0], false, textureSamples, assets)
+  await check(textureScene, [0, 255, 255, 0], true, textureSamples, assets)
   await browser.wait(`!!renderer.imageTextures.get('StaticReference:101001')?.texture`)
   await browser.evaluate(`window.oldMaskTexture=[...renderer.nodes.values()].find(root=>root.__imageMask).__imageMask.texture;window.oldImageTexture=renderer.imageTextures.get('StaticReference:101001').texture;void 0`)
   assetCtx.fillStyle = '#fff'; assetCtx.fillRect(0, 0, 10, 10)
   assetPng = assetImage.toBuffer('image/png')
   await browser.evaluate(`refreshMask(101001)`)
   await browser.wait(`oldImageTexture.destroyed && !!renderer.imageTextures.get('StaticReference:101001')?.texture`)
-  // No scene update: completion must repaint both the positive mask texture and
-  // the inverse group while preserving its owned GPU resource.
+  // No scene update: completion must repaint the bounded reversed alpha on
+  // the existing GPU resource.
   const refreshed = await browser.evaluate(`window.sample({format:'tree-v1',reset:false,changed:[]},false,${JSON.stringify(textureSamples)})`)
-  assert.deepEqual(refreshed.map(p => p[3]), [255, 0, 0, 0])
+  assert.deepEqual(refreshed.map(p => p[3]), [0, 0, 0, 0])
   assert.equal(await browser.evaluate(`oldMaskTexture.destroyed`), false)
   await browser.evaluate(`renderer.destroy()`)
   assert.equal(await browser.evaluate(`oldMaskTexture.destroyed`), true)
@@ -313,11 +327,11 @@ test('editor DOM applies grouped feathering, updates mask settings and leaves se
   assert.deepEqual(pixel(800, 450), [255, 0, 0, 255])
   assert.deepEqual(pixel(760, 410), [0, 0, 0, 255], 'circle clips the rectangle corner in DOM')
   await toggle('遮罩区域反转')
-  await wait(`document.querySelector('[data-mask-id="inner"]').style.maskImage.includes('luminance')`)
+  await wait(`Array.from(document.querySelectorAll('.qxsim-switch-row')).find(row=>row.textContent==='遮罩区域反转').querySelector('input').checked`)
   pixel = await sample()
   assert.deepEqual(pixel(800, 450), [0, 0, 0, 255])
   assert.deepEqual(pixel(760, 410), [255, 0, 0, 255])
-  assert.deepEqual(pixel(730, 450), [255, 0, 0, 255], 'outside mask rectangle remains visible')
+  assert.deepEqual(pixel(730, 450), [0, 0, 0, 255], 'reversed DOM mask still clips outside its rectangle')
   await number('imageId', 100006)
   await wait(`document.querySelector('[data-control-id="inner"]').style.maskImage.includes('radial-gradient')`)
   pixel = await sample()

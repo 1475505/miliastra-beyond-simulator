@@ -169,6 +169,12 @@ test('browser plays packed effects, preserves manual frames and composition, and
   assert.deepEqual(await pixel(), [80, 100, 120, 255], 'ring hole clips effect planes')
   await browser.evaluate(`vfxRenderer.syncEffects(frame(0.1,{masks:[{id:9,primitive:'ring',reverseMaskArea:true,matrix:{a:1,b:0,c:0,d:1,tx:160,ty:120},width:100,height:100,featherX:0,featherY:0}]}))`)
   for (const [i, expected] of first.entries()) assert.ok(Math.abs((await pixel())[i] - expected) <= 2, 'inverse ring reveals effect at center')
+  for (const matrix of [{ a: 1, d: 1, tx: 260 }, { a: 0, d: 1, tx: 160 }]) {
+    const mask = { id: 9, primitive: 'ring', reverseMaskArea: true, width: 100, height: 100, featherX: 0, featherY: 0,
+      matrix: { b: 0, c: 0, ty: 120, ...matrix } }
+    await browser.evaluate(`vfxRenderer.syncEffects(frame(0.1,{masks:[${JSON.stringify(mask)}]}))`)
+    assert.deepEqual(await pixel(), [80, 100, 120, 255], 'disjoint and edge-on reversed masks do not reveal the effect')
+  }
   await browser.evaluate(`vfxRenderer.syncEffects(frame(0.1,{matrix:{a:0,b:0.5,c:-1,d:0,tx:160,ty:120},masks:[
     {id:9,matrix:{a:1,b:0,c:0,d:1,tx:160,ty:120},width:182,height:182,featherX:182,featherY:0},
     {id:10,matrix:{a:1,b:0,c:0,d:1,tx:160,ty:120},width:182,height:182,featherX:0,featherY:182}]}))`)

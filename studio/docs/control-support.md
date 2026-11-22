@@ -157,27 +157,27 @@
 
 MASK v1 的 PC 真机回传确认：`enableMask` 裁切图片的后代，不裁切兄弟；`imageColor` alpha=0 不取消遮罩。像素羽化从对应两边向内衰减，羽化宽度 0 仍是硬边。真机两组软边并非逐像素相同：不透明遮罩组有较亮条带，具体合成过程未确认，详见完整工作区 `knowledge/fact.md` 的 MASK v1 条目。
 
-按用户采用的 [Miliastra-image-editor-webui `103025f`](https://github.com/1475505/Miliastra-image-editor-webui/tree/103025f) `frontend/src/maskShapes.ts` / `maskPreview.ts` 对齐预览规则（[#25](https://github.com/1475505/miliastra-beyond-simulator/issues/25)）：
+取形和羽化沿用 [Miliastra-image-editor-webui `103025f`](https://github.com/1475505/Miliastra-image-editor-webui/tree/103025f)；反转边界按 [`3b60f6a`](https://github.com/1475505/Miliastra-image-editor-webui/commit/3b60f6a00a24ca0991fe9014363cace658ff5d40) 对齐：
 
 - **取形**：100001–100006 使用矩形、椭圆、三角、四角星、五角星、圆环代理。圆环内半轴为外半轴的80%，图片本体与遮罩采用同一几何；宽高分别缩放。白名单静态／Prefab 图片取素材原始 alpha，保留孔洞、半透明和留白，按 Basic／Stretch 先缩放或切片。图片着色与着色 alpha 不改变遮罩；进度填充仍只裁图片本体。
 - **羽化**：矩形沿四边线性向内；其它轮廓沿启用的 X/Y 轴双向扫描到透明像素，孔洞同样算边缘，覆盖率取原 alpha 与各轴渐变的最小值。Pixel 使用 `softEdgeWidthX/Y`；Percentage 使用 `轴尺寸 × (1-clamp(range,0,100)/100)/2`，其中 range 对应 `horizontalSoftRange/verticalSoftRange`。100为硬边、0为从两边渐变到中心；非当前模式的字段仍保留，不回写保存值。旧版忽略范围字段、将像素宽度当百分比的近似已替代。
-- **反转与合成**：先计算取形和羽化，再以 `1-alpha` 反转，包括遮罩矩形以外的后代内容。按遮罩身份先合成整组（包括图片自身），应用一次覆盖率；兄弟独立、嵌套逐层相乘。零尺寸正向为空覆盖、反向保留后代，与关闭开关分开处理。
-- **资源与边界**：轮廓栅格最长边1536（另加透明边界），局部羽化纹理有界；缺失／加载中的素材取空覆盖，反向为空覆盖的补集。异步加载及显式刷新会重绘静态场景，迟到结果不覆盖新来源／ID；Host 的 `assetWarnings` 与图片预览继续报告加载失败。点击命中仍按原布局矩形。
+- **反转与合成**：先计算取形和羽化，只在遮罩自身的矩形内取 `1-alpha`，框外仍裁掉。这个矩形随控件变换，不是屏幕上的轴对齐包围盒。零尺寸或投影侧立的遮罩在正向、反向都不显示内容；反转实心矩形硬遮罩也不显示内容，这与关闭遮罩不同。按遮罩身份先合成整组（包括图片自身），再应用一次覆盖率；兄弟独立、嵌套逐层相乘。
+- **资源与边界**：轮廓栅格最长边1536（另加透明边界）；缺失／加载中的素材取空覆盖，反向也最多显示遮罩框内。异步加载及显式刷新会重绘静态场景，迟到结果不覆盖新来源／ID；Host 的 `assetWarnings` 与图片预览继续报告加载失败。点击命中仍按原布局矩形。
 
-证据：2026-11-12 Windows / Node22 / Canvas0.1.100 / Pixi8.20 / Edge；参考源码为 `documented / simulator`，自动回归为 `observed / simulator / device_status=not_required`。除上方 MASK v1 已测的矩形条件外，非矩形轮廓、Percentage、反转、嵌套及精确软边合成仍 `device_status=pending`；对齐外部预览不等于千星真机通过。
+证据：[图片编辑器 #1](https://github.com/1475505/Miliastra-image-editor-webui/issues/1) 报告真机开启反转后，移离矩形遮罩的圆环仍不可见（`provided_unverified / device`，版本未知）；`3b60f6a` 是其网页预览修复，不是真机实现。反转时的半透明边缘、非矩形轮廓、百分比及精确合成仍 `device_status=pending`。以下回归只验证模拟器。
 
 - PNG 与 Pixi 的树形及扁平回退使用相同分组边界，重叠子图不会叠加同一个遮罩的覆盖率；独立兄弟遮罩即使几何相同也分别合成。
-- PNG 正向使用与画布相交的遮罩包围盒，反向使用后代可见内容的包围盒；按组读回合成，逆矩阵与轮廓采样器在像素循环外计算，避免每个小蒙版分配整屏图层。
-- Pixi 外层保留视窗裁切，内层执行图片遮罩；两者独立更新和释放。矩形硬边使用 Graphics，轮廓／羽化／反向使用自有 alpha Sprite；反向由整组合成执行，纹理保持正向覆盖率。相同栅格尺寸更新复用纹理，删除时释放；不销毁共享素材纹理。输出尺寸与轮廓栅格相同时直接复制覆盖率，硬边省去浮点羽化中间数组；不同尺寸保留双线性采样。
+- PNG 两种方向都在与目标画布相交的遮罩包围盒内合成，像素按逆矩阵回到本地矩形采样。
+- Pixi 外层保留视窗裁切，内层执行图片遮罩；两者独立更新和释放。正向矩形硬边使用 Graphics，轮廓／羽化使用自有 alpha Sprite。反向直接把框内补集写入纹理，不对整个画面取反。相同栅格尺寸复用纹理，删除时释放；不销毁共享素材纹理。
 - 实现：`play/image-mask.js` 保存描述、采样与分组；`play/image-mask-raster.js` 绘制轮廓和扫描羽化；`assets/primitives.js` 共用代理几何。`session.js` 的场景指纹比较 `reverseMaskArea`、`horizontalSoftRange`、`verticalSoftRange`；Lua 单独写入其中任一字段，或 Tween 推进范围值，都能在下一次读取场景时更新试玩和试玩截图，不必同时改位置或素材。扁平回退保留遮罩素材身份。动效平面也使用同一覆盖率。
-- 回归入口：`test/image-mask.test.mjs` 使用独立几何和手算像素期望，覆盖六种形状、孔洞、半透明、切片、反转外部区域、范围公式、重叠/嵌套/兄弟/零尺寸/旋转/高 DPI、Lua 单字段增量与两轴范围 Tween 中间帧的 PNG 像素，以及资源回收；`web/test/image-mask-browser.test.mjs` 核对真实 WebGL、遮罩字段逐项更新、PNG、编辑 DOM、扁平回退、异步素材刷新及纹理复用。动效组合见 `web/test/ui-vfx.test.mjs`。浏览器用例通过 `QXQY_BROWSER` 启用。
+- 回归入口：`test/image-mask.test.mjs` 覆盖六种形状、孔洞、半透明、切片、羽化、嵌套、零尺寸、旋转、高 DPI 和 Lua 增量；`web/test/image-mask-browser.test.mjs` 核对 WebGL、PNG、编辑 DOM 和扁平回退，包含圆环与反向矩形完全错开的 0°／45°／90° 对照。动效组合见 `web/test/ui-vfx.test.mjs`。浏览器用例通过 `QXQY_BROWSER` 启用。
 
 <a id="编辑画布遮罩与羽化2026-10-20"></a>
 ### 编辑画布遮罩与羽化
 
 `ui/inspector.js` 为编辑盒附加祖先遮罩链与层级可见性，复用试玩的 `imageMaskSpec/groupMaskedPaint`；透明图片的遮罩、子孙裁切、嵌套、零尺寸和投影随布局一起更新。
 
-- `editor-ui/mask-preview.js` 将同一遮罩下的DOM内容分组合成，再应用一次alpha遮罩；复用 `paintMaskCanvas` 的轮廓与羽化，局部栅格单边上限2048。反向通过 SVG 亮度补集保留矩形外内容。遮罩图像经完整仿射矩阵映射到画布，控件沿用DOM文字/图片预览；修改图片、类型、范围、反转、羽化或变换，以及素材加载／刷新完成后直接更新。
+- `editor-ui/mask-preview.js` 将同一遮罩下的 DOM 内容分组合成，再应用一次 alpha 遮罩；轮廓、羽化和框内反转共用 `paintMaskCanvas`，局部栅格单边上限2048。遮罩用完整仿射矩阵映射到画布；修改属性、变换或刷新素材会直接更新。
 - 编辑器PNG复用试玩的裁剪包围盒分组合成。DOM选框/控制点与PNG选框最后单独绘制，不参与羽化，不因选中控件而把其图像提升层序。隐藏祖先或左树关闭画布可见性时，其后代不显示；遮罩范围外仍可通过控件树选取，编辑点击继续按布局矩形判断。
 - 回归沿用上述遮罩用例及 `fixtures/image-mask.mjs`，覆盖祖先链、选框、检视器提交和树可见性。边界沿用试玩策略；编辑预览不执行 Lua。
 

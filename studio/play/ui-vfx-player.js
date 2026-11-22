@@ -178,13 +178,13 @@ export class BrowserUIVfxPlayer {
       canvas.width = w; canvas.height = h
       return canvas
     }
-    const masks = row.masks.map(spec => ({ spec, inverse: invertMatrix(spec.matrix),
+    const masks = row.masks.map(spec => ({ inverse: invertMatrix(spec.matrix),
       sample: createMaskSampler(spec, createCanvas, this.maskAsset(spec)) }))
     for (let y = 0; y < mask.height; y++) for (let x = 0; x < mask.width; x++) {
       const world = applyMatrix(m, (x + 0.5) * asset.width / mask.width - asset.width / 2, asset.height / 2 - (y + 0.5) * asset.height / mask.height)
       let coverage = 1
-      for (const { spec, inverse, sample } of masks) {
-        if (!inverse) { coverage *= spec.reverseMaskArea ? 1 : 0; continue }
+      for (const { inverse, sample } of masks) {
+        if (!inverse) { coverage = 0; break }
         const local = applyMatrix(inverse, world.x, world.y)
         coverage *= sample(local.x, local.y)
       }

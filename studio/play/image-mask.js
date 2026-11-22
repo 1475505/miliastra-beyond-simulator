@@ -7,8 +7,8 @@
  * does not reveal content outside the rectangle. Width 0 stays a hard edge.
  *
  * Preview policy aligned with Miliastra-image-editor-webui 103025f: primitive /
- * texture alpha contours, inward scanline feather, percentage opaque spans and
- * complement AFTER feathering. Nested masks multiply coverage. Not device proof.
+ * texture alpha contours, inward scanline feather and percentage opaque spans.
+ * 3b60f6a bounds the complement after feathering to the mask rectangle.
  */
 import { applyMatrix } from '../ui/layout.js'
 import { imagePrimitive } from '../constants.js'
@@ -46,14 +46,20 @@ export function centerMaskMatrix(matrix, centerX, centerY) {
   return { a: matrix.a, b: matrix.b, c: matrix.c, d: matrix.d, tx: center.x, ty: center.y }
 }
 
+export function isHardRectMask(mask) {
+  return mask.primitive === 'rect' && !(mask.featherX > 0 || mask.featherY > 0)
+}
+
 export function imageMaskCoverage(localX, localY, mask, raster) {
+  // A reversed mask only complements in local rectangle coordinates, never
+  // outside the box (including the corners of a rotated box's screen bounds).
+  if (!(Math.abs(localX) < mask.width / 2 && Math.abs(localY) < mask.height / 2)) return 0
   const fade = (distance, feather) => {
     if (distance <= 0) return 0
     if (!(feather > 0) || distance >= feather) return 1
     return distance / feather
   }
-  const inside = mask.width > 0 && mask.height > 0 && Math.abs(localX) < mask.width / 2 && Math.abs(localY) < mask.height / 2
-  const coverage = !inside ? 0 : mask.primitive && mask.primitive !== 'rect' ? sampleMaskRaster(localX, localY, mask, raster) : Math.min(
+  const coverage = mask.primitive && mask.primitive !== 'rect' ? sampleMaskRaster(localX, localY, mask, raster) : Math.min(
     fade(localX + mask.width / 2, mask.featherX),
     fade(mask.width / 2 - localX, mask.featherX),
     fade(localY + mask.height / 2, mask.featherY),
@@ -125,8 +131,8 @@ export function maskedPaintScene(items) {
   return { format: 'tree-v1', reset: true, nodes }
 }
 
-// Paint positive coverage. Each backend complements the entire affected group,
-// including content OUTSIDE the mask rectangle, rather than just these texels.
+// Paint final coverage in the mask rectangle. Both the DOM and Pixi treat the
+// area outside this image as transparent, even when its texels are reversed.
 export function paintMaskCanvas(canvas, mask, asset, createCanvas = (w, h) => {
   const result = canvas.ownerDocument.createElement('canvas')
   result.width = w; result.height = h
@@ -137,15 +143,18 @@ export function paintMaskCanvas(canvas, mask, asset, createCanvas = (w, h) => {
   const ctx = canvas.getContext('2d')
   const image = ctx.createImageData(width, height)
   const data = image.data
-  const positive = { ...mask, reverseMaskArea: false }
+  const reverse = mask.reverseMaskArea
   const raster = mask.primitive && mask.primitive !== 'rect' ? rasterizeMask(mask, createCanvas, asset) : null
-  // Pixi paints at the contour's own pixel centers: a direct alpha copy is
-  // identical to bilinear sampling there, without four lookups per texel.
-  if (raster?.width === width && raster.height === height) {
+  // At the contour's own pixel centers, reading the source alpha is equivalent
+  // to bilinear sampling, without four lookups per texel.
+  if (mask.width > 0 && mask.height > 0 && raster?.width === width && raster.height === height) {
     data.fill(255)
     for (let y = 0; y < height; y++) {
       const source = (y + 1) * (width + 2) + 1
-      for (let x = 0; x < width; x++) data[(y * width + x) * 4 + 3] = raster.alpha[source + x]
+      for (let x = 0; x < width; x++) {
+        const alpha = raster.alpha[source + x]
+        data[(y * width + x) * 4 + 3] = reverse ? 255 - alpha : alpha
+      }
     }
     ctx.putImageData(image, 0, 0)
     return canvas
@@ -154,7 +163,7 @@ export function paintMaskCanvas(canvas, mask, asset, createCanvas = (w, h) => {
     const localY = mask.height / 2 - (y + 0.5) * mask.height / height
     for (let x = 0; x < width; x += 1) {
       const localX = -mask.width / 2 + (x + 0.5) * mask.width / width
-      const alpha = Math.round(255 * imageMaskCoverage(localX, localY, positive, raster))
+      const alpha = Math.round(255 * imageMaskCoverage(localX, localY, mask, raster))
       const i = (y * width + x) * 4
       data[i] = 255
       data[i + 1] = 255

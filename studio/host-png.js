@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module'
 import { clipImageFill, imageFillClip, imageFillRect } from './play/image-fill.js'
-import { imageMaskSpec, createMaskSampler, groupMaskedPaint } from './play/image-mask.js'
+import { imageMaskSpec, createMaskSampler, groupMaskedPaint, isHardRectMask } from './play/image-mask.js'
 import { applyMatrix, invertMatrix, multiplyMatrix } from './ui/layout.js'
 import { tintedImage } from './assets/raster.js'
 import { rasterizeSlices, resolveImageType } from './assets/image-stretch.js'
@@ -10,7 +10,7 @@ import { rectClipPolygon, scrollBarGeometry } from './play/scroll-geometry.js'
 import { localFontStack } from './host/local-font.js'
 import { textLayout } from './play/text-layout.js'
 import { drawRichText } from './play/rich-text-paint.js'
-import { drawKeyHint, keyHintSize } from './play/key-hint-paint.js'
+import { drawKeyHint } from './play/key-hint-paint.js'
 
 const require = createRequire(import.meta.url)
 
@@ -354,7 +354,7 @@ export function renderScenePng(scene, canvasWidth, canvasHeight, options = {}) {
 }
 
 function maskPixelBounds(mask, target, size) {
-  if (!(mask.width > 0 && mask.height > 0) || !invertMatrix(mask.matrix)) return null
+  if (!(mask.width > 0 && mask.height > 0)) return null
   const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => {
     const p = applyMatrix(mask.matrix, x * mask.width / 2, y * mask.height / 2)
     return { x: p.x * size.pixelRatio, y: (size.height - p.y) * size.pixelRatio }
@@ -366,41 +366,12 @@ function maskPixelBounds(mask, target, size) {
   return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null
 }
 
-// Inverse coverage extends beyond the mask, but its intermediate layer only
-// needs the descendants' visible bounds. Small inverse masks must not allocate
-// and scan a full-screen buffer apiece.
-function inverseGroupBounds(entries, target, size, editor) {
-  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity
-  const include = bounds => {
-    if (!bounds) return
-    left = Math.min(left, bounds.x); top = Math.min(top, bounds.y)
-    right = Math.max(right, bounds.x + bounds.width); bottom = Math.max(bottom, bounds.y + bounds.height)
-  }
-  for (const entry of entries) {
-    if (entry.mask) {
-      include(entry.mask.reverseMaskArea ? inverseGroupBounds(entry.children, target, size, editor) : maskPixelBounds(entry.mask, target, size))
-      continue
-    }
-    const item = entry.item, box = editor ? editorBoxStyle(item) : item
-    let width = Math.max(0, finite(box.sourceWidth, finite(box.width))), height = Math.max(0, finite(box.sourceHeight, finite(box.height)))
-    const angle = finite(box.rotationZ) * Math.PI / 180
-    const matrix = box.matrix || { a: Math.cos(angle), b: Math.sin(angle), c: -Math.sin(angle), d: Math.cos(angle),
-      tx: finite(box.left) + finite(box.width) / 2, ty: finite(box.bottom) + finite(box.height) / 2 }
-    if (item.kind === 'keyhint') width = keyHintSize(item, width, height).width
-    // Include Canvas strokes and antialias fringes in local coordinates.
-    const bounds = maskPixelBounds({ width: width + 4, height: height + 4, matrix }, target, size)
-    include(bounds)
-  }
-  return right > left && bottom > top ? { x: left, y: top, width: right - left, height: bottom - top } : null
-}
-
-function compositeMaskedGroup(target, layer, mask, size, assets) {
+function compositeMaskedGroup(target, layer, mask, inverse, size, assets) {
   const width = layer.canvas.width, height = layer.canvas.height
   const src = layer.ctx.getImageData(0, 0, width, height).data
   const dx = layer.x - target.x, dy = layer.y - target.y
   const image = target.ctx.getImageData(dx, dy, width, height)
   const dst = image.data
-  const inverse = invertMatrix(mask.matrix)
   const key = imageAssetKey(mask.imageId, mask.imageSource)
   const sample = createMaskSampler(mask, loadCanvas().createCanvas,
     { image: assets.images?.get(key), meta: assets.imageMetadata?.get(key) })
@@ -411,8 +382,8 @@ function compositeMaskedGroup(target, layer, mask, size, assets) {
       const i = (y * width + x) * 4
       if (!src[i + 3]) continue
       const worldX = (layer.x + x + 0.5) / size.pixelRatio
-      const localX = inverse ? inverse.a * worldX + inverse.c * worldY + inverse.tx : Infinity
-      const localY = inverse ? inverse.b * worldX + inverse.d * worldY + inverse.ty : Infinity
+      const localX = inverse.a * worldX + inverse.c * worldY + inverse.tx
+      const localY = inverse.b * worldX + inverse.d * worldY + inverse.ty
       const coverage = sample(localX, localY)
       const sa = Math.round(src[i + 3] * coverage) / 255
       if (!sa) continue
@@ -432,15 +403,17 @@ function compositeMaskedGroup(target, layer, mask, size, assets) {
 function drawPaintGroups(target, entries, size, assets, drawItem = drawPaintItem) {
   for (const entry of entries) {
     if (entry.item) { drawItem(target.ctx, entry.item, size.height, assets); continue }
-    const bounds = entry.mask.reverseMaskArea
-      ? inverseGroupBounds(entry.children, target, size, drawItem === drawEditorItem) : maskPixelBounds(entry.mask, target, size)
-    if (!bounds) continue // Enabled empty/singular mask means empty coverage.
+    const { mask } = entry
+    if (mask.reverseMaskArea && isHardRectMask(mask)) continue
+    const inverse = invertMatrix(mask.matrix)
+    const bounds = inverse && maskPixelBounds(mask, target, size)
+    if (!bounds) continue // Both directions clip to the projected mask rectangle.
     const canvas = loadCanvas().createCanvas(bounds.width, bounds.height)
     const ctx = canvas.getContext('2d')
     ctx.setTransform(size.pixelRatio, 0, 0, size.pixelRatio, -bounds.x, -bounds.y)
     const layer = { canvas, ctx, x: bounds.x, y: bounds.y }
     drawPaintGroups(layer, entry.children, size, assets, drawItem)
-    compositeMaskedGroup(target, layer, entry.mask, size, assets)
+    compositeMaskedGroup(target, layer, mask, inverse, size, assets)
   }
 }
 

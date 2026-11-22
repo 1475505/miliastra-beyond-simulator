@@ -7,7 +7,7 @@ import { createStudio } from '../index.js'
 import { paintList, playSnapshot } from '../play/session.js'
 import { renderEditorPng, renderPaintPng, renderScenePng, flattenScenePaint } from '../host-png.js'
 import { PixiPlayRenderer } from '../play/pixi-renderer.js'
-import { editorMaskProject, maskScenes, maskSamples, maskAlphas, contourScene, contourSamples, contourAlphas } from './fixtures/image-mask.mjs'
+import { editorMaskProject, maskScenes, maskSamples, maskAlphas, contourScene, contourSamples, contourAlphas, disjointReverseMaskScene } from './fixtures/image-mask.mjs'
 import { imageMaskSpec, createMaskSampler, paintMaskCanvas } from '../play/image-mask.js'
 import { featherMaskAlpha } from '../play/image-mask-raster.js'
 import { imageAssetKey } from '../assets/catalog.js'
@@ -135,9 +135,8 @@ test('Pixi image and viewport masks update independently and release their resou
   assert.equal(root.__imageContent.mask, root.__imageMask)
   await update({ primitive: 'ring', imageId: 100006, reverseMaskArea: true })
   assert.equal(root.__imageMask.texture, texture, 'shape and inverse changes repaint the owned texture')
-  assert.equal(root.__imageContent._maskOptions.inverse, true)
   const pixels = texture.source.resource.getContext('2d')
-  assert.equal(pixels.getImageData(100, 60, 1, 1).data[3], 0, 'ring hole remains positive-coverage zero before GPU inversion')
+  assert.equal(pixels.getImageData(100, 60, 1, 1).data[3], 255, 'the inverted ring leaves its hole visible in the mask texture')
   await update({ sourceWidth: 0 })
   assert.equal(root.__imageContent.visible, false)
   assert.equal(root.mask, viewport)
@@ -165,6 +164,17 @@ test('a rotated mask uses its own rectangle rather than the axis-aligned bounds'
   assert.equal(await alphaPixel(png, 120, 80), 255, 'center survives rotation')
   assert.equal(await alphaPixel(png, 145, 80), 0, 'wide axis-aligned point is outside the rotated thin rectangle')
   assert.equal(await alphaPixel(png, 120, 60), 255, 'the rotated long axis remains inside')
+})
+
+test('a disjoint reversed mask does not reveal the ring at 0°, 45° or 90°', async () => {
+  const options = { background: 'transparent' }
+  const empty = renderPaintPng([], 240, 160, options).data
+  for (const angle of [0, 45, 90]) {
+    const scene = disjointReverseMaskScene(angle)
+    assert.ok(renderScenePng(scene, 240, 160, options).data.equals(empty), `the ring is fully clipped at ${angle}°`)
+    scene.nodes[1].enableMask = false
+    assert.equal(await alphaPixel(renderScenePng(scene, 240, 160, options), 164, 80), 255, 'the ring is visible with masking off')
+  }
 })
 
 test('editor boxes preserve mask ancestry; editor PNG composites groups and keeps selection outside masks', async () => {
@@ -211,13 +221,13 @@ test('editor boxes preserve mask ancestry; editor PNG composites groups and keep
   pixel(760, 450).slice(0, 3).forEach((value, i) => assert.ok(Math.abs(value - fadedTwice[i]) <= 1))
 })
 
-test('six contour masks and their complements preserve outside children, holes and rotated geometry', async () => {
+test('six contour masks and their complements clip outside the rectangle and retain local shapes', async () => {
   for (const [primitive, expected] of Object.entries(contourAlphas)) for (const reverseMaskArea of [false, true]) {
     const scene = contourScene(primitive, { reverseMaskArea })
     const png = renderScenePng(scene, 240, 160, { background: 'transparent' })
     assert.deepEqual(png.data, renderPaintPng(flattenScenePaint(scene), 240, 160, { background: 'transparent' }).data)
     for (const [i, [x, y]] of contourSamples.entries()) {
-      const want = reverseMaskArea ? 255 - expected[i] : expected[i]
+      const want = reverseMaskArea && i !== 0 ? 255 - expected[i] : expected[i]
       assert.equal(await alphaPixel(png, x, y), want, `${primitive} reverse=${reverseMaskArea} at ${x},${y}`)
     }
   }
@@ -226,8 +236,11 @@ test('six contour masks and their complements preserve outside children, holes a
   const png = renderScenePng(scene, 240, 160, { background: 'transparent' })
   assert.equal(await alphaPixel(png, 160, 120), 255, 'rotated base')
   assert.equal(await alphaPixel(png, 80, 120), 0, 'rotated tip excludes corner')
-  const empty = renderScenePng(contourScene('rect', { sourceWidth: 0, reverseMaskArea: true }), 240, 160, { background: 'transparent' })
-  assert.equal(await alphaPixel(empty, 60, 80), 255, 'complement of empty coverage keeps descendants')
+  for (const size of [{ sourceWidth: 0 }, { sourceHeight: 0 }]) {
+    const empty = renderScenePng(contourScene('ring', { ...size, reverseMaskArea: true }), 240, 160, { background: 'transparent' })
+    assert.equal(await alphaPixel(empty, 120, 80), 0, 'empty rectangle stays empty with inversion on')
+    assert.equal(await alphaPixel(empty, 60, 80), 0)
+  }
 })
 
 test('percentage ranges, contour feather and inversion follow independently calculated alpha', () => {
@@ -245,7 +258,8 @@ test('percentage ranges, contour feather and inversion follow independently calc
   assert.ok(Math.abs(sample(90, 0) - .5) < 1e-10)
   assert.equal(sample(0, 40), .5)
   const inverted = createMaskSampler({ ...mask, reverseMaskArea: true }, createCanvas)
-  assert.equal(inverted(110, 0), 1)
+  assert.equal(inverted(100, 0), 0, 'the boundary is not inverted')
+  assert.equal(inverted(110, 0), 0)
   assert.ok(Math.abs(inverted(95, 0) - .75) < 1e-10)
   const ring = createMaskSampler({ ...mask, primitive: 'ring', width: 100, height: 100, featherX: 10, featherY: 0 }, createCanvas)
   assert.equal(ring(0, 0), 0)
@@ -256,12 +270,15 @@ test('percentage ranges, contour feather and inversion follow independently calc
 test('mask textures preserve contour coverage at native and resampled resolutions', () => {
   for (const [primitive, expected] of Object.entries(contourAlphas)) for (const [width, height] of [[200, 200], [125, 75]]) {
     const canvas = createCanvas(width, height)
-    paintMaskCanvas(canvas, { primitive, width: 100, height: 100, featherX: 0, featherY: 0, reverseMaskArea: true }, null, createCanvas)
     const ctx = canvas.getContext('2d')
-    contourSamples.slice(1).forEach(([x, y], i) => {
-      const pixel = ctx.getImageData(Math.floor((x - 70) * width / 100), Math.floor((y - 30) * height / 100), 1, 1).data
-      assert.equal(pixel[3], expected[i + 1], `${primitive} ${width}×${height} at ${x},${y}; textures store positive coverage`)
-    })
+    for (const reverseMaskArea of [false, true]) {
+      paintMaskCanvas(canvas, { primitive, width: 100, height: 100, featherX: 0, featherY: 0, reverseMaskArea }, null, createCanvas)
+      contourSamples.slice(1).forEach(([x, y], i) => {
+        const pixel = ctx.getImageData(Math.floor((x - 70) * width / 100), Math.floor((y - 30) * height / 100), 1, 1).data
+        const want = reverseMaskArea ? 255 - expected[i + 1] : expected[i + 1]
+        assert.equal(pixel[3], want, `${primitive} ${width}×${height} at ${x},${y}; reverse=${reverseMaskArea}`)
+      })
+    }
   }
   const canvas = createCanvas(200, 200)
   paintMaskCanvas(canvas, { primitive: 'ring', width: 100, height: 100, featherX: 10, featherY: 0 }, null, createCanvas)
@@ -288,7 +305,7 @@ test('texture alpha and slice borders determine masks independently of image tin
   mask.reverseMaskArea = true
   png = renderScenePng(scene, 240, 160, options)
   assert.equal(await alphaPixel(png, 120, 80), 255)
-  assert.equal(await alphaPixel(png, 60, 80), 255, 'inverse includes outside rectangle')
+  assert.equal(await alphaPixel(png, 60, 80), 0, 'inverted slice stays inside the rectangle')
   assert.equal(await alphaPixel(png, 169, 80), 0)
 })
 
@@ -330,7 +347,7 @@ function UseCircle() mask:SetImage(Enum.ImageSource.StaticReference, 100002) end
   for (const [action, argument, field, value, alphas] of [
     ['Horizontal', 60, 'horizontalSoftRange', 60, [121, 255, 0, 255, 255]],
     ['Vertical', 40, 'verticalSoftRange', 40, [121, 120, 0, 255, 255]],
-    ['Invert', true, 'reverseMaskArea', true, [134, 135, 255, 0, 255]],
+    ['Invert', true, 'reverseMaskArea', true, [134, 135, 0, 0, 255]],
     ['Invert', false, 'reverseMaskArea', false, [121, 120, 0, 255, 255]],
   ]) {
     invoke(action, argument)
