@@ -11,7 +11,7 @@ import {
 const ASSET_TYPES = new Set(['server-control-template', 'client-control-template'])
 const PLAY_ACTIONS = new Set([
   'start', 'device', 'fps', 'view', 'get', 'step', 'pointer', 'key', 'click', 'pause', 'resume', 'stop',
-  'serverGet', 'serverSet', 'serverSend', 'history', 'saveCase', 'runCase',
+  'serverGet', 'serverSet', 'serverSend', 'history', 'saveCase', 'runCase', 'frame', 'attach', 'release',
 ])
 function normalizePath(value) {
   return String(value || '').trim().replaceAll('\\', '/')
@@ -201,6 +201,8 @@ export class WebSession {
   async play(action, args = {}, signal) {
     if (!PLAY_ACTIONS.has(action)) throw new Error(`unknown play action: ${action || '(empty)'}`)
     const value = await this.controller.exclusive(() => this.controller.play(action, args, signal))
+    // A preempted page's request changed nothing; keep the owner's state.
+    if (value?.preempted) return value
     this.playState = playSummary(this.playState, value, action)
     this.emit({ type: 'play', action, frame: this.playState.frame })
     // Match the DSH standalone play page: return only the worker snapshot.

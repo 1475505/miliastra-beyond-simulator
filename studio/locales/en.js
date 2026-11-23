@@ -576,6 +576,7 @@ export default {
   "停止试玩失败，请重试：{0}": "Could not stop the playtest. Retry: {0}",
   "试玩页未能加载，请返回编辑后重试。": "The playtest page could not load. Return to the editor and retry.",
   "试玩正在关闭": "Closing playtest",
+  "AI或其他进程开启了试玩，本试玩自动退出": "The AI or another window started this playtest; this view has exited",
   "内嵌试玩": "Embedded Playtest",
   "正在停止试玩…": "Stopping playtest…",
   "正在载入试玩…": "Loading playtest…",

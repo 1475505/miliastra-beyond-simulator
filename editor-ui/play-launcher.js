@@ -53,7 +53,9 @@ export function createPlayLauncher(React) {
             // These promises belong to the parent, so iframe destruction on
             // React unmount cannot abandon the drain or the final stop.
             await Promise.allSettled([...state.requests])
-            await api(entry.sessionId, 'play', { action: 'stop', args: {} })
+            // Stop as this frame's driver: if the AI or another window took the
+            // game over, the Worker ignores it instead of ending the new owner's play.
+            await api(entry.sessionId, 'play', { action: 'stop', args: { driverId: state.controller?.driverId } })
             state.stopped = true
           })().finally(() => {
             state.pending = null

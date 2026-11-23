@@ -377,6 +377,9 @@ async function refreshState({ quiet = false, force = false, forceDiscovery = fal
   try {
     model = await requestJson(forceDiscovery ? '/api/state?refresh=1' : '/api/state')
     if (!model?.play?.running && play.running) play.reset()
+    // The server game now belongs to another page or the AI; show this tab as
+    // exited until it explicitly starts again.
+    if (play.preempted && model?.play) model.play = { ...model.play, running: false }
     if (!quiet && model?.play?.running && !play.running) {
       mode = 'play'
       await play.attach()
@@ -412,6 +415,12 @@ const play = createPlaySession({
   onSnapshot: onPlaySnapshot,
   onStatus: (next) => { applyPlayStatus(next); updatePlayChrome() },
   onError: (error) => notify(error.message, true),
+  onPreempted: () => {
+    applyPlayStatus({ running: false })
+    renderStage()
+    updatePlayChrome()
+    notify(t('AI或其他进程开启了试玩，本试玩自动退出'), true)
+  },
   onAudioStatus: status => {
     elements.playAudio.textContent = status.muted ? t('声音已关闭') : !status.unlocked ? t('开启声音') : t('声音已开启')
     elements.playAudio.title = status.error || (status.muted || status.unlocked ? t('切换静音') : t('点击或在画布内操作以解锁音效'))

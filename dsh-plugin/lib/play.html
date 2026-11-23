@@ -264,12 +264,25 @@
         $('state').textContent = t('⚠ 试玩错误')
       }
 
+      // Another page or the AI took over the same play session: leave it running.
+      function showPreempted() {
+        if (closing) return
+        stopped = true
+        $('state').textContent = t('AI或其他进程开启了试玩，本试玩自动退出')
+        $('state').className = 'error'
+        $('pause').disabled = true
+        $('step').disabled = true
+        $('stop').disabled = true
+        $('restart').classList.remove('hidden')
+      }
+
       const play = createPlaySession({
         renderer,
         api,
         onSnapshot: renderChrome,
         onStatus: applyStatus,
         onError: showError,
+        onPreempted: showPreempted,
         onAudioStatus: status => {
           $('audio').textContent = status.muted ? t('声音已关闭') : !status.unlocked ? t('开启声音') : t('声音已开启')
           $('audio').title = status.error || (status.muted || status.unlocked ? t('切换静音') : t('点击或在画布内操作以解锁音效'))
@@ -392,7 +405,7 @@
         }
         try {
           quiesce()
-          await api('stop')
+          await api('stop', { driverId: play.driverId })
           stopped = true
           window.close()
         } catch (error) {
@@ -412,14 +425,15 @@
       }
       $('saveCase').addEventListener('click', async () => {
         try {
-          lastCase = await api('saveCase', { name: 'play-case', asserts: parseAsserts() })
+          lastCase = await api('saveCase', { name: 'play-case', asserts: parseAsserts(), driverId: play.driverId })
           $('caseHint').textContent = t('已保存 ') + (lastCase.events || []).length + t(' 步 / ') + (lastCase.asserts || []).length + t(' 条断言')
         } catch (error) { showError(error) }
       })
       $('runCase').addEventListener('click', async () => {
         try {
-          if (!lastCase) lastCase = await api('saveCase', { name: 'play-case', asserts: parseAsserts() })
-          const report = await api('runCase', { case: lastCase })
+          if (!lastCase) lastCase = await api('saveCase', { name: 'play-case', asserts: parseAsserts(), driverId: play.driverId })
+          const report = await api('runCase', { case: lastCase, driverId: play.driverId })
+          if (report?.preempted) return showPreempted()
           $('caseHint').textContent = report.passed ? t('回放通过') : (t('回放失败 @') + (report.failedAt ?? '?') + 's')
           if (!report.passed) setView('log')
         } catch (error) { showError(error) }
@@ -431,7 +445,7 @@
         play.destroy()
         // Embedded close/unmount is owned by the parent. A late keepalive stop
         // from the old frame must never terminate the next play session.
-        if (!embedded && !stopped) fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, action: 'stop', args: {} }), keepalive: true }).catch(() => {})
+        if (!embedded && !stopped) fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, action: 'stop', args: { driverId: play.driverId } }), keepalive: true }).catch(() => {})
       })
       if (embedded) {
         // Closing the whole application document has no awaitable teardown.
@@ -456,6 +470,8 @@
           },
           quiesce,
           focus: focusStage,
+          // The parent stops with this id, so a preempted frame cannot end the new owner's game.
+          driverId: play.driverId,
         }
       } else play.start().then(() => setTimeout(revealStage, 0)).catch(showError)
     })()

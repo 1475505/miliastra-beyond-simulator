@@ -15,6 +15,45 @@ let clockTimer = null
 // step / case replay advances Lua, including between observation requests.
 const MAX_CATCHUP_SECONDS = 5 / 30
 
+// A page that displays the game drives Lua itself: one `frame` per presented
+// frame with the measured dt, like Unity Update and the device OnUpdate(dt).
+// Only one page holds the lease; a newer start/attach takes it over. The
+// Worker clock runs whenever no page drives: background tabs (the PC client
+// keeps updating in the background, BGTICK v1), closed pages and tool-only play.
+const LEASE_TIMEOUT_MS = 1000
+// Upper bound for one presented frame, like Unity's default Time.maximumDeltaTime.
+// Simulator policy: the device cap is unknown.
+const MAX_FRAME_DT = 1 / 3
+// Tool calls that advance time take the game away from a driving page.
+const PREEMPTING_ACTIONS = new Set(['step', 'runCase'])
+let lease = { owner: null, active: false, lastSeen: 0 }
+
+function releaseLease() {
+  if (!lease.active) return
+  lease.active = false
+  lastTick = performance.now()
+  accumulator = 0
+}
+
+// Requests from a page carry its driverId. A page that lost the lease gets
+// `preempted` and nothing else, so it can neither advance nor stop the game.
+function leaseAllows(action, args) {
+  const driverId = args.driverId
+  if (driverId === undefined || driverId === null) {
+    if (PREEMPTING_ACTIONS.has(action) && lease.owner !== null) {
+      releaseLease()
+      lease = { owner: null, active: false, lastSeen: 0 }
+    }
+    return true
+  }
+  return action === 'start' || action === 'attach' || String(driverId) === lease.owner
+}
+
+function frameDt(value) {
+  const dt = Number(value)
+  return Number.isFinite(dt) && dt > 0 ? Math.min(dt, MAX_FRAME_DT) : 1 / fps
+}
+
 function scheduleClock() {
   if (clockTimer) clearInterval(clockTimer)
   clockTimer = clockMode === 'realtime' ? setInterval(tickClock, Math.floor(1000 / fps)) : null
@@ -47,6 +86,12 @@ function respond(args = {}) {
 
 function tickClock() {
   if (!studio || ticking || clockMode !== 'realtime') return
+  if (lease.active) {
+    // A page that stops sending frames without releasing (crash, frozen tab)
+    // hands the game back to the Worker instead of freezing it.
+    if (performance.now() - lease.lastSeen > LEASE_TIMEOUT_MS) releaseLease()
+    return
+  }
   const status = studio.playStatus()
   if (!status.running || status.paused) {
     lastTick = null
@@ -87,13 +132,45 @@ function run(action, args = {}) {
     audioMuted = args.muteAudio === true
     lastTick = null
     accumulator = 0
+    lease = args.driverId != null
+      ? { owner: String(args.driverId), active: true, lastSeen: performance.now() }
+      : { owner: null, active: false, lastSeen: 0 }
     const value = studio.playStart(startOptions(args))
     lastTick = performance.now()
     scheduleClock()
     return value
   }
   if (!studio) throw new Error('play session has not started')
-  if (action === 'get') return args.light ? respond(args) : studio.playGet(observeOptions(args))
+  if (action === 'get') {
+    // Observers between Worker ticks see the game at the current wall time.
+    if (!lease.active) tickClock()
+    return args.light ? respond(args) : studio.playGet(observeOptions(args))
+  }
+  if (action === 'attach') {
+    if (args.driverId == null) throw new Error('attach requires driverId')
+    tickClock()
+    lease = { owner: String(args.driverId), active: true, lastSeen: performance.now() }
+    return studio.playGet(observeOptions(args))
+  }
+  if (action === 'frame') {
+    let dt = frameDt(args.dt)
+    if (!lease.active) {
+      // The owner resumes after a release or timeout. The Worker clock already
+      // covered the gap, so catch it up to now and advance at most one interval:
+      // the page measured that gap too and must not count it twice.
+      tickClock()
+      lease.active = true
+      dt = Math.min(dt, 1 / fps)
+    }
+    lease.lastSeen = performance.now()
+    const status = studio.playStatus()
+    if (status.running && !status.paused) studio.playStep(dt, { observe: false })
+    return studio.playGet(observeOptions(args))
+  }
+  if (action === 'release') {
+    releaseLease()
+    return respond({ light: true })
+  }
   if (action === 'fps') {
     const requestedFps = validatePlayFps(args.fps)
     // Account for elapsed time at the old rate, retaining the fractional step.
@@ -161,6 +238,7 @@ function run(action, args = {}) {
     studio = null
     lastTick = null
     accumulator = 0
+    lease = { owner: null, active: false, lastSeen: 0 }
     clearInterval(clockTimer)
     clockTimer = null
     return value
@@ -171,6 +249,10 @@ function run(action, args = {}) {
 parentPort.on('message', (message) => {
   const { id, action, args = {} } = message || {}
   try {
+    if (!leaseAllows(action, args)) {
+      parentPort.postMessage({ id, ok: true, value: { preempted: true }, error: null })
+      return
+    }
     const value = run(action, args)
     // Include the clock on all play snapshots, including light/input responses.
     const result = typeof value?.running === 'boolean' ? { ...value, clockMode, fps, audioMuted } : value

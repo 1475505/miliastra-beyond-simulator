@@ -302,12 +302,18 @@ export class SimulatorController {
     }
     if (action === 'stop') {
       if (!this.worker) return { running: false, tree: [], logs: [] }
+      let value
       try {
-        return await this.request('stop', args, signal)
-      } finally {
+        value = await this.request('stop', args, signal)
+      } catch (error) {
         await this.terminateWorker()
+        throw error
       }
+      // A page that already lost the game to a newer driver must not end it.
+      if (!value?.preempted) await this.terminateWorker()
+      return value
     }
+    if (action === 'release' && !this.worker) return { running: false }
     if (!this.worker) throw new Error('play session has not started')
     if (action === 'fps') {
       const fps = validatePlayFps(args.fps)

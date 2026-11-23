@@ -38,7 +38,7 @@
 
 `play-launcher.js`同步尝试打开标签页；`window.open`返回null时，保存脚本/服务端逻辑后在modal中嵌入同源试玩页`?embedded=1#<sessionId>`，编辑器保持挂载。两种入口共用`dsh-plugin/lib/play.html`。
 
-内嵌页等待父级load握手才启动；父级跟踪API请求。关闭、返回编辑和Escape统一执行：关闭输入/轮询 → 排空请求 → 等stop成功 → 移除遮罩、恢复焦点；失败保留重试。只接受当前iframe WindowProxy、sessionId和指定消息类型。
+内嵌页等待父级load握手才启动；父级跟踪API请求。关闭、返回编辑和Escape统一执行：关闭输入/帧驱动 → 排空请求 → 等stop成功 → 移除遮罩、恢复焦点；失败保留重试。stop带iframe的`driverId`：试玩已被AI或其他窗口接管时，Worker忽略这次stop，不会结束新所有者的试玩。只接受当前iframe WindowProxy、sessionId和指定消息类型。
 
 切换会话或卸载同样停止旧会话，同会话重开先等旧清理。整个文档关闭的pagehide/keepalive仅为尽力清理。键盘焦点在试玩画布，点击可恢复焦点。
 

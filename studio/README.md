@@ -96,7 +96,22 @@ Lua 调用图片的 `SetFillHorizontal`、`SetFillVertical`、`SetFillRadial90`�
 <a id="试玩轮询与增量更新2026-11-07"></a>
 ### 试玩轮询与增量更新
 
-`play/browser-session.js` 只保留一个在途场景请求，将请求、渲染和快照回调耗时计入本帧预算，再按剩余时间安排下一次观察。超时帧完成后尽快继续，不补排历史帧；输入触发的刷新共用调度、合并为一次后续观察。停止取消后续调度，旧 generation 的结果不能覆盖新会话。Lua 的固定步长时钟仍由 Worker 管理，界面选择60 FPS不保证浏览器每秒实际显示60帧。
+**页面驱动时钟（2026-11-24 起）**：`play/browser-session.js` 在页面可见且处于试玩视图时，每到期的一次显示刷新（`requestAnimationFrame`）发一个 `frame`。Worker 以两次刷新的实测间隔为 dt 推进一次 Lua，再返回场景增量。这样做与 Unity `Update` 和真机 `OnUpdate(dt)` 的方式一致：每个 Lua 帧正好显示一次；页面卡顿时只增大下一帧的 dt，不补发多步。
+- dt 上限为 1/3 秒，取 Unity `maximumDeltaTime` 的默认值。这是模拟器策略，真机上限未知。
+- 同一时刻只保留一个在途帧请求。
+- 目标 30/60 FPS 按截止时间落到最近一次刷新，最多提前 4 ms，因此高刷新率屏上的平均帧率不会因取整而下降。
+- 旧 generation 的结果不能覆盖新会话。
+- 此前的做法是“Worker 定时器加浏览器定时轮询”：Windows 上 Node 的 33 ms 定时器约 47 ms 才触发一次，与浏览器的 33 ms 轮询互相采样。在 flappy 上实测，约 27% 的画面更新推进了 0 帧或 2 帧。
+
+**驱动权**（`host/worker.js` 中的租约）：同一试玩同时只有一个页面驱动。
+- 页面带自己的 `driverId` 调用 `start`、`device` 或 `attach` 即可接管。不带 `driverId` 的工具调用 `start`、`device`、`step` 或 `runCase` 也会接管。
+- 失去驱动权的页面，此后任何请求都只得到 `{ preempted: true }`，既不能推进、输入，也不能停止新所有者的试玩。页面提示「AI或其他进程开启了试玩，本试玩自动退出」，只能通过重新开始再次接管。
+- 工具的观察与输入（`get`、截图、`key`、`pointer`、`click`）不改变驱动权。
+- 嵌入式试玩的父页面停止时也带上 iframe 的 `driverId`。
+
+**后台**：页面隐藏或离开试玩视图时发送 `release`，Lua 改由 Worker 定时器继续推进；页面超过 1 秒没有发帧（崩溃或冻结）时同样交回 Worker。这与 PC 客户端在后台照常运行一致，依据见完整工作区 `knowledge/fact.md` 的 BGTICK 条。隐藏期间页面每分钟发一次 `release` 心跳，避免 Web 编辑器把无请求超过 15 分钟的 Worker 当作闲置清理；心跳同时让被抢占的隐藏页面得知已被接管。页面回到前台后，首帧 dt 为一个目标帧间隔，Worker 已经推进的时间不会重复计入。没有页面驱动时，工具调用 `get` 会先把 Worker 时钟追到当前时间。
+
+**回放边界**：回放用例仍按固定 `dt` 重放。由页面驱动的试玩保存的用例，输入事件会按录制时间落到固定步长网格上，重放的 Lua 逐帧状态不保证与录制时一致。
 
 `play/session.js` 的 `tree-v1` revision 只随场景实际变化推进；每个查看端传自己的 `sceneRev`，静止场景返回同版本空增量。缓存只存当前节点及有界变更 ID 历史（最多120次变更、累计10,000个ID），跨版本合并为当前 `changed` / `removed`。首次、过旧/未来版本或切换玩家返回完整 `reset`。浏览器同时传 `sceneSessionId`（快照中的 `audio.sessionId` 标识整局试玩），Worker 重建后标识不匹配即重置，避免跨局同号；只传 revision 的调用者须在新局主动读取完整场景。响应与缓存隔离，多个查看端互不消耗增量。
 
@@ -106,7 +121,7 @@ Lua 调用图片的 `SetFillHorizontal`、`SetFillVertical`、`SetFillRadial90`�
 
 普通二维分支的 `matrix` 仍相对父级中心，移动父组不必重发所有子图。对 X/Y 倾转分支，`tree-v1` 额外发送 `projectedMatrix`，表示合成三维变换后在最近二维祖先（或画布）坐标中的面。渲染时只变换各自的面和遮罩，父子树仍管理裁切与层序。祖先的深度变化即使没改变自身投影，也会更新投影改变的后代。几何与真机范围见[旋转投影](docs/control-support.md#xy-旋转投影2026-10-12)。
 
-回归：`test/play-snapshot.test.mjs` 验证多查看端、历史预算和截取前不复制；调度见 `test/browser-session.test.mjs`，裁剪复用见 `test/pixi-cache.test.mjs`，浏览器视口见 `web/test/key-input-browser.test.mjs`。性能对照保存在完整工作区 `probes/browser-play-performance-20261107/`：观察的是画面提交率，受传输链路和图形后端影响，不等于显示器呈现帧率；初始化和大组恢复仍可能有尖峰。
+回归：`test/play-snapshot.test.mjs` 验证多查看端、历史预算和截取前不复制；帧驱动、后台交接与抢占见 `test/browser-session.test.mjs`、`test/play-driver.test.mjs`，裁剪复用见 `test/pixi-cache.test.mjs`，浏览器视口见 `web/test/key-input-browser.test.mjs`。性能对照保存在完整工作区 `probes/browser-play-performance-20261107/`：观察的是画面提交率，受传输链路和图形后端影响，不等于显示器呈现帧率；初始化和大组恢复仍可能有尖峰。
 
 <a id="2026-10-18-高频文字更新与缓存残留16"></a>
 ### 文字更新与资源释放

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createPlaySession, keyEventName, PLAY_MOVE_THROTTLE_MS, PLAY_POLL_INTERVAL_MS } from '../play/browser-session.js'
+import { createPlaySession, keyEventName, PLAY_HIDDEN_HEARTBEAT_MS, PLAY_MOVE_THROTTLE_MS, PLAY_POLL_INTERVAL_MS } from '../play/browser-session.js'
 import { mouseKeyEventName } from '../play/key-bindings.js'
 import { buildEnumTree } from '../../client/lua-runtime/src/enums.js'
 import { createStudio } from '../index.js'
@@ -36,7 +36,10 @@ test('reloading a browser attaches to the existing paused game without a start o
   t.after(() => play.destroy())
   await play.attach()
   play.stopPolling()
-  assert.deepEqual(calls, [{ action: 'get', args: { view: true, compact: true, sceneRev: 0 } }])
+  assert.deepEqual(calls.slice(0, 2), [
+    { action: 'attach', args: { view: true, compact: true, sceneRev: 0, driverId: play.driverId } },
+    { action: 'release', args: { driverId: play.driverId } },
+  ])
   assert.equal(play.running, true)
   assert.equal(play.snapshot.paused, true)
   assert.equal(play.snapshot.frame, 1254)
@@ -46,82 +49,186 @@ test('reloading a browser attaches to the existing paused game without a start o
   assert.equal(rendered.length, 1)
 })
 
-test('browser doubles scene polling at 60 FPS and preserves the choice across restarts and device changes', async t => {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'] })
-  t.mock.method(performance, 'now', () => Date.now())
+// A fake display: each refresh runs the pending frame callbacks with its timestamp.
+function display(hz) {
+  const callbacks = new Map()
+  let next = 1, now = 0
+  return {
+    scheduler: { request(callback) { const id = next++; callbacks.set(id, callback); return id }, cancel(id) { callbacks.delete(id) } },
+    async run(ms) {
+      const end = now + ms
+      while (now + 1000 / hz <= end + 1e-9) {
+        now += 1000 / hz
+        const due = [...callbacks.values()]
+        callbacks.clear()
+        for (const callback of due) callback(now)
+        await new Promise(resolve => setImmediate(resolve))
+      }
+    },
+  }
+}
+
+test('each due display refresh drives one Lua frame with the measured dt at 30/60 FPS', async t => {
+  const screen = display(160)
   const calls = []
   let fps = 30
-  const play = createPlaySession({ renderer: { async applyScene() {} }, async api(action, args = {}) {
+  const play = createPlaySession({ frameScheduler: screen.scheduler, renderer: { async applyScene() {} }, async api(action, args = {}) {
     calls.push({ action, args })
     if (args.fps !== undefined) fps = args.fps
     return { running: true, frame: 20, time: 0.5, fps }
   } })
   t.after(() => play.destroy())
-  const pollsPerSecond = async () => {
+  const framesIn = async ms => {
     const first = calls.length
-    for (let ms = 0; ms < 1000; ms++) {
-      t.mock.timers.tick(1)
-      await new Promise(resolve => setImmediate(resolve))
-    }
-    return calls.slice(first).filter(call => call.action === 'get').length
+    await screen.run(ms)
+    return calls.slice(first).filter(call => call.action === 'frame')
   }
   await play.start()
-  const slow = await pollsPerSecond()
+  const slow = await framesIn(1000)
+  assert.ok(slow.length >= 29 && slow.length <= 31, `30 FPS frames on a 160 Hz display: ${slow.length}`)
+  // 33.3 ms targets land on 6.25 ms refreshes; dt is the presented interval, not a fixed step.
+  assert.ok(slow.slice(1).every(call => [0.03125, 0.0375].some(dt => Math.abs(call.args.dt - dt) < 1e-9)),
+    slow.map(call => call.args.dt).join(','))
+  assert.ok(Math.abs(slow.reduce((sum, call) => sum + call.args.dt, 0) - 1) < 0.05, 'Lua time follows presentation time')
+  assert.ok(slow.every(call => call.args.driverId === play.driverId && call.args.view && call.args.compact))
   await play.setFps(60)
-  const fast = await pollsPerSecond()
-  assert.ok(slow >= 29 && slow <= 31, `30 FPS requests: ${slow}`)
-  assert.ok(fast >= 59 && fast <= 64, `60 FPS requests: ${fast}`)
+  const fast = await framesIn(1000)
+  assert.ok(fast.length >= 59 && fast.length <= 61, `60 FPS frames: ${fast.length}`)
   assert.equal(calls.filter(call => call.action === 'start').length, 1, 'switching must not restart Lua')
   await play.start()
   assert.equal(calls.at(-1).args.fps, 60)
   await play.device({ canvasId: 'mobile-16-9' })
   assert.equal(calls.at(-1).args.fps, 60)
   await play.setFps(30)
-  const restored = await pollsPerSecond()
-  assert.ok(restored >= 29 && restored <= 32, `restored 30 FPS requests: ${restored}`)
+  const restored = await framesIn(1000)
+  assert.ok(restored.length >= 29 && restored.length <= 31, `restored 30 FPS frames: ${restored.length}`)
 })
 
-test('slow observations use the remaining frame budget without overlapping or dropping queued refreshes', async t => {
-  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'] })
-  t.mock.method(performance, 'now', () => Date.now())
-  const calls = [], revisions = []
-  let active = 0, peak = 0, revision = 0
+test('slow frames never overlap or catch up; the next frame carries the longer, capped dt', async t => {
+  const screen = display(60)
+  const frames = []
+  let active = 0, peak = 0, revision = 0, hold = null
   const play = createPlaySession({
-    renderer: { async applyScene() { await wait(3) } },
+    frameScheduler: screen.scheduler,
+    renderer: { async applyScene() {} },
     async api(action, args) {
-      if (action !== 'get') return { running: action !== 'stop', fps: 60 }
-      calls.push(Date.now()); revisions.push(args.sceneRev)
+      if (action !== 'frame') return { running: action !== 'stop', fps: 60 }
+      frames.push(args)
       peak = Math.max(peak, ++active)
-      await wait(17)
+      if (hold) await hold.promise
       active--
       return { running: true, fps: 60, scene: { format: 'tree-v1', revision: ++revision } }
     },
   })
   t.after(() => play.destroy())
-  const advance = async ms => {
-    for (let i = 0; i < ms; i++) {
-      t.mock.timers.tick(1)
-      await new Promise(resolve => setImmediate(resolve))
-    }
-  }
+  const gate = () => { let resolve; const promise = new Promise(done => { resolve = done }); return { promise, resolve } }
+  const settle = async () => { hold.resolve(); hold = null; await new Promise(resolve => setImmediate(resolve)) }
   await play.start()
-  await advance(220)
-  assert.ok(calls.length >= 10, `17 ms transport + 3 ms render must not become 32 ms polling: ${calls.length}`)
-  assert.ok(calls.slice(1).every((at, i) => at - calls[i] >= 20 && at - calls[i] <= 21))
-  assert.deepEqual(revisions, revisions.map((_, i) => i), 'each request uses the scene revision after rendering')
+  await screen.run(50)
+  assert.equal(frames.length, 3)
+  hold = gate()
+  await screen.run(17)
+  const blocked = frames.length
+  await screen.run(100)
+  assert.equal(frames.length, blocked, 'no frame is sent while one is in flight')
+  await settle()
+  await screen.run(17)
+  assert.equal(frames.length, blocked + 1, 'one frame resumes, not a burst of catch-up steps')
+  assert.ok(frames.at(-1).dt > 0.1, `the resumed frame covers the stall: ${frames.at(-1).dt}`)
+  hold = gate()
+  await screen.run(17)
+  await screen.run(2000)
+  await settle()
+  await screen.run(17)
+  assert.ok(Math.abs(frames.at(-1).dt - 1 / 3) < 1e-9, 'a long stall is capped like Unity maximumDeltaTime')
+  assert.deepEqual(frames.map(args => args.sceneRev), frames.map((_, i) => i), 'each frame uses the revision after rendering')
   assert.equal(peak, 1)
   play.stopPolling()
-  await advance(50)
-  const stopped = calls.length
-  await advance(100)
-  assert.equal(calls.length, stopped, 'a completed in-flight poll must not rearm stopped polling')
+  const stopped = frames.length
+  await screen.run(200)
+  assert.equal(frames.length, stopped, 'stopped driving sends no frames')
+})
 
-  play.pollSoon(0)
-  await advance(1)
-  play.pollSoon(0); play.pollSoon(0)
-  await advance(60)
-  assert.equal(calls.length, stopped + 2, 'refreshes during an in-flight poll coalesce into one follow-up')
-  assert.equal(peak, 1)
+test('hidden pages and inactive views hand the clock to the Worker and resume with one frame interval', async t => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'document')
+  const page = Object.assign(new EventTarget(), { hidden: false })
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: page })
+  t.after(() => { if (previous) Object.defineProperty(globalThis, 'document', previous); else delete globalThis.document })
+  const screen = display(60)
+  const calls = []
+  let active = true, audioResets = 0
+  const play = createPlaySession({
+    frameScheduler: screen.scheduler,
+    renderer: { async applyScene() {} },
+    audio: { muted: true, audioChoice: null, sync() {}, reset() { audioResets++ }, unlock() {}, destroy() {} },
+    isActive: () => active,
+    async api(action, args = {}) { calls.push({ action, args }); return { running: action !== 'stop', fps: 30 } },
+  })
+  t.after(() => play.destroy())
+  const count = action => calls.filter(call => call.action === action).length
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  await play.start()
+  await screen.run(200)
+  assert.ok(count('frame') >= 5)
+  page.hidden = true
+  page.dispatchEvent(new Event('visibilitychange'))
+  await screen.run(300)
+  assert.equal(count('release'), 1, 'hiding releases the lease once')
+  t.mock.timers.tick(PLAY_HIDDEN_HEARTBEAT_MS * 3)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(count('release'), 4, 'a hidden page keeps its background game from idle cleanup')
+  const hiddenFrames = count('frame')
+  page.hidden = false
+  page.dispatchEvent(new Event('visibilitychange'))
+  await screen.run(20)
+  assert.equal(count('frame'), hiddenFrames + 1)
+  assert.ok(Math.abs(calls.at(-1).args.dt - 1 / 30) < 1e-9, 'the Worker already advanced the hidden time')
+  t.mock.timers.tick(PLAY_HIDDEN_HEARTBEAT_MS * 2)
+  assert.equal(count('release'), 4, 'a visible page drives with frames, not heartbeats')
+  const resetsBefore = audioResets
+  active = false
+  await screen.run(300)
+  assert.equal(count('release'), 5, 'an inactive view releases once')
+  assert.equal(audioResets, resetsBefore + 1)
+  const inactiveFrames = count('frame')
+  active = true
+  await screen.run(40)
+  assert.ok(count('frame') > inactiveFrames)
+})
+
+test('a preempted page exits once, stops driving and cannot end the game that replaced it', async t => {
+  const screen = display(60)
+  const calls = []
+  let preempted = 0, owner = true
+  const play = createPlaySession({
+    frameScheduler: screen.scheduler,
+    renderer: { async applyScene() {} },
+    onPreempted: () => preempted++,
+    async api(action, args = {}) {
+      calls.push({ action, args })
+      if (action === 'start') { owner = true; return { running: true, fps: 60 } }
+      return owner ? { running: action !== 'stop', fps: 60 } : { preempted: true }
+    },
+  })
+  t.after(() => play.destroy())
+  await play.start()
+  await screen.run(50)
+  owner = false
+  await screen.run(50)
+  assert.equal(preempted, 1)
+  assert.equal(play.preempted, true)
+  assert.equal(play.running, false)
+  const exited = calls.length
+  await screen.run(200)
+  assert.equal(await play.act('key', { key: 'KeyboardJumpKeyDown' }), null)
+  assert.equal(calls.length, exited, 'no frames, releases or input after preemption')
+  await play.stop()
+  assert.deepEqual(calls.at(-1), { action: 'stop', args: { driverId: play.driverId } })
+  await play.start()
+  assert.equal(play.preempted, false, 'an explicit start takes the game back')
+  await screen.run(50)
+  assert.ok(calls.at(-1).action === 'frame')
+  assert.equal(preempted, 1)
 })
 
 test('late observations cannot revive stopped sessions or overwrite a replacement scene', async t => {

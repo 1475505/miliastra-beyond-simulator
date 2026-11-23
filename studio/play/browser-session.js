@@ -6,6 +6,26 @@ export { keyEventName } from './key-bindings.js'
 
 export const PLAY_POLL_INTERVAL_MS = Math.floor(1000 / DEFAULT_PLAY_FPS)
 export const PLAY_MOVE_THROTTLE_MS = 60
+// Upper bound for one presented frame's dt; the Worker applies the same cap.
+export const PLAY_MAX_FRAME_DT = 1 / 3
+// A due frame is sent on the closest display refresh, up to this much early,
+// so 30 FPS on a 144/160 Hz display averages 30 rather than rounding down.
+const FRAME_SLACK_MS = 4
+// A hidden page sends no frames but stays open; this heartbeat keeps hosts that
+// stop idle Workers (Web editor: 15 minutes) from ending its background game.
+// Browsers still run timers at least once a minute in background tabs.
+export const PLAY_HIDDEN_HEARTBEAT_MS = 60_000
+
+function defaultFrameScheduler() {
+  if (typeof requestAnimationFrame === 'function') {
+    return { request: callback => requestAnimationFrame(callback), cancel: id => cancelAnimationFrame(id) }
+  }
+  return { request: callback => setTimeout(() => callback(performance.now()), 4), cancel: id => clearTimeout(id) }
+}
+
+function newDriverId() {
+  return globalThis.crypto?.randomUUID?.() || `driver-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
 
 const fpsStorageKey = 'qxqy-play-fps'
 function preferredFps() {
@@ -22,21 +42,29 @@ export function stagePoint(event, rect, width, height) {
 
 /**
  * Shared browser play loop used by the DSH standalone page and local Web preview.
- * Worker semantics stay in studio/host/worker.js; this only observes compact
- * scene snapshots and sends light-weight input.
+ * While visible and active, the page drives the game: each due display refresh
+ * sends one `frame` with the measured dt and renders its compact scene delta.
+ * Worker semantics stay in studio/host/worker.js, including the single-driver
+ * lease: a newer page or a tool that starts or steps play preempts this one.
  */
-export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError, onAudioStatus, audio,
-  audioMuted, isActive, isInputActive, keyInputEnabled = true } = {}) {
+export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError, onAudioStatus, onPreempted, audio,
+  audioMuted, isActive, isInputActive, keyInputEnabled = true, frameScheduler = defaultFrameScheduler(),
+  driverId = newDriverId() } = {}) {
   const agentMuted = audioMuted ?? (typeof window !== 'undefined' && browserAudioMutedByDefault())
   audio ||= typeof window !== 'undefined' ? new BrowserAudioPlayer({ onStatus: onAudioStatus, muted: agentMuted }) : null
   if (typeof window !== 'undefined') audio?.bindUnlock(window)
   let generation = 0
   let snapshot = null
   let running = false
-  let polling = false
-  let pollingEnabled = false
-  let timer = null
-  let nextPollAt = Infinity
+  let driving = false
+  let frameHandle = null
+  let frameInFlight = false
+  let lastFrameAt = null
+  let nextFrameAt = 0
+  let leased = false
+  let idle = false
+  let preempted = false
+  let heartbeat = null
   let fps = preferredFps()
   let sceneRev = 0
   let moveTimer = null
@@ -98,12 +126,11 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     const next = validatePlayFps(value)
     if (fps === next) return
     fps = next
-    if (pollingEnabled) {
-      nextPollAt = performance.now() + Math.floor(1000 / fps)
-      armPoll()
-    }
+    if (lastFrameAt !== null) nextFrameAt = lastFrameAt + 1000 / fps
     try { globalThis.localStorage?.setItem(fpsStorageKey, String(fps)) } catch { /* Session-only if storage is blocked. */ }
   }
+
+  const withDriver = (args = {}) => ({ ...args, driverId })
 
   async function setFps(value) {
     const next = validatePlayFps(value)
@@ -130,63 +157,157 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     if (onSnapshot) await onSnapshot(next)
   }
 
+  function sceneArgs(args = {}) {
+    return withDriver({ ...args, view: true, sceneRev, compact: true,
+      ...(snapshot?.audio?.sessionId ? { sceneSessionId: snapshot.audio.sessionId } : {}) })
+  }
+
+  function failPlay(error) {
+    running = false
+    stopPolling()
+    audio?.reset()
+    renderer.resetEffects?.()
+    emitError(error)
+  }
+
+  // Another page, or a tool that started or stepped play, now owns the game.
+  // Exit without stopping it; the page can only take it back with start/attach.
+  function handlePreempted() {
+    if (preempted) return
+    preempted = true
+    leased = false
+    void releaseInputs(false)
+    generation++
+    running = false
+    stopDriving()
+    audio?.reset()
+    renderer.resetEffects?.()
+    if (onPreempted) onPreempted()
+  }
+
+  // One-shot observation without advancing Lua (the frame loop is the driver).
   async function poll() {
-    if (!running || polling) return
-    if (timer !== null) clearTimeout(timer)
-    timer = null
-    nextPollAt = Infinity
-    const startedAt = performance.now()
-    polling = true
+    if (!running) return
     const current = generation
     try {
-      if (isActive && !isActive()) { audio?.reset(); renderer.resetEffects?.(); return }
-      const next = await api('get', { view: true, sceneRev, compact: true,
-        ...(snapshot?.audio?.sessionId ? { sceneSessionId: snapshot.audio.sessionId } : {}) })
+      const next = await api('get', sceneArgs())
       if (current !== generation) return
+      if (next?.preempted) return handlePreempted()
       await applyScene(next)
     } catch (error) {
-      if (current !== generation) return
-      running = false
-      stopPolling()
-      audio?.reset()
-      renderer.resetEffects?.()
-      emitError(error)
-    } finally {
-      polling = false
-      // Count request, drawing and UI work against this frame's budget. A slow
-      // request starts the next observation as soon as it finishes, rather than
-      // missing an interval tick and falling from 60 Hz straight to 30 Hz.
-      // Never overlap observations or accumulate catch-up requests.
-      if (pollingEnabled && running) nextPollAt = Math.min(nextPollAt, startedAt + Math.floor(1000 / fps))
-      armPoll()
+      if (current === generation) failPlay(error)
     }
   }
 
-  function armPoll() {
-    if (timer !== null) clearTimeout(timer)
-    timer = null
-    if (polling || !running || !Number.isFinite(nextPollAt)) return
-    timer = setTimeout(() => { timer = null; void poll() }, Math.max(0, nextPollAt - performance.now()))
+  async function sendFrame(dt) {
+    const current = generation
+    frameInFlight = true
+    try {
+      const next = await api('frame', sceneArgs({ dt }))
+      if (current !== generation) return
+      if (next?.preempted) return handlePreempted()
+      leased = true
+      await applyScene(next)
+    } catch (error) {
+      if (current === generation) failPlay(error)
+    } finally {
+      if (current === generation) frameInFlight = false
+    }
+  }
+
+  function pageHidden() {
+    return typeof document !== 'undefined' && document.hidden === true
+  }
+
+  function scheduleFrame() {
+    if (frameHandle !== null || !driving || !running || preempted) return
+    frameHandle = frameScheduler.request(onDisplayFrame)
+  }
+
+  function onDisplayFrame(now) {
+    frameHandle = null
+    if (!driving || !running || preempted) return
+    scheduleFrame()
+    const inactive = isActive && !isActive()
+    if (inactive || pageHidden()) {
+      if (!idle) {
+        idle = true
+        releaseLease()
+        if (inactive) { audio?.reset(); renderer.resetEffects?.() }
+      }
+      return
+    }
+    idle = false
+    if (frameInFlight || switchingView) return
+    const interval = 1000 / fps
+    if (lastFrameAt !== null && now < nextFrameAt - FRAME_SLACK_MS) return
+    // One Lua update per presented frame with the measured dt, like Unity
+    // Update and the device OnUpdate(dt). A slow response just makes the next
+    // frame's dt larger; it never sends catch-up steps.
+    const dt = lastFrameAt === null ? 1 / fps : Math.min(PLAY_MAX_FRAME_DT, Math.max(0, now - lastFrameAt) / 1000)
+    nextFrameAt = (lastFrameAt === null || now - nextFrameAt > interval ? now : nextFrameAt) + interval
+    lastFrameAt = now
+    void sendFrame(dt)
+  }
+
+  // Hand the clock back to the Worker: hidden tabs keep running like the PC client.
+  function releaseLease() {
+    lastFrameAt = null
+    if (!leased || preempted) return
+    leased = false
+    const current = generation
+    void Promise.resolve(api('release', withDriver())).then(value => {
+      if (current === generation && value?.preempted) handlePreempted()
+    }, () => {})
+  }
+
+  function stopHeartbeat() {
+    if (heartbeat !== null) clearInterval(heartbeat)
+    heartbeat = null
+  }
+
+  function startHeartbeat() {
+    if (heartbeat !== null || !driving || !running || preempted) return
+    heartbeat = setInterval(() => {
+      if (!driving || !running || preempted) return stopHeartbeat()
+      const current = generation
+      void Promise.resolve(api('release', withDriver())).then(value => {
+        if (current === generation && value?.preempted) handlePreempted()
+      }, () => {})
+    }, PLAY_HIDDEN_HEARTBEAT_MS)
+  }
+
+  function onVisibilityChange() {
+    if (pageHidden()) { releaseLease(); startHeartbeat() }
+    else { stopHeartbeat(); lastFrameAt = null; scheduleFrame() }
+  }
+  if (typeof document !== 'undefined') document.addEventListener?.('visibilitychange', onVisibilityChange)
+
+  function stopDriving() {
+    driving = false
+    stopHeartbeat()
+    if (frameHandle !== null) frameScheduler.cancel(frameHandle)
+    frameHandle = null
+    lastFrameAt = null
   }
 
   function startPolling() {
-    if (pollingEnabled) return
-    pollingEnabled = true
-    pollSoon()
+    if (driving || preempted) return
+    driving = true
+    idle = false
+    scheduleFrame()
   }
 
   function stopPolling() {
-    pollingEnabled = false
-    if (timer !== null) clearTimeout(timer)
-    timer = null
-    nextPollAt = Infinity
+    stopDriving()
+    releaseLease()
     if (isActive && !isActive()) { audio?.reset(); renderer.resetEffects?.() }
   }
 
-  function pollSoon(delay = Math.floor(1000 / fps)) {
-    if (!running) return
-    nextPollAt = Math.min(nextPollAt, performance.now() + Math.max(0, delay))
-    armPoll()
+  // Input reaches the Worker immediately and shows on the next frame; an extra
+  // frame here would run Lua twice in one display refresh.
+  function pollSoon() {
+    scheduleFrame()
   }
 
   function clearMove() {
@@ -211,15 +332,21 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     switchingView = false
     running = false
     sceneRev = 0
-    stopPolling()
+    // The next start/device/attach/stop supersedes the lease; no release here.
+    stopDriving()
+    leased = false
+    frameInFlight = false
+    idle = false
   }
 
   async function act(action, args, { allowInactive = false } = {}) {
+    if (preempted) return null
     if (!allowInactive && isActive && !isActive()) return null
     const current = generation
     try {
-      const value = await api(action, { light: true, ...(args || {}) })
+      const value = await api(action, withDriver({ light: true, ...(args || {}) }))
       if (current !== generation || !running) return value
+      if (value?.preempted) { handlePreempted(); return null }
       syncFps(value?.fps)
       if (value && typeof value === 'object' && value.frame !== undefined && onStatus) onStatus(value)
       pollSoon()
@@ -238,18 +365,21 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     return args
   }
 
+  // start/device/attach are explicit takeovers: this page becomes the driver.
   async function start(args = {}) {
     reset()
+    preempted = false
     args = playbackArgs(args)
     audio?.unlock()
     const current = generation
     sceneRev = 0
-    const next = await api('start', { view: true, compact: true, ...args })
+    const next = await api('start', withDriver({ view: true, compact: true, ...args }))
     if (current !== generation) return next
     await applyScene({ ...next, running: true }, { freshAudio: true })
     if (current !== generation) return next
     running = true
-    stopPolling()
+    leased = true
+    stopDriving()
     startPolling()
     return next
   }
@@ -259,28 +389,30 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     // the game, changing its player, or resuming a paused session.
     await releaseInputs()
     reset()
+    preempted = false
     const current = generation
     sceneRev = 0
-    stopPolling()
-    const next = await api('get', { view: true, compact: true, sceneRev: 0 })
+    const next = await api('attach', withDriver({ view: true, compact: true, sceneRev: 0 }))
     if (current !== generation) return next
     await applyScene(next)
     if (current !== generation) return next
+    leased = true
     if (running) startPolling()
     return next
   }
 
   async function device(args = {}) {
     reset()
+    preempted = false
     args = playbackArgs(args)
     const current = generation
     sceneRev = 0
-    stopPolling()
-    const next = await api('device', { view: true, compact: true, ...args })
+    const next = await api('device', withDriver({ view: true, compact: true, ...args }))
     if (current !== generation) return next
     await applyScene({ ...next, running: true }, { freshAudio: true })
     if (current !== generation) return next
     running = true
+    leased = true
     startPolling()
     return next
   }
@@ -295,8 +427,9 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       audio?.reset()
       renderer.resetEffects?.()
       sceneRev = 0
-      const next = await api('view', { view: true, compact: true, ...args })
+      const next = await api('view', withDriver({ view: true, compact: true, ...args }))
       if (current !== generation) return next
+      if (next?.preempted) { handlePreempted(); return next }
       await applyScene({ ...next, running: true })
       return next
     } finally {
@@ -304,9 +437,11 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
     }
   }
 
+  // A preempted page's stop is ignored by the Worker, so it cannot end the
+  // game that replaced it.
   async function stop() {
     reset()
-    return api('stop')
+    return api('stop', withDriver())
   }
 
   function point(event, el) {
@@ -462,7 +597,10 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
   }
 
   function destroy() {
+    // Best effort on unload; otherwise the Worker takes over after its lease timeout.
+    releaseLease()
     reset()
+    if (typeof document !== 'undefined') document.removeEventListener?.('visibilitychange', onVisibilityChange)
     while (inputDisposers.length) inputDisposers.pop()()
     renderer?.destroy?.()
     audio?.destroy()
@@ -470,8 +608,10 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
 
   return {
     audio,
+    driverId,
     get snapshot() { return snapshot },
     get running() { return running },
+    get preempted() { return preempted },
     get sceneRev() { return sceneRev },
     get fps() { return fps },
     setFps,
