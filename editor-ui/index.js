@@ -66,7 +66,8 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
 .qxsim-toolbar-center{min-width:0}.qxsim-device-switch{display:flex;flex:0 0 auto;gap:2px;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--input)}.qxsim-device-switch button{height:26px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:11px;font-weight:600;white-space:nowrap}.qxsim-device-switch button:hover{color:var(--text)}.qxsim-device-switch button.active{color:#fff;background:linear-gradient(#4f86ff,#3c6ed8);box-shadow:0 1px 5px #1d4b9f44}.qxsim-control.ratio{width:150px;min-width:0;padding-right:22px;text-overflow:ellipsis}.qxsim-io .qxsim-control{width:118px;min-width:0;padding-right:22px;text-overflow:ellipsis}.qxsim-platform-tag{padding:2px 7px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);font-weight:600;font-size:10px}
 .qxsim-toolbar{grid-template-columns:minmax(170px,1fr) auto auto;column-gap:12px}.qxsim-toolbar-center .zoom{width:78px;min-width:78px}.qxsim-actions{min-width:0}
 @container(max-width:1180px){.qxsim-toolbar{grid-template-columns:minmax(130px,1fr) auto auto;column-gap:8px}.qxsim-action{padding:0 8px}.qxsim-main{grid-template-columns:200px minmax(300px,1fr) 292px}.qxsim-control{min-width:132px}.qxsim-control.ratio{width:128px}.qxsim-io .qxsim-control{width:96px}.qxsim-device-switch button{padding:0 7px}.qxsim-workspace{padding-left:12px;padding-right:12px}.qxsim-brand-text span{display:none}.qxsim-asset-switch button{font-size:11px}}
-@container(max-width:1000px){.qxsim-toolbar{height:90px;flex-basis:90px;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:42px 42px}.qxsim-toolbar-center{justify-self:end}.qxsim-actions{grid-column:1 / -1}.qxsim-editor-nav .save-summary{display:none}.qxsim-inspector{top:130px}}
+@container(max-width:1100px){.qxsim-toolbar{height:auto;flex-basis:auto;grid-template-columns:minmax(0,1fr) auto;row-gap:4px;padding-block:4px}.qxsim-toolbar-center{justify-self:end}.qxsim-actions{grid-column:1 / -1;flex-wrap:wrap}.qxsim-editor-nav .save-summary{display:none}}
+@container(max-width:560px){.qxsim-toolbar{grid-template-columns:minmax(0,1fr)}.qxsim-toolbar-center{justify-self:stretch;justify-content:flex-end;flex-wrap:wrap}.qxsim-io{max-width:100%;flex-wrap:wrap;justify-content:flex-end}}
 @container(max-width:820px){.qxsim-main{grid-template-columns:180px minmax(280px,1fr)}.qxsim-inspector{position:absolute;right:0;top:0;bottom:0;width:285px;z-index:5;box-shadow:-10px 0 24px var(--shadow)}.qxsim-script-page{grid-template-columns:190px minmax(320px,1fr)}.qxsim-script-editor{padding:12px}.qxsim-script-fields{grid-template-columns:1fr}}
 `
 
@@ -648,15 +649,16 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
         observer.observe(el)
         return () => observer.disconnect()
       }, [snap?.canvas?.id, page])
-      function accept(next, { keepLogicDraft = true } = {}) {
+      function accept(next, { replaceProject = false } = {}) {
         snapRef.current = next; setSnap(next)
+        if (replaceProject) setScriptDraft(null)
         if (next?.scripts) {
           setSelectedScriptId((prev) => next.scripts.some((row) => row.id === prev) ? prev : (next.scripts[0]?.id || ''))
         }
-        setLogicDraft((prev) => (keepLogicDraft && prev?.dirty ? prev : cloneServerLogic(next?.serverLogic)))
+        setLogicDraft((prev) => (!replaceProject && prev?.dirty ? prev : cloneServerLogic(next?.serverLogic)))
         return next
       }
-      const reload = React.useCallback(async () => { try { setError(''); accept(await callApi(sessionId, 'get'), { keepLogicDraft: false }) } catch (reason) { setError(reason?.message || String(reason)) } }, [sessionId])
+      const reload = React.useCallback(async () => { try { setError(''); accept(await callApi(sessionId, 'get')) } catch (reason) { setError(reason?.message || String(reason)) } }, [sessionId])
       const refreshArchives = React.useCallback(async () => {
         try {
           const listed = await callApi(sessionId, 'archives')
@@ -681,10 +683,11 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
         await queueRef.current
         const current = snapRef.current
         if (!current.storage?.path) {
-          if (saveToWorkspace) setSavePath(`${current.save?.name || 'project'}.save.json`)
+          if (saveToWorkspace && current.workspace?.bound) setSavePath(`${current.save?.name || 'project'}.save.json`)
           throw new Error(t('请先保存完整存档，再复制提示词；AI 需要读取这次实际修改的存档。'))
         }
         await callApi(sessionId, 'save', { path: current.storage.path, expectedRevision: current.version })
+        accept(await callApi(sessionId, 'get'))
         const changes = current.controlGuidChanges || []
         const prompt = [t('请完成模拟器控件索引与 Lua 引用同步。'),
           t`工作区：${current.workspace?.path || t('请先核对工作区')}`,
@@ -731,13 +734,23 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
         })
       }, [snap, selectedScriptId])
       function updateDraft(fields) {
-        setScriptDraft((prev) => (prev ? { ...prev, ...fields, dirty: true } : prev))
+        setScriptDraft(prev => {
+          if (!prev) return prev
+          const next = { ...prev, ...fields }
+          const entry = snapRef.current.scripts.find(script => script.id === next.id)
+          next.dirty = ['path', 'source', 'controlId', 'controlAsset'].some(key => next[key] !== entry?.[key])
+          return next
+        })
+      }
+      function updateLogicDraft(next) {
+        const base = cloneServerLogic(snapRef.current.serverLogic)
+        setLogicDraft({ ...next, dirty: next.enabled !== base.enabled || JSON.stringify(next.rules) !== JSON.stringify(base.rules) })
       }
       async function saveScriptDraft() {
         const draft = scriptDraft
         if (!draft || !draft.dirty) return
         await patch({ op: 'updateScript', id: draft.id, path: draft.path, source: draft.source, controlId: draft.controlId, controlAsset: draft.controlAsset })
-        setScriptDraft((prev) => (prev && prev.id === draft.id ? { ...prev, dirty: false } : prev))
+        setScriptDraft(prev => prev === draft ? { ...prev, dirty: false } : prev)
       }
       function saveScriptDraftSilently() {
         void saveScriptDraft().then(() => setNotice(t('Lua 脚本已保存到当前存档'))).catch(() => {})
@@ -752,7 +765,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
           throw new Error(message)
         }
         const next = await patch({ op: 'setServerLogic', logic: sanitizeLogic(draft) })
-        setLogicDraft(cloneServerLogic(next.serverLogic))
+        setLogicDraft(prev => prev === draft ? cloneServerLogic(next.serverLogic) : prev)
         setNotice(t('服务端逻辑已保存到当前存档'))
       }
       function saveLogicDraftSilently() {
@@ -833,7 +846,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
         try {
           await queueRef.current.catch(() => {})
           const result = await callApi(sessionId, 'load-archive', { path })
-          accept(result.snapshot, { keepLogicDraft: false }); setError('')
+          accept(result.snapshot, { replaceProject: true }); setError('')
           setNotice(t`已从工作区拉取 ${path}`)
           setExportWarnings([])
         } catch (reason) { setError(reason?.message || String(reason)) }
@@ -845,7 +858,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
         try {
           await queueRef.current.catch(() => {})
           const result = await callApi(sessionId, 'import', { format, filename: file.name, data: await fileBase64(file) })
-          accept(result.snapshot, { keepLogicDraft: false }); setError('')
+          accept(result.snapshot, { replaceProject: true }); setError('')
           setNotice([t`已导入 ${file.name}`, ...(result.warnings || [])].join('\n'))
           setExportWarnings([])
         } catch (reason) { setError(reason?.message || String(reason)) }
@@ -960,6 +973,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
         ? snap.tree.filter((row) => row.id !== selectedRow.id && !(row.ancestorIds || []).includes(selectedRow.id))
         : []
       const selectedParentId = selectedRow?.parentId || snap.root.id
+      const showSave = saveToWorkspace && (snap.storage?.dirty || scriptDraft?.dirty || logicDraft.dirty)
       return e('div', { className: 'qxsim', 'data-qxqy-font-ui': '', lang: locale === 'zh' ? 'zh-CN' : 'en', 'data-theme': theme, 'data-qxsim-session-id': sessionId },
         tutorial.dialog,
         playLauncher.overlay,
@@ -987,7 +1001,6 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
               [['auto', '按键：跟随画布'], ['keyboard', '按键：键鼠'], ['controller', '按键：手柄']].map(([value, label]) => e('option', { key: value, value }, t(label)))),
             e('select', { className: 'qxsim-control zoom', 'aria-label': t('画布缩放'), value: zoom, onChange: (event) => setZoom(event.target.value) }, [['fit', t('适应')], ['0.25', '25%'], ['0.5', '50%'], ['0.75', '75%'], ['1', '100%']].map(([value, label]) => e('option', { key: value, value }, label)))) : e('span', { className: 'qxsim-muted' }, page === 'logic' ? t('服务端逻辑：监听信号 / 自定义变量 / 玩家1-8 回传') : t('Lua 脚本资产编辑'))),
           e('div', { className: 'qxsim-actions' },
-            saveToWorkspace ? e('button', { className: 'qxsim-action', 'data-quick-start-target': 'save', title: t('保存完整存档到工作区'), onClick: openSave }, t('保存存档')) : null,
             e('div', { className: 'qxsim-io', 'data-quick-start-target': 'files' },
               e('input', { ref: fileInputRef, hidden: true, type: 'file', accept: '.json,.gia,.lua,application/json,application/octet-stream,text/plain', onChange: (event) => void importFile(event.target.files?.[0]) }),
               e('select', { className: 'qxsim-control zoom', 'aria-label': t('从工作区拉取存档'), 'data-quick-start-target': 'load-archive', defaultValue: '', onFocus: () => void refreshArchives(), onChange: (event) => { const path = event.target.value; event.target.value = ''; if (path) void loadWorkspaceArchive(path) } }, e('option', { value: '', disabled: true }, snap.workspace?.bound ? t('⤓ 工作区存档') : t('工作区未绑定')), ...(archives.length ? archives.map((row) => e('option', { key: row.path, value: row.path }, `${row.name} · ${row.path}`)) : [e('option', { value: '', disabled: true }, snap.workspace?.bound ? t('未发现 qxqy-simulator-save') : t('先绑定会话工作区'))])),
@@ -999,8 +1012,10 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
               } }, e('option', { value: '', disabled: true }, t('⇩ 导出')),
               e('option', { value: 'gia-partial' }, t('部分组合导出')),
               e('option', { value: 'save' }, t('资产包 JSON（三类合一）')), e('option', { value: 'save-gia' }, t('资产包 GIA（已改动项）')), e('option', { value: 'gia-combined' }, t('资产包 GIA 整合包（控件+脚本）')), e('optgroup', { label: t('当前界面（左栏正在看的那棵树）') }, e('option', { value: 'json' }, t('当前界面 Authoring JSON')), e('option', { value: 'gia' }, t('当前界面 GIA'))), e('optgroup', { label: t('服务器控件模板') }, e('option', { value: 'json|server-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|server-control-template' }, 'GIA')), e('optgroup', { label: t('客户端控件模板（仅当左栏切到「UI控件-客户端」时才是页面内容）') }, e('option', { value: 'json|client-control-template' }, 'Authoring JSON'), e('option', { value: 'gia|client-control-template' }, 'GIA')), e('optgroup', { label: t('Lua 脚本') }, e('option', { value: 'scripts' }, t('脚本包 JSON（全部脚本）')), e('option', { value: 'scripts-gia' }, t('脚本包 GIA（全部脚本）'))))),
+            e('button', { className: 'qxsim-iconbtn', title: t('重新载入'), 'aria-label': t('重新载入'), onClick: reload }, '↻'),
             e('button', { className: 'qxsim-action primary', 'data-quick-start-target': 'play', title: t('打开试玩；新窗口不可用时在应用内试玩'), disabled: playLauncher.opening, 'aria-busy': playLauncher.opening || undefined, onClick: startPlay }, playLauncher.opening ? t('正在准备…') : t('▷ 试玩 ↗')),
-            e('button', { className: 'qxsim-iconbtn', title: t('重新载入'), onClick: reload }, '↻'))),
+            showSave ? e('button', { className: 'qxsim-action', 'data-quick-start-target': 'save', disabled: !snap.workspace?.bound,
+              title: snap.workspace?.bound ? t('保存完整存档到工作区') : t('先绑定会话工作区'), onClick: openSave }, t('保存存档')) : null)),
         e('nav', { className: 'qxsim-editor-nav', 'aria-label': t('编辑页面'), 'data-quick-start-target': 'navigation' }, e('button', { className: page === 'ui' ? 'active' : '', onClick: () => leavePage('ui') }, t('UI 编辑')), e('button', { className: page === 'script' ? 'active' : '', onClick: () => leavePage('script') }, t('Lua 脚本')), e('button', { className: page === 'logic' ? 'active' : '', onClick: () => leavePage('logic') }, t('服务端逻辑')), e('span', { className: 'save-summary' }, t('一个存档 · 服务器控件模板 + 客户端控件模板 + Lua 脚本 + 服务端逻辑')),
           e('div', { className: 'qxsim-editor-settings' },
             e('button', { onClick: () => setFontSettingsOpen(true), 'aria-label': t('字体设置') }, t('字体设置')),
@@ -1055,7 +1070,7 @@ export function createEditor(React, { api, playUrl, saveToWorkspace = false, ver
                   e('button', { className: 'qxsim-action', disabled: refreshingImage, onClick: refreshSelectedImage }, refreshingImage ? t('正在刷新素材…') : t('↻ 重新下载此素材')),
                   e('p', { className: 'qxsim-muted' }, t('白名单图片按需缓存；刷新会重新访问素材源。'))) : null)),
             e('div', { className: 'qxsim-tree-foot' }, e('button', { className: 'qxsim-action danger', style: { width: '100%' }, onClick: () => void patch({ op: 'remove' }).catch(() => {}) }, clientTemplates && selectedRow?.depth === 0 ? t('⌫ 删除当前模板') : t('⌫ 删除当前控件'))))
-          : e('div', { className: 'qxsim-empty' }, t('请选择一个控件')))) : page === 'script' ? e(ScriptPage, { snap, selectedScriptId, selectScript: (id) => { saveScriptDraftSilently(); setSelectedScriptId(id) }, draft: scriptDraft, updateDraft, saveScript: () => void saveScriptDraft().then(() => setNotice(t('Lua 脚本已保存到当前存档'))).catch(() => {}), addScript: () => void addScript(), removeScript, exportLua: (id) => void exportFile('lua', id), exportScripts: () => void exportFile('scripts'), exportScriptsGia: () => void exportFile('scripts-gia'), notice }) : e(ServerLogicPage, { snap, draft: logicDraft, setDraft: setLogicDraft, saveLogic: () => void saveLogicDraft().catch(() => {}), notice, error })),
+          : e('div', { className: 'qxsim-empty' }, t('请选择一个控件')))) : page === 'script' ? e(ScriptPage, { snap, selectedScriptId, selectScript: (id) => { saveScriptDraftSilently(); setSelectedScriptId(id) }, draft: scriptDraft, updateDraft, saveScript: () => void saveScriptDraft().then(() => setNotice(t('Lua 脚本已保存到当前存档'))).catch(() => {}), addScript: () => void addScript(), removeScript, exportLua: (id) => void exportFile('lua', id), exportScripts: () => void exportFile('scripts'), exportScriptsGia: () => void exportFile('scripts-gia'), notice }) : e(ServerLogicPage, { snap, draft: logicDraft, setDraft: updateLogicDraft, saveLogic: () => void saveLogicDraft().catch(() => {}), notice, error })),
         e(Footer, { version, request: action => callApi(sessionId, action), onQuickStart: tutorial.open }))
     }
 

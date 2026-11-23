@@ -26,6 +26,24 @@ test('save defaults to the last successfully opened or saved path', t => {
   assert.equal(controller.saveArchive().path, 'nested/a.json')
 })
 
+test('unsaved status follows authoring content across assets, not selection or editor revisions', t => {
+  const { controller } = setup(t)
+  const patch = op => controller.patch(op).storage.dirty
+  assert.equal(controller.get().storage.dirty, false)
+  assert.equal(patch({ op: 'select', id: 'n1' }), false)
+  assert.equal(patch({ op: 'setKeyHintDevice', device: 'controller' }), false)
+  assert.equal(patch({ op: 'addScript', path: 'game.lua', source: '-- original' }), true)
+  controller.saveArchiveChecked('game.save.json', controller.get().version)
+  const { id } = controller.get().scripts[0]
+  assert.equal(patch({ op: 'updateScript', id, source: '-- changed' }), true)
+  assert.equal(patch({ op: 'selectAsset', assetType: 'client-control-template' }), true)
+  assert.equal(patch({ op: 'updateScript', id, source: '-- original' }), false, 'reverting the edit is clean')
+  assert.equal(patch({ op: 'renameSave', name: 'Different name' }), true, 'rename does not bump the asset revision')
+  assert.throws(() => controller.saveArchiveChecked('../other.json', controller.get().version))
+  assert.equal(controller.get().storage.dirty, true)
+  assert.equal(controller.loadArchive('game.save.json').snapshot.storage.dirty, false)
+})
+
 test('editor and sync saves share revision checks, file fingerprints and save-as association', t => {
   const { controller, workspace } = setup(t)
   const save = (path, revision = controller.get().version) => controller.saveArchiveChecked(path, revision)
@@ -73,6 +91,7 @@ test('successful imports detach the old save; failed imports preserve the projec
   const result = controller.importData('json', Buffer.from(JSON.stringify(imported)).toString('base64'))
   assert.equal(result.snapshot.save.name, 'Imported')
   assert.equal(result.snapshot.storage.path, '')
+  assert.equal(result.snapshot.storage.dirty, true)
   assert.throws(() => controller.assertSavedArchive(), /保存/)
   assert.throws(() => controller.scriptSyncAction('save', { expectedRevision: result.snapshot.version }), /path/)
   assert.equal(readFileSync(join(workspace, 'original.json'), 'utf8'), original)

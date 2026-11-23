@@ -63,26 +63,37 @@ try {
   child.stdout.on('data', chunk => { output += chunk })
   child.stderr.on('data', chunk => { output += chunk })
   const deadline = Date.now() + 60_000
-  let url
+  let launchUrl
   while (Date.now() < deadline) {
     if (spawnError) throw spawnError
     if (child.exitCode !== null || child.signalCode !== null) throw new Error('Harness exited before readiness')
-    url = output.match(/dsh web: (http:\/\/127\.0\.0\.1:\d+)/)?.[1]
-    if (url) break
+    launchUrl = output.match(/dsh web: (http:\/\/127\.0\.0\.1:\d+(?:\/[^\s]*)?)\r?\n/)?.[1]
+    if (launchUrl) break
     await delay(100)
   }
-  assert.ok(url, 'Harness did not become ready within 60 seconds')
-  const response = await fetch(`${url}/qxqy-smoke`, { signal: AbortSignal.timeout(30_000) })
+  assert.ok(launchUrl, 'Harness did not become ready within 60 seconds')
+  const probeUrl = new URL('/qxqy-smoke', launchUrl)
+  const probe = headers => fetch(probeUrl, { headers, redirect: 'error', signal: AbortSignal.timeout(30_000) })
+  let response = await probe()
+  if (response.status === 401 && new URL(launchUrl).searchParams.has('token')) {
+    // Newer Hosts protect plugin routes too. Use the normal loopback sign-in.
+    await response.body?.cancel()
+    const login = await fetch(launchUrl, { redirect: 'manual', signal: AbortSignal.timeout(5_000) })
+    assert.equal(login.status, 303, 'Harness login must redirect to its clean URL')
+    const cookie = login.headers.getSetCookie().map(value => value.split(';', 1)[0]).join('; ')
+    assert.ok(cookie, 'Harness login did not issue a session cookie')
+    await login.body?.cancel()
+    response = await probe({ cookie })
+  }
+  if (response.status !== 200) throw new Error(`Harness probe returned HTTP ${response.status}: ${await response.text()}`)
   const report = await response.json()
-  assert.equal(response.status, 200, JSON.stringify(report))
   assert.equal(report.ok, true, JSON.stringify(report))
   assert.equal(report.modelSelection, modelSelection, '#24 smoke runs on supported hosts')
   assert.deepEqual(report.language, await systemLanguage(), 'installed DSH reads the actual host UI language')
   console.log(`PASS Harness ${harness.version}: CLI tarball admission, full Web boot, preset/Skill discovery, persisted preset session recovery, real tool calls, attachments, HTTP play, native locale ${JSON.stringify(report.language)} and plugin restart lifecycle`)
-  if (modelSelection) console.log('PASS #24: preset route fields/discovery, Host opt-in, allowlist/effort enforcement, preset switch and policy restoration')
+  if (modelSelection) console.log('PASS #24: preset route fields, model discovery and Host allowlist/effort enforcement after preset switch')
   if (process.env.QXQY_BROWSER) {
     const { smokeHarnessLanguage } = await import('./smoke-harness-language.mjs')
-    const launchUrl = output.match(/dsh web: (http:\/\/127\.0\.0\.1:\d+[^\s]*)/)?.[1] || url
     await smokeHarnessLanguage(launchUrl, temporary, report.language)
   }
 } catch (error) {

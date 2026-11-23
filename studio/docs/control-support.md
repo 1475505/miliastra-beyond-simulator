@@ -188,7 +188,8 @@ MASK v1 的 PC 真机回传确认：`enableMask` 裁切图片的后代，不裁�
 
 - **文本视窗**：在检视器填写超过视窗高度的文本，开启“允许滚动交互”，进入试玩后直接滚轮或拖动。隐藏滚动条仍可滚动。文本变短、字号或尺寸变化会重新测量并限制偏移。
 - **网格视窗**：配置“列表项模板索引”、尺寸/间距/排列，在运行脚本中调用 `RefreshItems(itemCount, callback)`。编辑器“预览数量”不自动生成运行条目。只有 `RefreshItems` 管理的模板项随列表移动和裁切；静态子控件保持原位。
-- **工具/回放**：使用 `pointer` 的 `type: "wheel"`，传 `x/y/deltaX/deltaY`。例如 `{"type":"wheel","x":600,"y":450,"deltaY":48}`。正 `deltaY` 往后滚动；横向列表优先使用 `deltaX`，没有横向量时使用 `deltaY`。`type: "cancel"` 结束当前指针事务，不产生点击。
+- **试玩滚轮**：鼠标停在纵向视窗或其列表按钮上，向上拨显示后面的行／项，向下拨显示前面的行／项。选在列表中段对照，可避开首尾限位。
+- **工具/回放**：使用 `pointer` 的 `type: "wheel"`，传 `x/y/deltaX/deltaY`。例如 `{"type":"wheel","x":600,"y":450,"deltaY":48}`。这里是转换后的画布增量：正 `deltaY` 往后滚动。浏览器只在输入时反转 DOM `deltaY`；已有录制按原值回放。横向列表优先使用 `deltaX`，没有横向量时使用 `deltaY`。`type: "cancel"` 结束当前指针事务，不产生点击。
 - 编辑视图保持静态布局；滚动在试玩生效。运行偏移保存在各玩家的运行时控件上，停止/重开复位，不写回 Authoring JSON。
 
 ### 明确采用的模拟器策略
@@ -208,6 +209,7 @@ MASK v1 的 PC 真机回传确认：`enableMask` 裁切图片的后代，不裁�
 - API依据：历史本地 `Lua客户端UI脚本API.md` 快照SHA256 `4A43F93F2B322BE8336FF33D9CB07B3BC3A8D4C8A931A45D18F90E4E64941BAB` 声明视窗 `interactable/showScrollBar`、网格字段及七个方法和滚动枚举（`documented / official_document`）；范围、索引起点与间距方向按上述模拟器策略处理。
 - 自动回归：`test/scroll.test.mjs` 使用独立几何预期覆盖命中、布局、Lua 回调/复用/定位/Tween/释放、PNG/Pixi 裁切及回放；`test/browser-session.test.mjs` 覆盖滚轮单位、多指过滤及取消；`test/gia-loss-warnings.test.mjs` 覆盖 JSON 保留与 GIA 损失提示。
 - 浏览器回归：`web/test/scroll-browser.test.mjs`，覆盖滚轮、拖拽、滚动条、触摸、Worker 输入与 GPU 裁切。
+- 滚轮上下方向依据用户对旧版“模拟器和真机相反”的反馈调整（`provided_unverified / device / pending`，原件待补）；浏览器用例核对按钮列表和文本视窗在两个方向的响应。真机的系统滚动设置、每格距离未核实。
 - GIA：视窗交互/滚动条、列表模板、方向/排列字段仅保证JSON/Lua，未核实wire映射不猜写，导出时明确提示；已知尺寸/间距及文本字段沿用原编解码。
 
 ### 实现入口

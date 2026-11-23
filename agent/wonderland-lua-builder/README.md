@@ -62,13 +62,13 @@ Harness 0.2.2 起，预设按官方 `standard` 的方式在 spawn 工具声明�
 
 `modelSelection` 为 `subagent` 添加 `provider`、`model`、`reasoning_effort` 参数；`modelDiscovery` 在该预设作用域注册唯一的 `list_subagent_models`。fork 沿用官方默认，继承父模型。声明式预设、包内旧目录副本均从 `agent.cordis.yml` 构建。
 
-Host 的 `@deepseek-ai/dsh-tool-subagent/model-selection-settings` 管理用户开关与模型白名单；在 Harness 的子智能体设置中配置后**新建会话**，由 Host 保存授权。子会话继承授权，切换预设和恢复历史保留原授权；后改设置不扩张旧会话的权限。没有会话授权时，查询和显式选模仅允许父 Agent 当前模型及其支持的推理强度。预设只声明工具能力，不复制 Host 设置服务或写入白名单，也不使用旧 `modelSelectionSettings`。
+用户开关和模型白名单由 Host 管理。**0.2.2-rc.1、rc.5** 在会话创建时保存授权，修改设置后需新建会话；**0.2.3-alpha.2** 在每次调用时读取当前设置，已打开和从历史恢复的会话也随之更新。关闭选模时，两版都只允许显式选择父 Agent 当前模型及其支持的推理强度。预设只声明工具能力，不写白名单。
 
-如果更新后参数或列表工具仍缺失，检查实际 profile 加载的插件与预设配置；用户保存的整份 `config.plugins` 可能覆盖新包。旧 `.agent-presets` 不会自动覆盖，修改目录副本也不保证声明式预设同步。此选模契约适用于 0.2.2+；0.2.1 及更早宿主仍按原有预设能力运行。
+如果更新后参数或列表工具仍缺失，检查实际 profile 加载的插件与预设配置；用户保存的整份 `config.plugins` 可能覆盖新包。旧 `.agent-presets` 不会自动覆盖，修改目录副本也不保证声明式预设同步。0.2.1 及更早宿主仍按原有预设能力运行。
 
-官方依据：[`dsh-v0.2.2-rc.1` standard 预设](https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/bundle/web-app/presets/standard.patch.yml)与 [tool-subagent 文档](https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/subagent/tool-subagent/README.md#selecting-a-child-llm)，2026-11-12 在线核对，`documented / official_document / device_status=not_required`。
+官方依据：[0.2.2-rc.5 选模规则](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/subagent/tool-subagent/README.md#selecting-a-child-llm)、[0.2.3-alpha.2 实时设置迁移说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.3-alpha.2/docs/upgrade-guide/v0.2.2-rc.3/subagent-model-selection-live-setting/guide.md)。
 
-回归入口 `scripts/smoke-harness-models.mjs` 随 `pnpm test:harness` 在隔离 Host 运行。Windows / Node24.21.0 / Harness0.2.2-rc.1 已验证实际工具参数与列表唯一性、Host 开关及白名单过滤／拒绝、非法推理强度拒绝、standard→本预设切换和关闭开关后的历史授权恢复（`observed / simulator / device_status=not_required`）。模型目录为合成适配器，未调用真实模型；不涵盖模型生成质量与 Desktop 界面操作。
+回归入口 `scripts/smoke-harness-models.mjs` 随 `pnpm test:harness` 在隔离 Host 运行：分别在关闭、开启选模时创建会话，验证预设切换后工具可见、只列出可用模型、拒绝未授权模型和无效推理强度。使用合成模型目录，不调用真实模型。预设历史会话恢复由同一验收中的 `smoke-harness-probe.mjs` 单独验证。
 
 ## 资料与验证边界
 

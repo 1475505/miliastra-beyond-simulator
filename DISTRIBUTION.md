@@ -8,7 +8,7 @@
 
 `scripts/build.mjs` 为 Web、Harness、MCP 分别生成 ESM Node 入口及同目录 Worker。核心 JavaScript 打入产品；`fengari`、`@napi-rs/canvas` 保留为明确的运行依赖。DSH 的完整 `protobufjs` 随 Host 和 Worker 打入，避免 GIA 的导入期解析依赖宿主共享 CommonJS 状态；Web/MCP 继续显式依赖外部 `protobufjs`。Canvas 的原生依赖按安装平台选取。Pixi 和 Web React 编译进浏览器资源；Harness 从宿主取得 React。
 
-`editor-ui` 只接收 React、API 调用函数和试玩 URL，不依赖 Harness 服务。Harness 薄适配层负责 slots / ModuleLoader；Web 薄适配层负责 React 挂载、标签页会话与保存入口。双方共用原有控件编辑、脚本、服务端逻辑及试玩界面。
+`editor-ui` 由宿主注入 React、API 调用函数和试玩 URL，不依赖 Harness 服务。Harness 薄适配层负责 slots / ModuleLoader；Web 薄适配层负责 React 挂载和标签页会话。双方共用控件编辑、脚本、服务端逻辑、保存与试玩界面。
 
 ## 打包流程
 

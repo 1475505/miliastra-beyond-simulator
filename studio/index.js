@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { normalizeScriptSync } from './script-sync-config.js'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { applyPatch, createProject, snapshotProject } from './ui/project.js'
@@ -443,7 +443,11 @@ export function createStudio(seed, options = {}) {
   }
 
   function archiveData() {
-    return toJson({
+    return toJson(archiveRecord())
+  }
+
+  function archiveRecord() {
+    return {
       format: SAVE_FORMAT,
       version: 4,
       meta: { name: currentSaveName() },
@@ -454,7 +458,7 @@ export function createStudio(seed, options = {}) {
       assets: {
         server: projects.server,
         client: projects.client,
-        scripts: scripts.map((script) => toJson({
+        scripts: scripts.map((script) => ({
           id: script.id,
           guid: script.guid || 0,
           path: script.path || '',
@@ -463,7 +467,22 @@ export function createStudio(seed, options = {}) {
           controlAsset: script.controlAsset || '',
         })),
       },
-    })
+    }
+  }
+
+  // Archives also carry the last editor view. Browsing a different asset,
+  // selecting a node, or advancing a revision is not an edit to the game.
+  let authoringHash
+  function contentHash() {
+    if (authoringHash === undefined) {
+      const { activeAssetType, ...record } = archiveRecord()
+      for (const key of ['server', 'client']) {
+        const { version, selectedId, canvasId, keyHintDevice, ...asset } = record.assets[key]
+        record.assets[key] = asset
+      }
+      authoringHash = createHash('sha256').update(JSON.stringify(record)).digest('hex')
+    }
+    return authoringHash
   }
 
   function get() {
@@ -627,6 +646,7 @@ export function createStudio(seed, options = {}) {
 
   function patch(op) {
     if (!op || typeof op !== 'object') throw new Error('patch requires op')
+    if (!['select', 'pick', 'selectAsset', 'setCanvas', 'setKeyHintDevice'].includes(op.op)) authoringHash = undefined
     if (op.op === 'setScriptSync') {
       const project = checkRevision(op)
       scriptSync = normalizeScriptSync(op.config)
@@ -879,6 +899,7 @@ export function createStudio(seed, options = {}) {
   }
 
   function importData(format, base64, filename = '') {
+    authoringHash = undefined
     const normalized = String(format || '').toLowerCase()
     if (typeof base64 !== 'string' || !base64) throw new Error('import data is required')
     const bytes = Buffer.from(base64, 'base64')
@@ -1249,6 +1270,7 @@ export function createStudio(seed, options = {}) {
     playSaveCase,
     playRunCase,
     archiveData,
+    contentHash,
   }
   Object.defineProperty(api, '_project', { enumerable: false, get: currentProject })
   return api

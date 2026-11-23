@@ -21,11 +21,15 @@ function archive() {
     transform.offset = { x: node === text ? -200 : 200, y: 0 }
   }
   stage.children = [text, grid]
-  save.assets.client.root.children = [createNode('textbox', { id: 'scroll-item', guid: 1073742999, name: 'Item', text: '', fontSize: 24, bgColor: 0xff365570 })]
+  const item = createNode('button', { id: 'scroll-item', guid: 1073742999, name: 'Item' })
+  const label = createNode('textbox', { id: 'scroll-label', name: 'Label', text: '', fontSize: 24, bgColor: 0xff365570 })
+  for (const transform of Object.values(label.transformByPlatform)) transform.size = { x: 260, y: 45 }
+  item.children.push(label)
+  save.assets.client.root.children = [item]
   save.assets.scripts = [{ id: 'scroll-main', path: 'scroll.lua', controlId: stage.id, controlAsset: 'server-control-template', source: `
 function OnStart()
   local grid = script.object:GetChild('Grid')
-  grid:RefreshItems(30, function(item, index) item.text = 'Item ' .. index end)
+  grid:RefreshItems(30, function(item, index) item:GetChild('Label').text = 'Item ' .. index end)
 end` }]
   return save
 }
@@ -74,9 +78,12 @@ test('browser wheel, real mouse drag, scrollbar and touch scroll both viewport t
   }
   for (const [name, x] of [['LongText', 600], ['Grid', 1000]]) {
     const p = point(x, 450)
+    // Start inside the list: neither direction should be hidden by clamping.
+    await h.api('pointer', { type: 'wheel', x, y: 450, deltaY: 320 })
     await input({ type: 'mouseWheel', ...p, deltaX: 0, deltaY: 30 })
-    await waitOffset(name, n => n > 30)
-    const before = await offset(name)
+    await waitOffset(name, n => n < 319)
+    await input({ type: 'mouseWheel', ...p, deltaX: 0, deltaY: -30 })
+    const before = await waitOffset(name, n => Math.abs(n - 320) < 1)
     await input({ type: 'mousePressed', ...p, button: 'left', buttons: 1, clickCount: 1 })
     await input({ type: 'mouseMoved', ...point(x, 490), button: 'left', buttons: 1 })
     await input({ type: 'mouseReleased', ...point(x, 490), button: 'left', buttons: 0, clickCount: 1 })

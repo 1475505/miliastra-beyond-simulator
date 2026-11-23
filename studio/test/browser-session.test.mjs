@@ -567,7 +567,7 @@ test('wheel pixels/lines/pages scale into canvas units and cancellation ignores 
   for (const deltaMode of [0, 1, 2]) handlers.wheel({ clientX: 410, clientY: 275, deltaMode, deltaX: 1, deltaY: 2, preventDefault() { prevented++ } })
   await wait(0)
   const wheels = calls.filter(c => c.args?.type === 'wheel').map(c => c.args)
-  assert.deepEqual(wheels.map(c => [c.x, c.y, c.deltaX, c.deltaY]), [[800, 450, 2, 4], [800, 450, 32, 64], [800, 450, 1600, 1800]])
+  assert.deepEqual(wheels.map(c => [c.x, c.y, c.deltaX, c.deltaY]), [[800, 450, 2, -4], [800, 450, 32, -64], [800, 450, 1600, -1800]])
   assert.equal(prevented, 3)
   const p = { pointerId: 1, clientX: 410, clientY: 275 }
   handlers.pointerdown(p)

@@ -4,7 +4,7 @@
 
 ## 接入契约
 
-`createEditor(React, { api, playUrl, saveToWorkspace, quickStart })`返回`SimulatorView`、`ensureStyle()`和`removeStyle()`。宿主提供React；`api(sessionId, action, body)`返回envelope中的value并将失败转为异常；`playUrl(sessionId)`返回同源试玩页地址。Web设置`saveToWorkspace: true`显示显式存档按钮。
+`createEditor(React, { api, playUrl, saveToWorkspace, quickStart })`返回`SimulatorView`、`ensureStyle()`和`removeStyle()`。宿主提供React；`api(sessionId, action, body)`返回envelope中的value并将失败转为异常；`playUrl(sessionId)`返回同源试玩页地址。Web 和 DSH 都启用 `saveToWorkspace`。顶栏按宿主返回的 `storage.dirty` 以及尚未提交的 Lua、服务端逻辑草稿显示保存入口；操作说明见[保存第一份工程](../docs/user-guide.md#files)。
 
 编辑操作沿用Controller的snapshot、revision与patch；本层不读取文件系统或处理部署认证。
 

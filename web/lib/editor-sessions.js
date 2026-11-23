@@ -61,7 +61,7 @@ export class EditorSessions {
       if (row === keep || row.inFlight || c.worker || c.pending.size) continue
       const parked = deflateSync(Buffer.from(JSON.stringify({
         archive: c.studio.archiveData(),
-        storage: { archivePath: c.archivePath, archiveStamp: c.archiveStamp, savedArchive: c.savedArchive },
+        storage: { archivePath: c.archivePath, archiveStamp: c.archiveStamp, savedArchive: c.savedArchive, savedContentHash: c.savedContentHash },
         scriptSync: { plan: c.scriptSync.plan, lastResult: c.scriptSync.lastResult },
         guidPlan: c.controlGuidSync.plan,
       })))

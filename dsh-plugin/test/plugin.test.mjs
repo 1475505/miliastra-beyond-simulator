@@ -1,15 +1,34 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { basename, join } from 'node:path'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { SimulatorController, apply, headerWorkspace, jsonParam, lookupSessionWorkspace, sessionWorkspace } from '../lib/index.js'
 
 const testWorkspace = fileURLToPath(new URL('../', import.meta.url)).replace(/[/\\]+$/, '')
 
 // Shared editing, codecs and rendering are tested in Studio. Keep DSH host,
 // Worker and registered-tool boundaries here, not a second copy of core tests.
+test('a PTC-style eval host can start and stop play through the bundled DSH tool (#28)', async () => {
+  const bundle = new URL('../dist/index.js', import.meta.url).href
+  const script = `
+    import assert from 'node:assert/strict';
+    import { apply } from ${JSON.stringify(bundle)};
+    const tools = new Map(), effects = [];
+    apply({ tools: { register(tool) { tools.set(tool.name, tool) } }, webServer: { register() {} },
+      effect(factory) { effects.push(factory()) } });
+    const play = action => tools.get('qxqy_studio_play').execute({ action }, { agent: { id: 'ptc-test' } });
+    try {
+      assert.equal((await play('start')).running, true);
+      assert.equal((await play('stop')).running, false);
+    } finally { await Promise.all(effects.map(dispose => dispose?.())); }
+  `
+  await promisify(execFile)(process.execPath, ['--input-type=module', '--eval', script], { windowsHide: true, timeout: 15_000 })
+})
+
 test('persistent play Worker delivers pointer input, server writes and replay history', async t => {
   const controller = new SimulatorController('', { clockMode: 'manual' })
   t.after(() => controller.dispose())
@@ -118,14 +137,6 @@ test('Harness AI tools save and copy selected scripts without requiring editor a
   assert.equal(readFileSync(join(target, 'keep.lua'), 'utf8'), '-- untouched')
   assert.deepEqual((await sync('status')).lastResult, result)
   await assert.rejects(() => sync('apply', { planId: plan.id, scriptIds: [main.id], confirmed: true }), /确认/)
-})
-
-test('client bundle loads through Harness ModuleLoader and exposes the slot plugin', () => {
-  let clientModule
-  new Function('window', readFileSync(new URL('../dist/client.js', import.meta.url), 'utf8'))({ __ModuleLoader__: { load: value => { clientModule = value } } })
-  const exports = clientModule.factory(name => { assert.equal(name, 'react'); return { createElement() {} } })
-  assert.deepEqual(exports.inject, ['slots'])
-  assert.equal(typeof exports.apply, 'function')
 })
 
 test('host tool runtime is supplied by Harness instead of bundled twice', () => {

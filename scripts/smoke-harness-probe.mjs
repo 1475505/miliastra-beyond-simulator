@@ -10,7 +10,7 @@ import * as simulator from 'dsh-plugin-beyond-simulator'
 
 export const inject = ['webServer', 'tools', 'agentPresets', 'skills', 'sessions', 'agents', 'sessionPersistence', 'systemPrompt', 'workspaceController', 'sessionController', 'llm', 'settings']
 export function apply(ctx, config) {
-  ctx.webServer.register({ kind: 'exact', path: '/qxqy-smoke', async handler(_request, response) {
+  ctx.webServer.register({ kind: 'exact', path: '/qxqy-smoke', async handler(request, response) {
     response.setHeader('content-type', 'application/json')
     const sessionId = 'harness-smoke'
     let owned
@@ -30,19 +30,21 @@ export function apply(ctx, config) {
     }
     try {
       const url = `http://127.0.0.1:${ctx.webServer.port}`
-      const readLanguage = async (headers = {}) => {
-        const result = await fetch(`${url}/qxqy-simulator/api/locale`, {
-          method: 'POST', headers: { 'content-type': 'application/json', ...headers },
-          body: '{}', signal: AbortSignal.timeout(5_000),
-        })
-        assert.equal(result.status, 200)
+      const localFetch = (path, options = {}) => fetch(url + path, { ...options, redirect: 'error',
+        headers: { ...(request.headers.cookie ? { cookie: request.headers.cookie } : {}), ...options.headers },
+        signal: AbortSignal.timeout(10_000),
+      })
+      const editorCall = async (action, body = { sessionId }, headers = {}) => {
+        const result = await localFetch(`/qxqy-simulator/api/${action}`, { method: 'POST',
+          headers: { 'content-type': 'application/json', origin: url, ...headers }, body: JSON.stringify(body) })
+        assert.equal(result.status, 200, `HTTP ${action}: ${result.status}`)
         const payload = await result.json()
         assert.equal(payload.ok, true, JSON.stringify(payload))
         return payload.value
       }
       // Metadata must work before a simulator session or controller exists.
-      const language = await readLanguage()
-      assert.deepEqual(await readLanguage({ 'x-forwarded-for': '192.0.2.1' }), { language: '', source: 'browser' })
+      const language = await editorCall('locale', {})
+      assert.deepEqual(await editorCall('locale', {}, { 'x-forwarded-for': '192.0.2.1' }), { language: '', source: 'browser' })
       const require = createRequire(import.meta.url)
       const manifest = JSON.parse(await readFile(require.resolve('dsh-plugin-beyond-simulator/package.json'), 'utf8'))
       for (const version of ['0.1.0-rc.6', '0.1.7-rc.2', '0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-rc.1', '0.2.1-rc.2', '0.2.2-rc.1']) {
@@ -114,28 +116,15 @@ export function apply(ctx, config) {
       assert.equal((await call('qxqy_studio_play', { action: 'start' })).value.running, true)
       assert.ok((await call('qxqy_studio_play_screenshot')).content.some(block => block.type === 'image'))
       await call('qxqy_studio_play', { action: 'stop' })
-      for (const path of ['/qxqy-simulator/play', '/qxqy-simulator/play-renderer.js']) {
-        assert.equal((await fetch(url + path, { signal: AbortSignal.timeout(5_000) })).status, 200, path)
-      }
-      const snapshot = await (await fetch(`${url}/qxqy-simulator/api/get`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId }), signal: AbortSignal.timeout(5_000),
-      })).json()
-      assert.equal(snapshot.ok, true)
-      assert.equal(snapshot.value.workspace.path, config.workspace)
-      const editorCall = async action => {
-        const response = await fetch(`${url}/qxqy-simulator/api/${action}`, { method: 'POST',
-          headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId }), signal: AbortSignal.timeout(10_000) })
-        const result = await response.json()
-        assert.equal(result.ok, true, JSON.stringify(result))
-        return result.value
-      }
+      const snapshot = await editorCall('get')
+      assert.equal(snapshot.workspace.path, config.workspace)
       assert.equal((await editorCall('quick-start-info')).enabled, true)
       const lesson = await editorCall('quick-start-open')
       assert.equal(lesson.save.name, 'Harness practice example')
       assert.equal(lesson.quickStart.originalId, sessionId)
       assert.deepEqual((await call('qxqy_studio_get')).value, lesson, 'real AI tools follow the lesson opened from HTTP')
-      assert.deepEqual(await editorCall('quick-start-back'), snapshot.value, 'return restores the original project')
-      assert.deepEqual((await call('qxqy_studio_get')).value, snapshot.value)
+      assert.deepEqual(await editorCall('quick-start-back'), snapshot, 'return restores the original project')
+      assert.deepEqual((await call('qxqy_studio_get')).value, snapshot)
       const runtime = ctx.registry.get(simulator)
       assert.ok(runtime, 'The installed simulator must be loaded by Harness')
       const owners = [...runtime.fibers]
@@ -145,17 +134,14 @@ export function apply(ctx, config) {
         // is replaced. Previously the very first restart hit duplicate prefix.
         await call('qxqy_studio_play', { action: 'start' })
         await owners[0].restart()
-        assert.deepEqual(await readLanguage(), language, 'locale route survives plugin restart')
+        assert.deepEqual(await editorCall('locale', {}), language, 'locale route survives plugin restart')
         assert.equal(ctx.tools.schemas().filter(tool => tool.name.startsWith('qxqy_')).length, 8)
         const beforeRestartEdit = (await call('qxqy_studio_get')).value
         await call('qxqy_studio_patch', { op: { op: 'renameSave', name: `restart-${cycle}`, expectedRevision: beforeRestartEdit.version } })
-        const reloaded = await (await fetch(`${url}/qxqy-simulator/api/get`, {
-          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId }), signal: AbortSignal.timeout(5_000),
-        })).json()
-        assert.equal(reloaded.ok, true, JSON.stringify(reloaded))
-        assert.equal(reloaded.value.save.name, `restart-${cycle}`, 'HTTP and tools must share the new registry')
+        const reloaded = await editorCall('get')
+        assert.equal(reloaded.save.name, `restart-${cycle}`, 'HTTP and tools must share the new registry')
         for (const path of ['/qxqy-simulator/play', '/qxqy-simulator/play-renderer.js']) {
-          assert.equal((await fetch(url + path, { signal: AbortSignal.timeout(5_000) })).status, 200, path)
+          assert.equal((await localFetch(path)).status, 200, path)
         }
       }
       if (config.languageBrowser) {
@@ -166,12 +152,8 @@ export function apply(ctx, config) {
           source: { kind: 'user' }, content: [{ type: 'text', text: 'UI language smoke fixture' }] }, { surfaceOp: 'append' })
         await ctx.sessionController.rename({ sessionId: created.sessionId, title: 'Harness language smoke' })
         await ctx.sessions.flush(uiSession)
-        const script = await (await fetch(`${url}/qxqy-simulator/api/patch`, {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ sessionId: created.sessionId, op: { op: 'addScript', path: 'language-smoke.lua', source: '-- language fixture' } }),
-          signal: AbortSignal.timeout(5_000),
-        })).json()
-        assert.equal(script.ok, true, JSON.stringify(script))
+        await editorCall('patch', { sessionId: created.sessionId,
+          op: { op: 'addScript', path: 'language-smoke.lua', source: '-- language fixture' } })
       }
       response.end(JSON.stringify({ ok: true, language, modelSelection }))
     } catch (error) {

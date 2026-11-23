@@ -153,6 +153,53 @@ test('DSH ModuleLoader shows the download button, retries, restores the lesson a
   assert.equal(app.downloads, 2)
 })
 
+test('DSH toolbar saves pending edits to the workspace, then hides the action again', { skip: !process.env.QXQY_BROWSER, timeout: 60_000 }, async t => {
+  const app = await fixture(t)
+  await app.browserFixture()
+  const path = 'game.save.json', source = '-- saved script'
+  const project = await app.tool('qxqy_studio_patch', { op: { op: 'addScript', path: 'game.lua', source } })
+  await app.tool('qxqy_script_sync', { action: 'save', args: { path, expectedRevision: project.version } })
+  const diskSource = () => JSON.parse(readFileSync(join(app.directory, path), 'utf8')).assets.scripts[0].source
+  const profile = mkdtempSync(join(tmpdir(), 'qxqy-save-browser-'))
+  const browser = await startTestBrowser(profile)
+  t.after(async () => { await browser.close(); rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) })
+  const { evaluate, wait } = browser
+  const save = `document.querySelector('.qxsim-actions [data-quick-start-target="save"]')`
+  const dialog = `document.querySelector('.qxsim-save-dialog')`
+  const lua = `document.querySelector('.qxsim-script-editor textarea')`
+  const replaceCode = async text => {
+    await evaluate(`${lua}.focus(); ${lua}.select()`)
+    await browser.send('Input.insertText', { text }, browser.sessionId)
+  }
+  await browser.navigate(app.url)
+  await wait(`!!document.querySelector('.qxsim-toolbar')`)
+  assert.equal(await evaluate(`!!${save}`), false)
+  await evaluate(`[...document.querySelectorAll('.qxsim-editor-nav button')].find(b => b.textContent === 'Lua 脚本').click()`)
+  await wait(`${lua}?.value === ${JSON.stringify(source)}`)
+  await replaceCode('-- edited')
+  await wait(`${save}?.matches(':last-child:enabled')`)
+  await replaceCode(source)
+  await wait(`!${save}`)
+  await replaceCode('-- save this draft')
+  await wait(`!!${save}`)
+  assert.equal(diskSource(), source)
+  await evaluate(`${save}.click()`)
+  await wait(`${dialog}?.querySelector('input').value === ${JSON.stringify(path)}`)
+  await evaluate(`${dialog}.querySelector('button[type=submit]').click()`)
+  await wait(`!${dialog} && !${save}`)
+  assert.equal(diskSource(), '-- save this draft')
+
+  await app.tool('qxqy_studio_patch', { op: { op: 'renameSave', name: 'Unsaved AI edit' } })
+  await browser.navigate(app.url)
+  await wait(`${save}?.matches(':last-child:enabled')`)
+  for (const width of [1280, 1024, 480]) {
+    await browser.send('Emulation.setDeviceMetricsOverride', { width, height: 720, deviceScaleFactor: 1, mobile: false }, browser.sessionId)
+    await wait(`innerWidth === ${width}`)
+    assert.equal(await evaluate(`(() => { const box = ${save}.getBoundingClientRect();
+      return box.right <= innerWidth && document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === ${save}; })()`), true, `save is reachable at ${width}px`)
+  }
+})
+
 test('unloading DSH cancels an in-flight example download without resurrecting a controller', { timeout: 10_000 }, async t => {
   const app = await fixture(t)
   app.valid()

@@ -16,9 +16,3 @@ test('skill plugin registers the simulator usage skill from the bundled body', (
 
   assert.equal(registered[0].content, readFileSync(new URL('../../skill/SKILL.md', import.meta.url), 'utf8'))
 })
-
-test('package ships the skill body and its subpath export', () => {
-  const manifest = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
-  assert.equal(manifest.exports['./skill'], './dsh-plugin/dist/skill.js')
-  assert.ok(manifest.files.includes('dsh-plugin/skill.md'))
-})

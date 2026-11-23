@@ -391,9 +391,10 @@ export function createPlaySession({ renderer, api, onSnapshot, onStatus, onError
       // one viewport per page, then convert to logical canvas units.
       const unitX = event.deltaMode === 2 ? rect.width : event.deltaMode === 1 ? 16 : 1
       const unitY = event.deltaMode === 2 ? rect.height : event.deltaMode === 1 ? 16 : 1
+      // DOM Y is positive for wheel-down; the play viewport advances on wheel-up.
       void sendPointer({ type: 'wheel', ...point(event, surface),
         deltaX: event.deltaX * unitX * snapshot.canvasWidth / rect.width,
-        deltaY: event.deltaY * unitY * snapshot.canvasHeight / rect.height })
+        deltaY: -event.deltaY * unitY * snapshot.canvasHeight / rect.height })
     }
     const onKeyDown = (event) => {
       if (!canKey() || editable(event)) return

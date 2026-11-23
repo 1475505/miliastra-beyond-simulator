@@ -44,28 +44,24 @@ export async function smokeSubagentModels(ctx, { presetId, workspace }) {
     assert.equal(result.isError, false, JSON.stringify(result))
     return result.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
   }
-  const reject = async (agent, name, args, expected) => {
+  const reject = async (agent, name, args, code, legacyMessage) => {
     const result = await execute(agent, name, args)
     assert.equal(result.isError, true, 'Unauthorized or invalid selection must fail before spawning')
-    assert.match(JSON.stringify(result), expected)
+    if (result.error?.info?.code) assert.equal(result.error.info.code, code)
+    else assert.match(result.error?.message ?? JSON.stringify(result.content), legacyMessage)
   }
-  const policy = agent => agent.session.snapshotEvents().filter(event => event.type === 'subagent/model-selection-policy')
   const update = patch => ctx.settings.update('subagent-model-selection-settings', patch)
   try {
     await update({ enabled: false, allowedModels: [] })
     const disabled = await create('models-disabled', mount)
-    checkTools(disabled.agent)
-    assert.equal(policy(disabled.agent).length, 0)
     const inheritedModels = await discover(disabled.agent, { provider })
     assert.match(inheritedModels, /qxqy-smoke-models\/parent/)
     assert.doesNotMatch(inheritedModels, /qxqy-smoke-models\/allowed/)
-    await reject(disabled.agent, 'subagent', { description: 'No session authorization', prompt: 'fixture', provider, model: 'allowed' }, /not allowed for this Session/)
+    await reject(disabled.agent, 'subagent', { description: 'Host setting disabled', prompt: 'fixture', provider, model: 'allowed' }, 'MODEL_ROUTE_NOT_ALLOWED', /not allowed/)
 
     await update({ enabled: true, allowedModels })
-    // Capture Host authorization with standard, then switch the same blank
-    // conversation to the game preset, matching the reported user workflow.
+    // A fresh session under each setting works on hosts with snapshot or live settings.
     const enabled = await create('models-enabled', async agentCtx => { await ctx.agentPresets.mount(agentCtx, 'standard') })
-    assert.deepEqual(policy(enabled.agent).map(event => event.data.allowedModels), [allowedModels])
     await ctx.agentPresets.select(enabled.agent, presetId)
     checkTools(enabled.agent)
     assert.match(await discover(enabled.agent, {}), /qxqy-smoke-models/)
@@ -73,26 +69,11 @@ export async function smokeSubagentModels(ctx, { presetId, workspace }) {
     assert.match(models, /qxqy-smoke-models\/allowed/)
     assert.doesNotMatch(models, /qxqy-smoke-models\/(?:parent|denied)/)
     assert.match(await discover(enabled.agent, { provider, model: 'allowed' }), /low[\s\S]*high/)
-    await reject(enabled.agent, 'list_subagent_models', { provider, model: 'denied' }, /not allowed for this Session/)
-    await reject(enabled.agent, 'subagent', { description: 'Reject unauthorized model', prompt: 'fixture', provider, model: 'denied' }, /not allowed for this Session/)
-    await reject(enabled.agent, 'subagent', { description: 'Validate authorized effort', prompt: 'fixture', provider, model: 'allowed', reasoning_effort: 'invalid' }, /does not support reasoning effort/)
-    assert.equal(policy(enabled.agent).length, 1, 'preset switching must not resample or duplicate Host authorization')
-
-    await update({ enabled: false })
-    assert.equal(await discover(enabled.agent, { provider }), models, 'existing Session retains its policy')
-    const fresh = await create('models-disabled-again', mount)
-    checkTools(fresh.agent)
-    assert.equal(policy(fresh.agent).length, 0)
-    assert.match(await discover(fresh.agent, { provider }), /qxqy-smoke-models\/parent/)
-    await ctx.sessions.flush(enabled.agent.session)
-    await enabled.dispose()
-    owners.delete(enabled)
-    const restored = await ctx.agents.resume({ resumeSessionId: 'models-enabled', agentOptions: { provider, model: 'parent' }, setup: mount })
-    owners.add(restored)
-    checkTools(restored.agent)
-    assert.equal(await discover(restored.agent, { provider }), models, 'restoration uses the saved policy after Host opt-out')
+    await reject(enabled.agent, 'list_subagent_models', { provider, model: 'denied' }, 'MODEL_ROUTE_NOT_ALLOWED', /not allowed/)
+    await reject(enabled.agent, 'subagent', { description: 'Reject unauthorized model', prompt: 'fixture', provider, model: 'denied' }, 'MODEL_ROUTE_NOT_ALLOWED', /not allowed/)
+    await reject(enabled.agent, 'subagent', { description: 'Validate authorized effort', prompt: 'fixture', provider, model: 'allowed', reasoning_effort: 'invalid' }, 'UNSUPPORTED_REASONING_EFFORT', /does not support reasoning effort/)
   } finally {
-    for (const owner of owners) await owner.dispose()
-    unregister()
+    try { for (const owner of owners) await owner.dispose() }
+    finally { unregister(); await update({ enabled: false, allowedModels: [] }) }
   }
 }

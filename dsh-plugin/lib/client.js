@@ -18,6 +18,7 @@ window.__ModuleLoader__.load({
     const options = {
       version: manifest.version,
       api,
+      saveToWorkspace: true,
       playUrl: sessionId => '/qxqy-simulator/play#' + encodeURIComponent(sessionId),
     }
     const editor = createEditor(React, options)

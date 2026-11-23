@@ -43,6 +43,7 @@ export class SimulatorController {
     this.archivePath = ''
     this.archiveStamp = ''
     this.savedArchive = ''
+    this.savedContentHash = this.studio.contentHash()
     this.scriptSync = new ScriptSync(this)
     this.controlGuidSync = new ControlGuidSync(this)
     this.imageAssets = imageAssets
@@ -65,7 +66,11 @@ export class SimulatorController {
   }
 
   get() {
-    return { ...this.studio.get(), storage: { path: this.archivePath } }
+    return { ...this.studio.get(), storage: this.storageStatus() }
+  }
+
+  storageStatus() {
+    return { path: this.archivePath, dirty: this.savedContentHash !== this.studio.contentHash() }
   }
 
   exportData(format, assetType, options = {}) {
@@ -79,6 +84,7 @@ export class SimulatorController {
     const result = next.importData(format, data, filename)
     this.studio = next
     this.archivePath = ''; this.archiveStamp = ''; this.savedArchive = ''
+    this.savedContentHash = null // Imported content has no workspace file until explicitly saved.
     this.scriptSync.plan = null
     this.scriptSync.lastResult = null
     this.controlGuidSync.plan = null
@@ -140,7 +146,7 @@ export class SimulatorController {
   patch(op) {
     if (op?.op === 'previewControlGuidSync') return { ...this.get(), controlGuidSyncPreview: this.controlGuidSync.preview() }
     if (op?.op === 'syncControlGuidReferences') return this.controlGuidSync.apply(op)
-    return { ...this.studio.patch(op), storage: { path: this.archivePath } }
+    return { ...this.studio.patch(op), storage: this.storageStatus() }
   }
 
   listArchives() {
@@ -156,6 +162,7 @@ export class SimulatorController {
     this.archivePath = String(path).trim().replaceAll('\\', '/')
     this.archiveStamp = contentHash(bytes)
     this.savedArchive = JSON.stringify(this.studio.archiveData())
+    this.savedContentHash = this.studio.contentHash()
     return { ...result, snapshot: this.get() }
   }
 
@@ -170,6 +177,7 @@ export class SimulatorController {
     this.archivePath = requestedPath.replaceAll('\\', '/')
     this.archiveStamp = contentHash(data)
     this.savedArchive = JSON.stringify(this.studio.archiveData())
+    this.savedContentHash = this.studio.contentHash()
     return {
       path: this.archivePath,
       bytes: data.length,
@@ -184,7 +192,12 @@ export class SimulatorController {
   }
 
   createWorker() {
-    const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module', workerData: { localFont: localFont()?.data ?? null } })
+    const worker = new Worker(new URL('./worker.js', import.meta.url), {
+      type: 'module',
+      // The Worker loads a file; a PTC host's --input-type applies only to string input.
+      execArgv: [],
+      workerData: { localFont: localFont()?.data ?? null },
+    })
     worker.on('message', (message) => {
       const pending = this.pending.get(message?.id)
       if (!pending) return

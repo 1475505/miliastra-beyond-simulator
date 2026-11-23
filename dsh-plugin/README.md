@@ -28,7 +28,7 @@ dsh plugin --profile web add ./release/dsh-plugin-beyond-simulator-2.3.1.tgz
 
 Host Tools为`qxqy_script_sync`、`qxqy_studio_get/patch/export/play/load`、`qxqy_studio_ui_screenshot/play_screenshot`。截图使用Host PNG，无需可见标签页；动效视频帧的省略提示见[动效边界](../studio/docs/ui-vfx-playback.md#截图与-gia-边界)。
 
-工作区绑定DSH会话原始工程根。存档发现复用Studio，支持大于8MiB的存档，选最近50项并返回`discovery`限制/诊断；指定工作区内路径不受列表筛选限制。加载成功记住相对路径，省略保存路径时写回；未绑定时返回`{ bound:false, archives:[] }`。
+工作区绑定DSH会话原始工程根。存档发现复用Studio，支持大于8MiB的存档，选最近50项并返回`discovery`限制/诊断；指定工作区内路径不受列表筛选限制。加载成功记住相对路径，省略保存路径时写回；未绑定时返回`{ bound:false, archives:[] }`。手动保存见[顶栏「保存存档」](../docs/user-guide.md#files)。
 
 ## 快速上手
 
@@ -45,15 +45,21 @@ Host Tools为`qxqy_script_sync`、`qxqy_studio_get/patch/export/play/load`、`qx
 - 宿主准入与 npm peer 的预发布匹配规则不同；兼容范围以根 `package.json` 为准，不用忽略 peer 代替适配。依据：[插件兼容](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/boot/plugin-manager/README.md#version-compatibility-and-exemptions)。
 - 新版默认使用声明式预设；构建从主维护源生成注册项与旧目录副本，更新旧 `.agent-presets` 不一定生效。Persona 变量与用户副本处理见[预设说明](../agent/wonderland-lua-builder/README.md#persona-工作目录变量兼容性)，`list-agents` 入口及持久化接口见[会话恢复](docs/session-recovery.md)。
 - 嵌入预设的 `baseUrl` 可能来自合成 profile，Skill 须按安装包定位；旧目录预设才使用相邻 `skills/`。`test:harness` 验证正文及 `references/workflow.md` 可读，不能只检查菜单可见。
-- 0.2.2+ 的子智能体选模使用官方 `modelSelection/modelDiscovery` 能力声明，白名单归 Host 并按会话保存；配置与更新排查见[预设模型选择](../agent/wonderland-lua-builder/README.md#子智能体模型选择)。
+- 子智能体选模使用官方 `modelSelection/modelDiscovery` 能力声明；白名单由 Host 管理，设置何时生效取决于宿主版本，见[预设模型选择](../agent/wonderland-lua-builder/README.md#子智能体模型选择)。
 - 模拟器绑定会话原始工程 cwd；Shell 切目录不切换编辑工程。工具定义、JSON 输出、附件、HTTP 路由、ModuleLoader 与 `conversation.view` 由适配层对接，共享 VM/存档不按宿主版本另建分支。子代理与 Agent Team 调度由官方插件处理，旧 `backgroundMode` 不构成新版同步等待承诺。
 
 <a id="desktop-内嵌试玩208"></a>
 ## Desktop 内嵌试玩
 
-Desktop 拒绝页面子窗口时，在保存成功后回退同源全屏 iframe。关闭、返回和 Escape 等待 stop 成功，失败可重试，编辑器保持挂载；完整生命周期见[共用编辑器](../editor-ui/README.md#试玩窗口与内嵌兜底)。
+Desktop 拒绝页面子窗口时，编辑器先将代码和逻辑草稿提交到当前会话，再打开同源全屏 iframe 试玩。关闭、返回和 Escape 等待 stop 成功，失败可重试，编辑器保持挂载；完整生命周期见[共用编辑器](../editor-ui/README.md#试玩窗口与内嵌兜底)。
 
 ## 故障定位
+
+### PTC 模式无法启动试玩
+
+[#28](https://github.com/1475505/miliastra-beyond-simulator/issues/28)：若宿主以 `node --input-type=module --eval ...` 启动，2.3.3 的试玩 Worker 会继承 `--input-type=module`。该参数只适用于字符串输入；Worker 的入口是文件 `worker.js`，因此 `qxqy_studio_play` 在 `start` 时即报 `ERR_INPUT_TYPE_NOT_ALLOWED`。共享 Controller 通过 `execArgv: []` 隔离宿主启动参数。安装含修复的 DSH 插件构建后，重启 Harness 生效。
+
+[回归用例](test/plugin.test.mjs) 在 Windows / Node.js 24.15.0 和 22.23.2 下按上述方式加载插件构建并调用注册工具：默认工程修复前同错，修复后可以开始、停止试玩（`observed / simulator / not_required`）。验证范围是插件和 Worker，未运行反馈者的完整 Harness PTC 会话。
 
 ### Desktop protobuf 导入失败
 
@@ -66,8 +72,8 @@ Desktop 拒绝页面子窗口时，在保存成功后回退同源全屏 iframe�
 
 ## 验证入口与边界
 
-构建/安装检查统一见[分发验收](../DISTRIBUTION.md#验收入口与证据范围)。`test:packages`覆盖dsh-tools0.1.0-rc.6、0.2.0-rc.2、0.2.1-rc.2、0.2.2-rc.1；`test:harness`默认0.2.2-rc.1，可传已有CLI路径测旧版本。DSH 0.2.2 要求 Node.js 24.9+（Desktop 使用自带运行时）；Web/MCP 的 Node.js 最低版本仍查各自清单。浏览器语言验收另设`QXQY_BROWSER`。
+构建/安装检查统一见[分发验收](../DISTRIBUTION.md#验收入口与证据范围)。`test:packages` 覆盖 dsh-tools 0.1.0-rc.6、0.2.0-rc.2、0.2.1-rc.2、0.2.2-rc.1；`test:harness` 默认 0.2.2-rc.1，也可传入已安装版本的 `lib/bin.js` 路径。请按所测 CLI 的 `engines.node` 选择 Node（Desktop 使用自带运行时）；Web/MCP 查各自清单。浏览器语言验收另设 `QXQY_BROWSER`。
 
 `test/plugin.test.mjs` 与 `test/lifecycle.test.mjs` 只维护宿主协议、注册工具、会话隔离和 Worker 生命周期；共享编辑、存档、GIA 与 PNG 的功能回归归 Studio，安装包与真实 Harness 检查继续验证交付边界。
 
-既有完整 Web 宿主观察范围为 Windows / Node24.21.0 / Harness0.2.1-rc.2 与0.2.2-rc.1，`observed / simulator / not_required`，不涵盖真实模型/Agent Team、完整签名 Desktop、Linux/macOS、SSH 或子路径 public-url 部署。Windows 隔离 Git 安装可用 `npm_config_package_import_method=copy` 避免已加载 Canvas DLL 的 unlink/EPERM 冲突；文件占用与构建审批拒绝应分别处理。
+Windows 真实 Web 宿主已验证预设恢复、工具、附件、试玩和重启：Node 24.21.0 / Harness 0.2.1-rc.2，以及 Node 24.22.3 / Harness 0.2.2-rc.1、0.2.2-rc.5、0.2.3-alpha.2（`observed / simulator / not_required`）。不涵盖真实模型/Agent Team、完整签名 Desktop、Linux/macOS、SSH 或子路径 public-url 部署。Windows 隔离 Git 安装可用 `npm_config_package_import_method=copy` 避免已加载 Canvas DLL 的 unlink/EPERM 冲突；文件占用与构建审批拒绝应分别处理。
