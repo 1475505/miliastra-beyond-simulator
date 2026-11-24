@@ -8,15 +8,30 @@
 
 | 步骤 | 独立文档 |
 |---|---|
-| 1. 策划案 | [01-game-design.md](skills/qxqy-game-studio/references/01-game-design.md) |
-| 2. TDD 制定测试用例 | [02-test-cases.md](skills/qxqy-game-studio/references/02-test-cases.md) |
-| 3. HTML 效果展示 | [03-html-prototype.md](skills/qxqy-game-studio/references/03-html-prototype.md) |
+| 1. 策划案 | [01-game-design.md](skills/qxqy-game-studio/references/01-game-design.md)；先交付的[游戏卡片](skills/qxqy-game-studio/references/game-card.md) |
+| 2. HTML 效果展示 | [02-html-prototype.md](skills/qxqy-game-studio/references/02-html-prototype.md) |
+| 3. TDD 制定测试用例 | [03-test-cases.md](skills/qxqy-game-studio/references/03-test-cases.md) |
 | 4. 准备千星美术参考图和素材 | [04-art-assets.md](skills/qxqy-game-studio/references/04-art-assets.md) |
 | 5. Lua 编码实现 | [05-lua-implementation.md](skills/qxqy-game-studio/references/05-lua-implementation.md) |
 | 6. 测试 | [06-simulator-testing.md](skills/qxqy-game-studio/references/06-simulator-testing.md) |
 | 7. 真机试玩验证与 bug 修复 | [07-device-validation.md](skills/qxqy-game-studio/references/07-device-validation.md) |
 
 PREFLIGHT 不计入七步。新游戏按顺序推进；已有工程从缺失证据继续，窄修复只读取受影响步骤。步骤 1–4 不操作模拟器；HTML 是体验展示。七份文档按需读取才能减少无关上下文，无需一次加载全部内容。
+
+### 游戏卡片的设计依据
+
+[游戏卡片](skills/qxqy-game-studio/references/game-card.md)用于减少 AI 按默认审美和套话填充风格。维护模板时参考以下做法：
+
+| 来源 | 模板采用的做法 |
+|---|---|
+| [Claude Code Game Studios：art-bible](https://tessl.io/registry/skills/github/Donchitos/Claude-Code-Game-Studios/art-bible) | 先写视觉身份，其余维度从它推导；情绪按每个游戏状态分别写，并要求比“dark and foreboding”更具体 |
+| [Cornell CS3152 视觉设计规范](https://www.cs.cornell.edu/courses/cs3152/2026sp/assignments/a9/) | 写明视角及其对画风的影响；前景与背景的色板分离；动画类型 |
+| [Anthropic：前端美学提示](https://platform.claude.com/cookbook/coding-prompting-for-frontend-aesthetics) | 按维度分别引导注意力，并逐项写出要避开的默认值 |
+| [Game feel（Swink）](https://en.wikipedia.org/wiki/Game_feel) | 动效维度区分响应、润色与隐喻 |
+| [MDA 的 8 种乐趣](https://computerscience.chemeketa.edu/cis125greader/Players/KindsOfFun.html) | 用乐趣类型代替“好玩”，作为情感目标的取值 |
+| [游戏 UX 写作的 voice 与 tone](https://contra.com/p/FAb6LFEL-ux-writing-and-voice-system-mobile-game) | 叙述者全局固定，语气按玩家状态变化 |
+
+审稿和盲测由不继承对话的子智能体完成，规则见 [workflow.md](skills/qxqy-game-studio/references/workflow.md#子智能体审稿与盲测)。
 
 ## 在 OpenCode、WorkBuddy、Codex 等工具中使用
 

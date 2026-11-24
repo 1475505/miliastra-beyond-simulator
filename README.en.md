@@ -19,7 +19,7 @@ The **[complete user guide (Chinese)](docs/user-guide.md)** covers [Harness setu
 | **Standalone playtests** | Use mouse, touch, or keyboard input; pause, step through execution, and inspect logs. |
 | **Device and multiplayer simulation** | Choose from five PC/mobile canvases and simulate 1–8 local players with perspective switching. |
 | **AI automated tests** | Edit projects, send input, capture screenshots, and record and replay test cases. |
-| **Seven-step workflow** | Progress through design, TDD, an HTML demo, art, Lua implementation, testing, and in-game validation. |
+| **Seven-step workflow** | Progress through design, an HTML demo, TDD, art, Lua implementation, testing, and in-game validation. Design starts with a game card that aligns the intended feel, art, and writing style with you; a subagent reviews or blind-plays key outputs before you see them. |
 | **Saves and asset exchange** | Save complete JSON projects and import/export UI, Lua, and supported GIA content. |
 
 See the [client control support matrix](studio/docs/control-support.md) for details.
@@ -88,9 +88,9 @@ Provide a game idea, reference image, or existing project. Choose the game creat
 
 | Step | Output |
 |---|---|
-| **1. Game design** | Core gameplay, controls, scoring, and win/loss rules. |
-| **2. TDD test cases** | Actions and expected results for starting, success, failure, restarting, and edge cases. |
-| **3. HTML demo** | A playable demo to confirm visuals, controls, and pacing. |
+| **1. Game design** | A game card confirmed with the user (design intent, art and writing style), then core gameplay, controls, scoring, and win/loss rules. |
+| **2. HTML demo** | A playable demo to confirm visuals, controls, and pacing. |
+| **3. TDD test cases** | Actions and expected results for starting, success, failure, restarting, and edge cases. |
 | **4. Miliastra art assets** | Reference art, an asset list, and a UI recreation plan. |
 | **5. Lua implementation** | Playable game scripts and a complete save. |
 | **6. Testing** | AI playtests, bug fixes, and regression results. |
