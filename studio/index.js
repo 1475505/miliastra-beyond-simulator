@@ -2,9 +2,10 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
 import { normalizeScriptSync } from './script-sync-config.js'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { applyPatch, createProject, snapshotProject } from './ui/project.js'
 import { assertSaveVersion } from './ui/migrate-layout.js'
-import { createDefaultClientTemplateProject, createDefaultProject, findNode, walk } from './ui/authoring.js'
+import { createDefaultClientTemplateProject, createDefaultProject, findNode, sanitizeNode, walk } from './ui/authoring.js'
 import {
   startPlay,
   stepPlay,
@@ -366,41 +367,14 @@ export function createStudio(seed, options = {}) {
     return out
   }
 
-  function factoryFingerprint(project) {
-    const rows = []
-    walk(project.root, (node) => {
-      if (node.kind === 'server-container') return
-      rows.push(JSON.stringify({
-        kind: node.kind,
-        guid: node.guid,
-        name: node.name,
-        text: node.text ?? null,
-        imageId: node.imageId ?? null,
-        imageSource: node.imageSource ?? null,
-        imageType: node.imageType ?? null,
-        fontSize: node.fontSize ?? null,
-        adaptiveFontSize: node.adaptiveFontSize ?? null,
-        minimumFontSize: node.minimumFontSize ?? null,
-        fontColor: node.fontColor ?? null,
-        bgColor: node.bgColor ?? null,
-        imageColor: node.imageColor ?? null,
-        fillType: node.fillType ?? null,
-        fillAmount: node.fillAmount ?? null,
-        syncAllDevices: node.syncAllDevices !== false,
-        transformByPlatform: node.transformByPlatform || null,
-      }))
-    })
-    return rows.join('/')
+  const factoryRoots = {
+    client: sanitizeNode(createDefaultClientTemplateProject().root),
+    server: sanitizeNode(createDefaultProject().root),
   }
 
-  const FACTORY_CLIENT_FINGERPRINT = factoryFingerprint(createDefaultClientTemplateProject())
-  const FACTORY_SERVER_FINGERPRINT = factoryFingerprint(createDefaultProject())
-
   function isFactoryDefaultProject(project) {
-    const fingerprint = factoryFingerprint(project)
-    return project.meta?.assetType === CLIENT_ASSET
-      ? fingerprint === FACTORY_CLIENT_FINGERPRINT
-      : fingerprint === FACTORY_SERVER_FINGERPRINT
+    // Normalize both trees as on import so a save/reload preserves the comparison.
+    return isDeepStrictEqual(sanitizeNode(project.root), factoryRoots[assetKey(project.meta.assetType)])
   }
 
   function safeFilePart(name, fallback) {
