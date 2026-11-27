@@ -304,3 +304,23 @@ test('button imports distinct independent wire state tags rather than the codec 
     assert.equal(node.children.find(child => child.id === node[key]).name, `state-${i}`)
   }
 })
+
+test('client asset package writes an explicit Stretch selection for image 100169', () => {
+  const studio = createStudio()
+  studio.patch({ op: 'selectAsset', assetType: 'client-control-template' })
+  studio.patch({ op: 'set', id: 'n3', key: 'imageId', value: 100169 })
+
+  for (const [value, wire] of [['Stretch', [1]], ['Basic', []], [null, []]]) {
+    studio.patch({ op: 'set', id: 'n3', key: 'imageType', value })
+    const { files } = studio.exportData('save-gia')
+    const file = files.find(({ filename }) => filename.endsWith('客户端控件模板.gia'))
+    const buffer = Buffer.from(file.data, 'base64')
+    const imageSlot = all(buffer.subarray(20, -4), 2).flatMap(details)
+      .flatMap(d => all(d, 84)).find(d => first(d, 503) === 100169)
+    assert.ok(imageSlot)
+    assert.deepEqual(all(imageSlot, 504), wire)
+    const { project } = importGia(buffer)
+    const icon = project.root.children[0].children.find(node => node.imageId === 100169)
+    assert.equal(icon.imageType, value ?? 'Basic')
+  }
+})
