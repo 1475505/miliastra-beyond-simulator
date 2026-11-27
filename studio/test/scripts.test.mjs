@@ -266,6 +266,26 @@ test('asset-package GIA exports the official three-file bundle', () => {
   assert.equal(restoredScripts.snapshot.scripts[0].path, 'lua/a.lua')
 })
 
+test('asset-package GIA keeps an edited button on a hidden template and omits it after reverting', () => {
+  const studio = createStudio()
+  studio.patch({ op: 'selectAsset', assetType: 'client-control-template' })
+  studio.patch({ op: 'set', id: 'n4', key: 'interactable', value: false })
+  studio.patch({ op: 'selectAsset', assetType: 'server-control-template' })
+
+  const reopened = createStudio(studio.archiveData())
+  const clientFile = reopened.exportData('save-gia').files.find(file => file.filename.endsWith('客户端控件模板.gia'))
+  assert.ok(clientFile, 'the package must contain the edited client template')
+  const { project } = giaCodec.importGia(Buffer.from(clientFile.data, 'base64'))
+  const button = project.root.children[0].children.find(node => node.name === '确认按钮')
+  assert.equal(button.interactable, false)
+
+  reopened.patch({ op: 'selectAsset', assetType: 'client-control-template' })
+  assert.equal(reopened.exportData('save-gia').files.length, 1, 'the untouched server template stays omitted after reload')
+  reopened.patch({ op: 'set', id: 'n4', key: 'interactable', value: true })
+  reopened.patch({ op: 'selectAsset', assetType: 'server-control-template' })
+  assert.equal(reopened.exportData('save-gia').files.length, 1, 'reverting the client template restores omission')
+})
+
 test('current-view GIA is the on-screen tree, not the factory client template', () => {
   const studio = createStudio()
   studio.patch({ op: 'renameSave', name: 'Flappy Fish' })
