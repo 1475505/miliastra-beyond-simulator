@@ -1,9 +1,9 @@
 import { t } from '../studio/i18n.js'
 import { loadBrowserImageAsset, loadBrowserImageMetadata, subscribeImageRefresh } from '../studio/assets/browser.js'
 import { tintedImage } from '../studio/assets/raster.js'
-import { rasterizeSlices, resolveImageType, supportsImageStretch } from '../studio/assets/image-stretch.js'
+import { rasterizeSlices, resolveImageType } from '../studio/assets/image-stretch.js'
 import { imageFillRect } from '../studio/play/image-fill.js'
-import { imageAssetKey, imageSourceName } from '../studio/assets/catalog.js'
+import { imageAssetKey, imageSourceName, isRemoteImage } from '../studio/assets/catalog.js'
 
 function canvas(width, height) {
   const node = document.createElement('canvas')
@@ -61,11 +61,16 @@ export function createImageTypeField(React) {
       return () => { active = false }
     }, [key, revision])
     const ready = state.key === key && state.meta !== undefined
-    const stretch = ready && supportsImageStretch(state.meta)
+    const canChoose = imageSourceName(imageSource) === 'StaticReference' && isRemoteImage(imageId, imageSource)
+    const autoLabel = !ready
+      ? t(state.error ? '元数据加载失败' : '读取素材边界…')
+      : resolveImageType(state.meta, null) === 'Stretch' ? t('自动（拉伸）') : t('自动（基础）')
     return e('label', { className: 'qxsim-field' }, e('span', { className: 'qxsim-field-label' }, t('图片类型')),
-      e('select', { 'aria-label': t('图片类型'), disabled: !stretch, value: ready ? resolveImageType(state.meta, value) : '', onChange: event => commit('imageType', event.target.value) },
-        !ready ? e('option', { value: '' }, state.error ? t('元数据加载失败') : t('读取素材边界…')) : e('option', { value: 'Basic' }, t('基础')),
-        stretch ? e('option', { value: 'Stretch' }, t('拉伸')) : null),
+      e('select', { 'aria-label': t('图片类型'), disabled: !canChoose, value: canChoose ? value ?? '' : '',
+        onChange: event => commit('imageType', event.target.value || null) },
+        e('option', { value: '' }, autoLabel),
+        canChoose ? e('option', { value: 'Basic' }, t('基础')) : null,
+        canChoose ? e('option', { value: 'Stretch' }, t('拉伸')) : null),
       state.error ? e('small', { role: 'status' }, state.error) : null)
   }
 }

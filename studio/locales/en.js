@@ -275,6 +275,8 @@ export default {
   "读取素材边界…": "Loading asset borders…",
   "基础": "Basic",
   "拉伸": "Stretch",
+  "自动（基础）": "Auto (Basic)",
+  "自动（拉伸）": "Auto (Stretch)",
   "客户端控件容器": "Client Control Container",
   "容器节点": "Container Control",
   "文本框": "Text Box",

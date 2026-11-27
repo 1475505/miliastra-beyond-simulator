@@ -344,7 +344,13 @@ test('editor DOM applies grouped feathering, updates mask settings and leaves se
   pixel = await sample()
   assert.deepEqual(pixel(800, 450), [0, 0, 0, 255], 'remote alpha hole reaches DOM')
   assert.deepEqual(pixel(762, 450), [0, 0, 0, 255], 'default Stretch retains a two-unit border')
-  await evaluate(`(()=>{const select=document.querySelector('[aria-label="图片类型"]');select.value='Basic';select.dispatchEvent(new Event('change',{bubbles:true}));})()`)
+  const typeSelect = 'document.querySelector(\'[aria-label="图片类型"]\')'
+  await wait(`${typeSelect}?.selectedOptions[0]?.textContent === '自动（拉伸）'`)
+  const chooseType = value => evaluate(`(()=>{const select=${typeSelect};select.value=${JSON.stringify(value)};select.dispatchEvent(new Event('change',{bubbles:true}));})()`)
+  await chooseType('Stretch')
+  await wait(`${typeSelect}?.selectedOptions[0]?.textContent === '拉伸'`)
+
+  await chooseType('Basic')
   await wait(`document.querySelector('[data-control-id="inner"] canvas').dataset.imageType === 'Basic'`)
   pixel = await sample()
   assert.deepEqual(pixel(762, 450), [255, 0, 0, 255], 'Basic alpha border expands with the image')
